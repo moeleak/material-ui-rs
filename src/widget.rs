@@ -18,13 +18,13 @@ use iced_widget::radio as iced_radio;
 use iced_widget::text::{self, LineHeight};
 use iced_widget::text_input as iced_text_input;
 use iced_widget::toggler as iced_toggler;
-use iced_widget::{Button, Container, Text, TextInput as IcedTextInput};
+use iced_widget::{Button, Container, ProgressBar, Slider, Text, TextInput as IcedTextInput};
 
 use crate::utils::mix;
 use crate::{Theme, tokens};
 use crate::{
-    button as button_style, checkbox as checkbox_style, text_input as text_input_style,
-    toggler as toggler_style,
+    button as button_style, checkbox as checkbox_style, progress_bar as progress_bar_style,
+    slider as slider_style, text_input as text_input_style, toggler as toggler_style,
 };
 
 const SWITCH_ON_ICON_SVG: &[u8] = br##"
@@ -545,6 +545,46 @@ pub mod button {
         Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     {
         chip(label, button_style::selected_input_chip)
+    }
+}
+
+pub mod slider {
+    //! Material 3 slider constructors with token-backed layout defaults.
+
+    use super::*;
+    use std::ops::RangeInclusive;
+
+    pub fn continuous<'a, T, Message>(
+        range: RangeInclusive<T>,
+        value: T,
+        on_change: impl Fn(T) -> Message + 'a,
+    ) -> Slider<'a, T, Message, Theme>
+    where
+        T: Copy + From<u8> + PartialOrd,
+        Message: Clone,
+    {
+        Slider::new(range, value, on_change)
+            .height(tokens::component::slider::STATE_LAYER_SIZE)
+            .style(slider_style::default)
+    }
+}
+
+pub mod progress_bar {
+    //! Material 3 progress indicator constructors with token-backed layout defaults.
+
+    use super::*;
+    use std::ops::RangeInclusive;
+
+    pub fn linear<'a>(range: RangeInclusive<f32>, value: f32) -> ProgressBar<'a, Theme> {
+        ProgressBar::new(range, value)
+            .girth(Length::Fixed(
+                tokens::component::linear_progress::TRACK_HEIGHT,
+            ))
+            .style(progress_bar_style::default)
+    }
+
+    pub fn vertical_linear<'a>(range: RangeInclusive<f32>, value: f32) -> ProgressBar<'a, Theme> {
+        linear(range, value).vertical()
     }
 }
 
@@ -2879,6 +2919,14 @@ mod tests {
         let _: TestElement<'_> = button::assist_chip("Assist")
             .on_press(Message::Pressed)
             .into();
+    }
+
+    #[test]
+    fn material_slider_and_progress_constructors_compile_to_elements() {
+        let _: TestElement<'_> =
+            slider::continuous(0.0..=100.0, 42.0, |_| Message::Pressed).into();
+        let _: TestElement<'_> = progress_bar::linear(0.0..=100.0, 42.0).into();
+        let _: TestElement<'_> = progress_bar::vertical_linear(0.0..=100.0, 42.0).into();
     }
 
     #[test]

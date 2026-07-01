@@ -676,8 +676,13 @@ mod tests {
         assert_eq!(component::switch::DISABLED_TRACK_OPACITY, 0.12);
         assert_eq!(component::switch::DISABLED_SELECTED_HANDLE_OPACITY, 1.0);
         assert_eq!(component::slider::ACTIVE_TRACK_HEIGHT, 4.0);
+        assert_eq!(component::slider::INACTIVE_TRACK_HEIGHT, 4.0);
         assert_eq!(component::slider::HANDLE_WIDTH, 20.0);
+        assert_eq!(component::slider::HANDLE_HEIGHT, 20.0);
+        assert_eq!(component::slider::STATE_LAYER_SIZE, 40.0);
+        assert_eq!(component::slider::LABEL_CONTAINER_HEIGHT, 28.0);
         assert_eq!(component::linear_progress::TRACK_HEIGHT, 4.0);
+        assert_eq!(component::linear_progress::ACTIVE_INDICATOR_HEIGHT, 4.0);
         assert_eq!(component::radio::ICON_SIZE, 20.0);
         assert_eq!(component::radio::TARGET_SIZE, 48.0);
         assert_eq!(component::radio::STATE_LAYER_SIZE, 40.0);
