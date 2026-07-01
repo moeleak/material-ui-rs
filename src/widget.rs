@@ -17,12 +17,13 @@ use iced_widget::core::{
 };
 use iced_widget::radio as iced_radio;
 use iced_widget::text::{self, LineHeight};
+use iced_widget::text_editor as iced_text_editor;
 use iced_widget::text_input as iced_text_input;
 use iced_widget::toggler as iced_toggler;
 use iced_widget::tooltip as iced_tooltip;
 use iced_widget::{
     Button, ComboBox, Container, PickList, ProgressBar, Slider, Text, TextInput as IcedTextInput,
-    Tooltip,
+    TextEditor as IcedTextEditor, Tooltip,
 };
 
 use crate::utils::mix;
@@ -30,8 +31,8 @@ use crate::{Theme, tokens};
 use crate::{
     button as button_style, checkbox as checkbox_style, container as container_style,
     menu as menu_style, pick_list as pick_list_style, progress_bar as progress_bar_style,
-    slider as slider_style, text_input as text_input_style, toggler as toggler_style,
-    tooltip as tooltip_style,
+    slider as slider_style, text_editor as text_editor_style, text_input as text_input_style,
+    toggler as toggler_style, tooltip as tooltip_style,
 };
 
 const SWITCH_ON_ICON_SVG: &[u8] = br##"
@@ -1468,6 +1469,36 @@ pub mod text_input {
         Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     {
         TextInput::placeholder(label, value)
+    }
+}
+
+pub mod text_editor {
+    //! Material 3 outlined multi-line text field constructors.
+
+    use super::*;
+
+    pub use iced_text_editor::{Action, Content};
+
+    pub fn outlined<'a, Message, Renderer>(
+        content: &'a Content<Renderer>,
+    ) -> IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>
+    where
+        Renderer: core_text::Renderer + 'a,
+        Message: 'a,
+    {
+        IcedTextEditor::new(content)
+            .padding(Padding {
+                top: tokens::component::text_field::TOP_SPACE,
+                right: tokens::component::text_field::TRAILING_SPACE,
+                bottom: tokens::component::text_field::BOTTOM_SPACE,
+                left: tokens::component::text_field::LEADING_SPACE,
+            })
+            .size(tokens::component::text_field::INPUT_TEXT_SIZE)
+            .line_height(absolute_line_height(
+                tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
+            ))
+            .min_height(tokens::component::text_field::CONTAINER_HEIGHT)
+            .style(text_editor_style::default)
     }
 }
 
@@ -3290,6 +3321,15 @@ mod tests {
     fn material_text_input_constructor_compiles_to_element() {
         let _: TestElement<'_> = text_input::outlined("Write a note", "value")
             .on_input(|_| Message::Pressed)
+            .into();
+    }
+
+    #[test]
+    fn material_text_editor_constructor_compiles_to_element() {
+        let content = text_editor::Content::with_text("value");
+        let _: TestElement<'_> = text_editor::outlined(&content)
+            .placeholder("Write a note")
+            .on_action(|_| Message::Pressed)
             .into();
     }
 
