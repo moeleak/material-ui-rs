@@ -37,6 +37,7 @@ use crate::{
 
 mod support;
 pub mod combo_box;
+pub mod list;
 
 use support::{
     AnimatedScalar, SelectionState, TextFieldState, alpha_border, alpha_color, bool_value,
@@ -3103,6 +3104,18 @@ mod tests {
             })
             .on_input(|_| Message::Pressed)
             .into();
+    }
+
+    #[test]
+    fn material_list_item_constructors_compile_to_elements() {
+        let _: TestElement<'_> = list::one_line("Single line").into();
+        let _: TestElement<'_> =
+            list::one_line_with_leading_icon("*", "With leading icon").into();
+        let _: TestElement<'_> = list::two_line("Two line", "Supporting text").into();
+        let _: TestElement<'_> =
+            list::two_line_with_trailing("Inventory", "In stock", "42").into();
+        let _: TestElement<'_> =
+            list::three_line("Three line", "Supporting text", "Second supporting line").into();
     }
 
     #[test]

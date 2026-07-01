@@ -396,8 +396,16 @@ pub mod component {
         pub const THREE_LINE_CONTAINER_HEIGHT: f32 = 88.0;
         pub const LEADING_SPACE: f32 = 16.0;
         pub const TRAILING_SPACE: f32 = 16.0;
+        pub const TOP_SPACE: f32 = 12.0;
+        pub const BOTTOM_SPACE: f32 = 12.0;
         pub const LEADING_ICON_SIZE: f32 = 24.0;
         pub const LEADING_AVATAR_SIZE: f32 = 40.0;
+        pub const LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_LARGE;
+        pub const SUPPORTING_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_MEDIUM;
+        pub const TRAILING_SUPPORTING_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_SMALL;
         pub const DISABLED_LABEL_TEXT_OPACITY: f32 = 0.30;
         pub const DISABLED_ICON_OPACITY: f32 = 0.38;
     }
@@ -734,6 +742,22 @@ mod tests {
         assert_eq!(component::divider::THICKNESS, 1.0);
         assert_eq!(component::divider::LIST_ITEM_LEADING_SPACE, 16);
         assert_eq!(component::list::ONE_LINE_CONTAINER_HEIGHT, 56.0);
+        assert_eq!(component::list::TWO_LINE_CONTAINER_HEIGHT, 72.0);
+        assert_eq!(component::list::THREE_LINE_CONTAINER_HEIGHT, 88.0);
+        assert_eq!(component::list::LEADING_SPACE, 16.0);
+        assert_eq!(component::list::TRAILING_SPACE, 16.0);
+        assert_eq!(component::list::TOP_SPACE, 12.0);
+        assert_eq!(component::list::BOTTOM_SPACE, 12.0);
+        assert_eq!(component::list::LEADING_ICON_SIZE, 24.0);
+        assert_eq!(component::list::LEADING_AVATAR_SIZE, 40.0);
+        assert_eq!(component::list::LABEL_TEXT, typography::BODY_LARGE);
+        assert_eq!(component::list::SUPPORTING_TEXT, typography::BODY_MEDIUM);
+        assert_eq!(
+            component::list::TRAILING_SUPPORTING_TEXT,
+            typography::LABEL_SMALL
+        );
+        assert_eq!(component::list::DISABLED_LABEL_TEXT_OPACITY, 0.30);
+        assert_eq!(component::list::DISABLED_ICON_OPACITY, 0.38);
         assert_eq!(component::menu::CONTAINER_ELEVATION_LEVEL, 2);
         assert_eq!(component::menu::TOP_SPACE, 8.0);
         assert_eq!(component::select::MENU_CONTAINER_ELEVATION_LEVEL, 2);

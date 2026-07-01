@@ -15,6 +15,7 @@ pub mod container;
 pub mod dialog;
 #[cfg(feature = "markdown")]
 pub mod markdown;
+pub mod list;
 pub mod menu;
 pub mod pane_grid;
 pub mod pick_list;
