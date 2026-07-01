@@ -26,9 +26,9 @@ use iced_widget::{
 use crate::utils::mix;
 use crate::{Theme, tokens};
 use crate::{
-    button as button_style, checkbox as checkbox_style, progress_bar as progress_bar_style,
-    slider as slider_style, text_input as text_input_style, toggler as toggler_style,
-    tooltip as tooltip_style,
+    button as button_style, checkbox as checkbox_style, container as container_style,
+    progress_bar as progress_bar_style, slider as slider_style, text_input as text_input_style,
+    toggler as toggler_style, tooltip as tooltip_style,
 };
 
 const SWITCH_ON_ICON_SVG: &[u8] = br##"
@@ -650,6 +650,133 @@ pub mod progress_bar {
 
     pub fn vertical_linear<'a>(range: RangeInclusive<f32>, value: f32) -> ProgressBar<'a, Theme> {
         linear(range, value).vertical()
+    }
+}
+
+pub mod container {
+    //! Material 3 container and card constructors.
+
+    use super::*;
+
+    fn styled<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+        style: fn(&Theme) -> iced_widget::container::Style,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        Container::new(content).style(style)
+    }
+
+    pub fn transparent<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::transparent)
+    }
+
+    pub fn surface<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface)
+    }
+
+    pub fn surface_container_lowest<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface_container_lowest)
+    }
+
+    pub fn surface_container_low<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface_container_low)
+    }
+
+    pub fn surface_container<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface_container)
+    }
+
+    pub fn surface_container_high<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface_container_high)
+    }
+
+    pub fn surface_container_highest<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::surface_container_highest)
+    }
+
+    pub fn outlined<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::outlined)
+    }
+
+    pub fn elevated_card<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::elevated_card)
+    }
+
+    pub fn filled_card<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::filled_card)
+    }
+
+    pub fn outlined_card<'a, Message, Renderer>(
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Container<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: iced_widget::core::Renderer + 'a,
+    {
+        styled(content, container_style::outlined_card)
     }
 }
 
@@ -3031,6 +3158,21 @@ mod tests {
         let _: TestElement<'_> = button::assist_chip("Assist")
             .on_press(Message::Pressed)
             .into();
+    }
+
+    #[test]
+    fn material_container_constructors_compile_to_elements() {
+        let surface = Text::new("Surface");
+        let _: TestElement<'_> = container::surface_container_high(surface).into();
+
+        let elevated = Text::new("Elevated card");
+        let _: TestElement<'_> = container::elevated_card(elevated).into();
+
+        let filled = Text::new("Filled card");
+        let _: TestElement<'_> = container::filled_card(filled).into();
+
+        let outlined = Text::new("Outlined card");
+        let _: TestElement<'_> = container::outlined_card(outlined).into();
     }
 
     #[test]
