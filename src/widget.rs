@@ -850,6 +850,10 @@ pub mod button {
             return cursor.position_in(bounds);
         }
 
+        if cursor.is_levitating() {
+            return None;
+        }
+
         match event {
             Event::Touch(touch::Event::FingerPressed { position, .. }) => {
                 relative_position(*position, bounds)
@@ -861,6 +865,10 @@ pub mod button {
     fn release_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> bool {
         if cursor.position().is_some() {
             return cursor.is_over(bounds);
+        }
+
+        if cursor.is_levitating() {
+            return false;
         }
 
         match event {
@@ -1364,6 +1372,29 @@ pub mod button {
         }
 
         #[test]
+        fn touch_press_origin_does_not_fallback_to_raw_position_when_cursor_is_levitating() {
+            let bounds = Rectangle {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 30.0,
+            };
+            let event = Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(0),
+                position: Point::new(25.0, 35.0),
+            });
+
+            assert_eq!(
+                press_origin(
+                    &event,
+                    bounds,
+                    mouse::Cursor::Levitating(Point::new(25.0, 135.0))
+                ),
+                None
+            );
+        }
+
+        #[test]
         fn touch_release_uses_translated_cursor_position() {
             let bounds = Rectangle {
                 x: 10.0,
@@ -1380,6 +1411,26 @@ pub mod button {
                 &event,
                 bounds,
                 mouse::Cursor::Available(Point::new(25.0, 135.0))
+            ));
+        }
+
+        #[test]
+        fn touch_release_does_not_fallback_to_raw_position_when_cursor_is_levitating() {
+            let bounds = Rectangle {
+                x: 10.0,
+                y: 20.0,
+                width: 40.0,
+                height: 30.0,
+            };
+            let event = Event::Touch(touch::Event::FingerLifted {
+                id: touch::Finger(0),
+                position: Point::new(25.0, 35.0),
+            });
+
+            assert!(!release_is_over(
+                &event,
+                bounds,
+                mouse::Cursor::Levitating(Point::new(25.0, 135.0))
             ));
         }
 
