@@ -386,13 +386,13 @@ impl NavigationRailExpansionState {
     pub fn open(&mut self, now: Instant) {
         self.open = true;
         self.progress
-            .set_spring_target(1.0, now, tokens::motion::EXPRESSIVE_FAST_SPATIAL);
+            .set_spring_target(1.0, now, navigation_rail_expansion_spring());
     }
 
     pub fn close(&mut self, now: Instant) {
         self.open = false;
         self.progress
-            .set_spring_target(0.0, now, tokens::motion::EXPRESSIVE_FAST_SPATIAL);
+            .set_spring_target(0.0, now, navigation_rail_expansion_spring());
     }
 
     pub fn toggle(&mut self, now: Instant) {
@@ -407,6 +407,13 @@ impl NavigationRailExpansionState {
         let animating = self.progress.advance(now);
         self.progress.value = self.progress.value.clamp(0.0, 1.0);
         animating
+    }
+}
+
+fn navigation_rail_expansion_spring() -> tokens::motion::Spring {
+    tokens::motion::Spring {
+        damping_ratio: 1.0,
+        stiffness: tokens::motion::EXPRESSIVE_FAST_SPATIAL.stiffness,
     }
 }
 
@@ -1410,8 +1417,15 @@ where
         navigation_rail_expanded_item_vertical_inset_for_progress(expansion_progress);
     let scale = tokens::component::navigation_drawer::LABEL_TEXT;
     let message = on_select(destination.id);
-    let icon =
-        navigation_rail_expanded_icon_layer(destination.icon, alpha_progress, indicator_height);
+    let badge_on_icon = navigation_rail_expanded_badge_uses_icon_anchor(label_alpha);
+    let trailing_badge_alpha = navigation_rail_expanded_trailing_badge_alpha(label_alpha);
+    let collapsed_label_alpha = navigation_rail_expanded_collapsed_label_alpha(label_alpha);
+    let icon = navigation_rail_expanded_icon_layer(
+        destination.icon,
+        alpha_progress,
+        indicator_height,
+        badge_on_icon.then_some(destination.badge).flatten(),
+    );
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
         color: Some(alpha_color(
             drawer_content_color(theme, alpha_progress),
@@ -1423,10 +1437,13 @@ where
         .height(Length::Fixed(indicator_height))
         .align_y(alignment::Vertical::Center)
         .push(Container::new(label).width(Length::Fill));
-    let content = if let Some(badge) = destination.badge {
+    let content = if let Some(badge) = destination.badge.filter(|_| !badge_on_icon) {
         content
             .push(Space::new().width(Length::Fixed(navigation_drawer_badge_space())))
-            .push(destination_badge::<Message, Renderer>(badge))
+            .push(destination_badge_with_alpha::<Message, Renderer>(
+                badge,
+                trailing_badge_alpha,
+            ))
     } else {
         content
     };
@@ -1440,7 +1457,7 @@ where
             left: navigation_rail_expanded_label_leading_padding(),
         })
         .align_y(alignment::Vertical::Center);
-    let indicator = Stack::new()
+    let expanded_indicator = Stack::new()
         .width(Length::Fixed(indicator_width))
         .height(Length::Fixed(indicator_height))
         .push(
@@ -1456,18 +1473,34 @@ where
         ))
         .push(content)
         .push(icon);
+    let collapsed_label = navigation_rail_expanded_collapsed_label::<Message, Renderer>(
+        destination.label,
+        alpha_progress,
+        collapsed_label_alpha,
+    )
+    .width(Length::Fixed(navigation_rail_collapsed_label_width()))
+    .height(Length::Fixed(navigation_rail_item_slot_height()));
+    let item = Stack::new()
+        .width(Length::Fixed(indicator_width))
+        .height(Length::Fixed(navigation_rail_item_slot_height()))
+        .push(
+            Container::new(expanded_indicator)
+                .width(Length::Fixed(indicator_width))
+                .height(Length::Fixed(navigation_rail_item_slot_height()))
+                .padding(Padding {
+                    top: vertical_inset,
+                    right: 0.0,
+                    bottom: vertical_inset,
+                    left: 0.0,
+                })
+                .align_y(alignment::Vertical::Top),
+        )
+        .push(collapsed_label);
 
     navigation_press_surface(
-        Container::new(indicator)
+        Container::new(item)
             .width(Length::Fixed(indicator_width))
-            .height(Length::Fixed(navigation_rail_item_slot_height()))
-            .padding(Padding {
-                top: vertical_inset,
-                right: 0.0,
-                bottom: vertical_inset,
-                left: 0.0,
-            })
-            .align_y(alignment::Vertical::Top),
+            .height(Length::Fixed(navigation_rail_item_slot_height())),
         message,
         NavigationStateLayer::Drawer {
             progress: alpha_progress,
@@ -2133,6 +2166,16 @@ fn navigation_rail_expanded_label_leading_padding() -> f32 {
         + tokens::component::navigation_rail::ICON_LABEL_HORIZONTAL_SPACE
 }
 
+fn navigation_rail_collapsed_label_top_padding() -> f32 {
+    navigation_rail_item_content_top_padding()
+        + tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT
+        + tokens::component::navigation_rail::ITEM_VERTICAL_PADDING
+}
+
+fn navigation_rail_collapsed_label_width() -> f32 {
+    tokens::component::navigation_rail::ACTIVE_INDICATOR_WIDTH
+}
+
 #[cfg(test)]
 fn navigation_rail_collapsed_icon_center_x() -> f32 {
     tokens::component::navigation_rail::CONTAINER_WIDTH / 2.0
@@ -2205,6 +2248,18 @@ fn navigation_rail_expanded_label_alpha_for_width(width: f32) -> f32 {
     ((progress - 0.6) / 0.4).clamp(0.0, 1.0)
 }
 
+fn navigation_rail_expanded_badge_uses_icon_anchor(label_alpha: f32) -> bool {
+    label_alpha <= 0.0
+}
+
+fn navigation_rail_expanded_trailing_badge_alpha(label_alpha: f32) -> f32 {
+    label_alpha.clamp(0.0, 1.0)
+}
+
+fn navigation_rail_expanded_collapsed_label_alpha(label_alpha: f32) -> f32 {
+    (1.0 - label_alpha).clamp(0.0, 1.0)
+}
+
 fn navigation_rail_expanded_header_leading_space() -> f32 {
     tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_MARGIN_HORIZONTAL
         + tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_PADDING_START
@@ -2265,6 +2320,7 @@ fn navigation_rail_expanded_icon_layer<'a, Message, Renderer>(
     icon: &'static str,
     progress: f32,
     height: f32,
+    badge: Option<Badge>,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Message: 'a,
@@ -2275,7 +2331,7 @@ where
         icon,
         tokens::component::navigation_rail::ICON_SIZE,
         progress,
-        None,
+        badge,
         true,
     )
     .width(Length::Fixed(tokens::component::navigation_rail::ICON_SIZE))
@@ -2286,6 +2342,32 @@ where
         .height(Length::Fixed(height))
         .align_x(alignment::Horizontal::Right)
         .align_y(alignment::Vertical::Center)
+}
+
+fn navigation_rail_expanded_collapsed_label<'a, Message, Renderer>(
+    label: &'static str,
+    progress: f32,
+    alpha: f32,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+{
+    let alpha = alpha.clamp(0.0, 1.0);
+    let scale = tokens::component::navigation_rail::LABEL_TEXT;
+    let label = type_text(label, scale).style(move |theme| text::Style {
+        color: Some(alpha_color(bar_or_rail_label_color(theme, progress), alpha)),
+    });
+
+    Container::new(label)
+        .padding(Padding {
+            top: navigation_rail_collapsed_label_top_padding(),
+            right: 0.0,
+            bottom: 0.0,
+            left: 0.0,
+        })
+        .align_x(alignment::Horizontal::Center)
 }
 
 fn destination_icon_anchor<'a, Message, Renderer>(
@@ -2328,6 +2410,38 @@ where
         Badge::Small => badge_widget::small().into(),
         Badge::Large(label) => badge_widget::large(label).into(),
     }
+}
+
+fn destination_badge_with_alpha<'a, Message, Renderer>(
+    badge: Badge,
+    alpha: f32,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+{
+    let alpha = alpha.clamp(0.0, 1.0);
+
+    match badge {
+        Badge::Small => badge_widget::small()
+            .style(move |theme| alpha_badge_style(theme, alpha))
+            .into(),
+        Badge::Large(label) => badge_widget::large(label)
+            .style(move |theme| alpha_badge_style(theme, alpha))
+            .into(),
+    }
+}
+
+fn alpha_badge_style(theme: &Theme, alpha: f32) -> iced_widget::container::Style {
+    let mut style = crate::badge::default(theme);
+
+    if let Some(Background::Color(color)) = style.background {
+        style.background = Some(Background::Color(alpha_color(color, alpha)));
+    }
+
+    style.text_color = style.text_color.map(|color| alpha_color(color, alpha));
+    style
 }
 
 fn destination_badge_placement(badge: Badge) -> badge_widget::BadgedBoxPlacement {
@@ -2764,6 +2878,46 @@ mod tests {
     }
 
     #[test]
+    fn navigation_rail_expansion_progress_does_not_bounce_at_edges() {
+        let start = Instant::now();
+        let mut state = NavigationRailExpansionState::new(false);
+
+        state.open(start);
+        let mut previous = state.progress.value;
+
+        for step in 1_u64..=24 {
+            let _ = state.advance(start + Duration::from_millis(step * 16));
+
+            let progress = state.progress.value;
+            assert!((0.0..=1.0).contains(&progress));
+            assert!(
+                progress + f32::EPSILON >= previous,
+                "open progress should be monotonic: {progress} < {previous}"
+            );
+            previous = progress;
+        }
+
+        let close_start = start + Duration::from_millis(500);
+        let _ = state.advance(close_start);
+        assert_eq!(state.progress.value, 1.0);
+
+        state.close(close_start);
+        previous = state.progress.value;
+
+        for step in 1_u64..=24 {
+            let _ = state.advance(close_start + Duration::from_millis(step * 16));
+
+            let progress = state.progress.value;
+            assert!((0.0..=1.0).contains(&progress));
+            assert!(
+                progress <= previous + f32::EPSILON,
+                "close progress should be monotonic: {progress} > {previous}"
+            );
+            previous = progress;
+        }
+    }
+
+    #[test]
     fn active_indicator_width_follows_selection_progress() {
         let target = tokens::component::navigation_bar::ACTIVE_INDICATOR_WIDTH;
 
@@ -2866,12 +3020,30 @@ mod tests {
             ),
             0.5,
         );
+        assert_eq!(navigation_rail_expanded_collapsed_label_alpha(1.0), 0.0);
+        assert_eq!(navigation_rail_expanded_collapsed_label_alpha(0.5), 0.5);
+        assert_eq!(navigation_rail_expanded_collapsed_label_alpha(0.0), 1.0);
+        assert_eq!(
+            navigation_rail_collapsed_label_top_padding(),
+            navigation_rail_item_content_top_padding()
+                + tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT
+                + tokens::component::navigation_rail::ITEM_VERTICAL_PADDING
+        );
+        assert_eq!(
+            navigation_rail_collapsed_label_width(),
+            tokens::component::navigation_rail::ACTIVE_INDICATOR_WIDTH
+        );
         assert_close(
             navigation_rail_expanded_label_alpha_for_width(
                 tokens::component::navigation_rail::EXPANDED_CONTAINER_WIDTH,
             ),
             1.0,
         );
+        assert!(navigation_rail_expanded_badge_uses_icon_anchor(0.0));
+        assert!(!navigation_rail_expanded_badge_uses_icon_anchor(0.01));
+        assert_eq!(navigation_rail_expanded_trailing_badge_alpha(-1.0), 0.0);
+        assert_eq!(navigation_rail_expanded_trailing_badge_alpha(0.5), 0.5);
+        assert_eq!(navigation_rail_expanded_trailing_badge_alpha(2.0), 1.0);
         assert_eq!(
             navigation_rail_expanded_indicator_height_for_progress(0.0),
             tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT
@@ -2997,6 +3169,18 @@ mod tests {
             destination_badge_placement(Badge::Large("3")),
             badge_widget::BadgedBoxPlacement::WithContent
         );
+    }
+
+    #[test]
+    fn navigation_trailing_badge_alpha_follows_expanded_label_visibility() {
+        let theme = Theme::Light;
+        let style = alpha_badge_style(&theme, 0.25);
+        let Some(Background::Color(background)) = style.background else {
+            panic!("badge background should be a color");
+        };
+
+        assert_eq!(background.a, 0.25);
+        assert_eq!(style.text_color.unwrap().a, 0.25);
     }
 
     #[test]

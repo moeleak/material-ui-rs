@@ -29,7 +29,7 @@ fn progress_indicators(state: &Showcase) -> material::Element<'_, Message> {
 
     page::stack([
         page::row([
-            material::text::body_large("Progress")
+            material::text::body_large("Determinate")
                 .width(iced::Length::Fill)
                 .into(),
             material::text::body_large(format!("{:.0}%", state.progress)).into(),
@@ -41,10 +41,7 @@ fn progress_indicators(state: &Showcase) -> material::Element<'_, Message> {
         material::widget::progress_bar::linear(progress, linear_phase).into(),
         material::widget::progress_bar::linear_indeterminate(linear_phase, false).into(),
         page::row([
-            material::widget::progress_bar::determinate_loading_indicator(progress).into(),
             material::widget::progress_bar::loading_indicator(loading_phase).into(),
-            material::widget::progress_bar::determinate_contained_loading_indicator(progress)
-                .into(),
             material::widget::progress_bar::contained_loading_indicator(loading_phase).into(),
         ])
         .spacing(16)
