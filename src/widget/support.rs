@@ -73,8 +73,19 @@ pub(super) struct AnimatedScalar {
     from: f32,
     pub(super) to: f32,
     started_at: Option<Instant>,
-    duration: Duration,
-    easing: tokens::motion::CubicBezier,
+    spec: AnimationSpec,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum AnimationSpec {
+    Cubic {
+        duration: Duration,
+        easing: tokens::motion::CubicBezier,
+    },
+    Spring {
+        spring: tokens::motion::Spring,
+        settle_after: Duration,
+    },
 }
 
 impl AnimatedScalar {
@@ -84,8 +95,10 @@ impl AnimatedScalar {
             from: value,
             to: value,
             started_at: None,
-            duration: Duration::ZERO,
-            easing: tokens::motion::EASING_LINEAR,
+            spec: AnimationSpec::Cubic {
+                duration: Duration::ZERO,
+                easing: tokens::motion::EASING_LINEAR,
+            },
         }
     }
 
@@ -103,8 +116,26 @@ impl AnimatedScalar {
         self.from = self.value;
         self.to = to;
         self.started_at = Some(now);
-        self.duration = duration;
-        self.easing = easing;
+        self.spec = AnimationSpec::Cubic { duration, easing };
+    }
+
+    pub(super) fn set_spring_target(
+        &mut self,
+        to: f32,
+        now: Instant,
+        spring: tokens::motion::Spring,
+    ) {
+        if (self.to - to).abs() <= f32::EPSILON {
+            return;
+        }
+
+        self.from = self.value;
+        self.to = to;
+        self.started_at = Some(now);
+        self.spec = AnimationSpec::Spring {
+            spring,
+            settle_after: spring_settle_duration(spring),
+        };
     }
 
     pub(super) fn advance(&mut self, now: Instant) -> bool {
@@ -113,28 +144,80 @@ impl AnimatedScalar {
             return false;
         };
 
-        if self.duration.is_zero() {
-            self.value = self.to;
-            self.started_at = None;
-            return false;
-        }
+        match self.spec {
+            AnimationSpec::Cubic { duration, easing } => {
+                if duration.is_zero() {
+                    self.value = self.to;
+                    self.started_at = None;
+                    return false;
+                }
 
-        let progress = (now.duration_since(started_at).as_secs_f32() / self.duration.as_secs_f32())
-            .clamp(0.0, 1.0);
+                let progress = (now.duration_since(started_at).as_secs_f32()
+                    / duration.as_secs_f32())
+                .clamp(0.0, 1.0);
 
-        self.value = lerp(self.from, self.to, cubic_bezier(progress, self.easing));
+                self.value = lerp(self.from, self.to, cubic_bezier(progress, easing));
 
-        if progress >= 1.0 {
-            self.value = self.to;
-            self.started_at = None;
-            false
-        } else {
-            true
+                if progress >= 1.0 {
+                    self.value = self.to;
+                    self.started_at = None;
+                    false
+                } else {
+                    true
+                }
+            }
+            AnimationSpec::Spring {
+                spring,
+                settle_after,
+            } => {
+                let elapsed = now.duration_since(started_at);
+
+                if elapsed >= settle_after {
+                    self.value = self.to;
+                    self.started_at = None;
+                    return false;
+                }
+
+                self.value = lerp(
+                    self.from,
+                    self.to,
+                    spring_progress(elapsed.as_secs_f32(), spring),
+                );
+
+                true
+            }
         }
     }
 
     fn is_animating(&self) -> bool {
         self.started_at.is_some()
+    }
+}
+
+fn spring_settle_duration(spring: tokens::motion::Spring) -> Duration {
+    let natural_frequency = spring.stiffness.sqrt();
+    let damping = (spring.damping_ratio * natural_frequency).max(1.0);
+    let seconds = (1000.0_f32.ln() / damping).clamp(0.05, 1.2);
+
+    Duration::from_secs_f32(seconds)
+}
+
+fn spring_progress(seconds: f32, spring: tokens::motion::Spring) -> f32 {
+    let damping_ratio = spring.damping_ratio.max(0.0);
+    let natural_frequency = spring.stiffness.sqrt();
+
+    if damping_ratio < 1.0 {
+        let damped_frequency = natural_frequency * (1.0 - damping_ratio * damping_ratio).sqrt();
+        let envelope = (-damping_ratio * natural_frequency * seconds).exp();
+        let oscillation = (damped_frequency * seconds).cos()
+            + (damping_ratio / (1.0 - damping_ratio * damping_ratio).sqrt())
+                * (damped_frequency * seconds).sin();
+
+        1.0 - envelope * oscillation
+    } else {
+        let envelope = (-natural_frequency * seconds).exp();
+
+        1.0 - envelope * (1.0 + natural_frequency * seconds)
     }
 }
 

@@ -7,8 +7,7 @@ use iced_widget::core::{Background, Color, Element, Length, Padding, alignment, 
 use iced_widget::text::{self, LineHeight};
 use iced_widget::{Button, Column, Container, Row, Space, Stack, Text};
 
-use super::support::{AnimatedScalar, duration_ms, lerp};
-use crate::button as button_style;
+use super::support::{AnimatedScalar, lerp};
 use crate::utils::{
     HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, mix, shadow_from_level, state_layer,
 };
@@ -76,9 +75,12 @@ impl WindowSizeClass {
 pub struct Selection<Id> {
     selected: Id,
     previous: Option<Id>,
-    selected_start: f32,
-    previous_start: f32,
-    progress: f32,
+    selected_size_start: f32,
+    previous_size_start: f32,
+    size_progress: f32,
+    selected_alpha_start: f32,
+    previous_alpha_start: f32,
+    alpha_progress: f32,
 }
 
 impl<Id: Copy + Eq> Selection<Id> {
@@ -86,9 +88,12 @@ impl<Id: Copy + Eq> Selection<Id> {
         Self {
             selected,
             previous: None,
-            selected_start: 1.0,
-            previous_start: 0.0,
-            progress: 1.0,
+            selected_size_start: 1.0,
+            previous_size_start: 0.0,
+            size_progress: 1.0,
+            selected_alpha_start: 1.0,
+            previous_alpha_start: 0.0,
+            alpha_progress: 1.0,
         }
     }
 
@@ -103,12 +108,29 @@ impl<Id: Copy + Eq> Selection<Id> {
         previous_start: f32,
         progress: f32,
     ) -> Self {
+        Self::transitioning_from_tracks(
+            selected,
+            previous,
+            TrackProgress::new(selected_start, previous_start, progress),
+            TrackProgress::new(selected_start, previous_start, progress),
+        )
+    }
+
+    fn transitioning_from_tracks(
+        selected: Id,
+        previous: Id,
+        size: TrackProgress,
+        alpha: TrackProgress,
+    ) -> Self {
         Self {
             selected,
             previous: Some(previous),
-            selected_start: selected_start.clamp(0.0, 1.0),
-            previous_start: previous_start.clamp(0.0, 1.0),
-            progress: progress.clamp(0.0, 1.0),
+            selected_size_start: size.selected_start,
+            previous_size_start: size.previous_start,
+            size_progress: size.progress,
+            selected_alpha_start: alpha.selected_start,
+            previous_alpha_start: alpha.previous_start,
+            alpha_progress: alpha.progress,
         }
     }
 
@@ -117,10 +139,24 @@ impl<Id: Copy + Eq> Selection<Id> {
     }
 
     pub fn progress(self, id: Id) -> f32 {
+        self.size_progress(id)
+    }
+
+    pub fn size_progress(self, id: Id) -> f32 {
         if id == self.selected {
-            lerp(self.selected_start, 1.0, self.progress)
+            lerp(self.selected_size_start, 1.0, self.size_progress)
         } else if self.previous.is_some_and(|previous| previous == id) {
-            lerp(self.previous_start, 0.0, self.progress)
+            lerp(self.previous_size_start, 0.0, self.size_progress)
+        } else {
+            0.0
+        }
+    }
+
+    pub fn alpha_progress(self, id: Id) -> f32 {
+        if id == self.selected {
+            lerp(self.selected_alpha_start, 1.0, self.alpha_progress)
+        } else if self.previous.is_some_and(|previous| previous == id) {
+            lerp(self.previous_alpha_start, 0.0, self.alpha_progress)
         } else {
             0.0
         }
@@ -131,9 +167,12 @@ impl<Id: Copy + Eq> Selection<Id> {
 pub struct NavigationState<Id> {
     selected: Id,
     previous: Option<Id>,
-    selected_start: f32,
-    previous_start: f32,
-    progress: AnimatedScalar,
+    selected_size_start: f32,
+    previous_size_start: f32,
+    selected_alpha_start: f32,
+    previous_alpha_start: f32,
+    size_progress: AnimatedScalar,
+    alpha_progress: AnimatedScalar,
 }
 
 impl<Id: Copy + Eq> NavigationState<Id> {
@@ -141,9 +180,12 @@ impl<Id: Copy + Eq> NavigationState<Id> {
         Self {
             selected,
             previous: None,
-            selected_start: 1.0,
-            previous_start: 0.0,
-            progress: AnimatedScalar::new(1.0),
+            selected_size_start: 1.0,
+            previous_size_start: 0.0,
+            selected_alpha_start: 1.0,
+            previous_alpha_start: 0.0,
+            size_progress: AnimatedScalar::new(1.0),
+            alpha_progress: AnimatedScalar::new(1.0),
         }
     }
 
@@ -153,39 +195,49 @@ impl<Id: Copy + Eq> NavigationState<Id> {
 
     pub fn selection(&self) -> Selection<Id> {
         if let Some(previous) = self.previous {
-            Selection::transitioning_from(
+            Selection::transitioning_from_tracks(
                 self.selected,
                 previous,
-                self.selected_start,
-                self.previous_start,
-                self.progress.value,
+                TrackProgress::new(
+                    self.selected_size_start,
+                    self.previous_size_start,
+                    self.size_progress.value,
+                ),
+                TrackProgress::new(
+                    self.selected_alpha_start,
+                    self.previous_alpha_start,
+                    self.alpha_progress.value,
+                ),
             )
         } else {
             Selection::new(self.selected)
         }
     }
 
-    pub fn select(&mut self, selected: Id, now: Instant, layout: AdaptiveLayout) {
+    pub fn select(&mut self, selected: Id, now: Instant, _layout: AdaptiveLayout) {
         if selected == self.selected {
             return;
         }
 
         let current = self.selection();
         let previous = self.selected;
-        let selected_start = current.progress(selected);
-        let previous_start = current.progress(previous);
+        let selected_size_start = current.size_progress(selected);
+        let previous_size_start = current.size_progress(previous);
+        let selected_alpha_start = current.alpha_progress(selected);
+        let previous_alpha_start = current.alpha_progress(previous);
 
         self.selected = selected;
         self.previous = Some(previous);
-        self.selected_start = selected_start;
-        self.previous_start = previous_start;
-        self.progress = AnimatedScalar::new(0.0);
-        self.progress.set_target(
-            1.0,
-            now,
-            duration_ms(layout.item_animation_duration_ms()),
-            tokens::motion::EASING_LEGACY,
-        );
+        self.selected_size_start = selected_size_start;
+        self.previous_size_start = previous_size_start;
+        self.selected_alpha_start = selected_alpha_start;
+        self.previous_alpha_start = previous_alpha_start;
+        self.size_progress = AnimatedScalar::new(0.0);
+        self.alpha_progress = AnimatedScalar::new(0.0);
+        self.size_progress
+            .set_spring_target(1.0, now, tokens::motion::EXPRESSIVE_FAST_SPATIAL);
+        self.alpha_progress
+            .set_spring_target(1.0, now, tokens::motion::EXPRESSIVE_DEFAULT_EFFECTS);
     }
 
     pub fn is_animating(&self) -> bool {
@@ -193,14 +245,36 @@ impl<Id: Copy + Eq> NavigationState<Id> {
     }
 
     pub fn advance(&mut self, now: Instant) -> bool {
-        if !self.progress.advance(now) {
-            self.progress.value = 1.0;
+        let animating = self.size_progress.advance(now) | self.alpha_progress.advance(now);
+
+        if !animating {
+            self.size_progress.value = 1.0;
+            self.alpha_progress.value = 1.0;
             self.previous = None;
-            self.selected_start = 1.0;
-            self.previous_start = 0.0;
+            self.selected_size_start = 1.0;
+            self.previous_size_start = 0.0;
+            self.selected_alpha_start = 1.0;
+            self.previous_alpha_start = 0.0;
             false
         } else {
             true
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TrackProgress {
+    selected_start: f32,
+    previous_start: f32,
+    progress: f32,
+}
+
+impl TrackProgress {
+    fn new(selected_start: f32, previous_start: f32, progress: f32) -> Self {
+        Self {
+            selected_start: selected_start.clamp(0.0, 1.0),
+            previous_start: previous_start.clamp(0.0, 1.0),
+            progress,
         }
     }
 }
@@ -448,7 +522,8 @@ where
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     F: Fn(Id) -> Message + Clone + 'a,
 {
-    let progress = selection.progress(destination.id);
+    let size_progress = selection.size_progress(destination.id);
+    let alpha_progress = selection.alpha_progress(destination.id);
     let scale = tokens::component::navigation_bar::LABEL_TEXT;
     let message = on_select(destination.id);
     let indicator = indicator_icon_stack(
@@ -456,12 +531,13 @@ where
         tokens::component::navigation_bar::ICON_SIZE,
         tokens::component::navigation_bar::ACTIVE_INDICATOR_WIDTH,
         tokens::component::navigation_bar::ACTIVE_INDICATOR_HEIGHT,
-        progress,
+        size_progress,
+        alpha_progress,
         false,
         message.clone(),
     );
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
-        color: Some(bar_or_rail_label_color(theme, progress)),
+        color: Some(bar_or_rail_label_color(theme, alpha_progress)),
     });
     let content = Column::new()
         .width(Length::Fill)
@@ -503,7 +579,8 @@ where
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     F: Fn(Id) -> Message + Clone + 'a,
 {
-    let progress = selection.progress(destination.id);
+    let size_progress = selection.size_progress(destination.id);
+    let alpha_progress = selection.alpha_progress(destination.id);
     let scale = tokens::component::navigation_rail::LABEL_TEXT;
     let message = on_select(destination.id);
     let indicator = indicator_icon_stack(
@@ -511,12 +588,13 @@ where
         tokens::component::navigation_rail::ICON_SIZE,
         tokens::component::navigation_rail::ACTIVE_INDICATOR_WIDTH,
         tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT,
-        progress,
+        size_progress,
+        alpha_progress,
         false,
         message.clone(),
     );
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
-        color: Some(bar_or_rail_label_color(theme, progress)),
+        color: Some(bar_or_rail_label_color(theme, alpha_progress)),
     });
     let content = Column::new()
         .width(Length::Fixed(
@@ -553,17 +631,18 @@ where
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     F: Fn(Id) -> Message + Clone + 'a,
 {
-    let progress = selection.progress(destination.id);
+    let size_progress = selection.size_progress(destination.id);
+    let alpha_progress = selection.alpha_progress(destination.id);
     let scale = tokens::component::navigation_drawer::LABEL_TEXT;
     let message = on_select(destination.id);
     let icon = destination_icon::<Renderer>(
         destination.icon,
         tokens::component::navigation_drawer::ICON_SIZE,
-        progress,
+        alpha_progress,
         true,
     );
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
-        color: Some(drawer_content_color(theme, progress)),
+        color: Some(drawer_content_color(theme, alpha_progress)),
     });
     let content = Row::new()
         .width(Length::Fill)
@@ -607,12 +686,15 @@ where
         .push(indicator_layer(
             tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
             tokens::component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT,
-            progress,
+            size_progress,
+            alpha_progress,
         ))
         .push(indicator_state_layer(
             tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
             tokens::component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT,
-            NavigationStateLayer::Drawer { progress },
+            NavigationStateLayer::Drawer {
+                progress: alpha_progress,
+            },
             message.clone(),
         ))
         .push(content);
@@ -634,7 +716,8 @@ fn indicator_icon_stack<'a, Message, Renderer>(
     icon_size: f32,
     indicator_width: f32,
     indicator_height: f32,
-    progress: f32,
+    size_progress: f32,
+    alpha_progress: f32,
     drawer: bool,
     on_press: Message,
 ) -> Stack<'a, Message, Theme, Renderer>
@@ -650,7 +733,12 @@ where
                 .width(Length::Fixed(indicator_width))
                 .height(Length::Fixed(indicator_height)),
         )
-        .push(indicator_layer(indicator_width, indicator_height, progress))
+        .push(indicator_layer(
+            indicator_width,
+            indicator_height,
+            size_progress,
+            alpha_progress,
+        ))
         .push(indicator_state_layer(
             indicator_width,
             indicator_height,
@@ -659,7 +747,10 @@ where
         ))
         .push(
             Container::new(destination_icon::<Renderer>(
-                icon, icon_size, progress, drawer,
+                icon,
+                icon_size,
+                alpha_progress,
+                drawer,
             ))
             .width(Length::Fixed(indicator_width))
             .height(Length::Fixed(indicator_height))
@@ -693,7 +784,8 @@ where
 fn indicator_layer<'a, Message, Renderer>(
     target_width: f32,
     height: f32,
-    progress: f32,
+    size_progress: f32,
+    alpha_progress: f32,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Message: 'a,
@@ -702,10 +794,10 @@ where
     let indicator = Container::new(Space::new())
         .width(Length::Fixed(animated_indicator_width(
             target_width,
-            progress,
+            size_progress,
         )))
         .height(Length::Fixed(height))
-        .style(active_indicator);
+        .style(move |theme| active_indicator(theme, alpha_progress));
 
     Container::new(indicator)
         .width(Length::Fixed(target_width))
@@ -743,7 +835,7 @@ enum NavigationStateLayer {
 
 fn animated_indicator_width(target_width: f32, progress: f32) -> f32 {
     // AndroidX Material3 measures the selected indicator width from animation progress.
-    target_width * progress.clamp(0.0, 1.0)
+    target_width * progress.max(0.0)
 }
 
 fn navigation_bar_item_bottom_padding() -> f32 {
@@ -796,11 +888,21 @@ where
 }
 
 fn navigation_button(theme: &Theme, status: button::Status) -> button::Style {
-    let mut style = button_style::text(theme, status);
-    style.text_color = theme.colors().surface.text;
-    style.background = None;
+    let colors = theme.colors();
+    let text_color = match status {
+        button::Status::Disabled => colors.surface.text_variant,
+        button::Status::Active | button::Status::Hovered | button::Status::Pressed => {
+            colors.surface.text
+        }
+    };
 
-    style
+    button::Style {
+        background: None,
+        text_color,
+        border: border::rounded(tokens::shape::CORNER_NONE),
+        shadow: shadow_from_level(0, Color::TRANSPARENT),
+        snap: cfg!(feature = "crisp"),
+    }
 }
 
 fn navigation_bar_container(theme: &Theme) -> iced_widget::container::Style {
@@ -848,9 +950,12 @@ fn navigation_drawer_container(theme: &Theme) -> iced_widget::container::Style {
     }
 }
 
-fn active_indicator(theme: &Theme) -> iced_widget::container::Style {
+fn active_indicator(theme: &Theme, alpha: f32) -> iced_widget::container::Style {
+    let mut color = theme.colors().secondary.container;
+    color.a *= alpha.clamp(0.0, 1.0);
+
     iced_widget::container::Style {
-        background: Some(Background::Color(theme.colors().secondary.container)),
+        background: Some(Background::Color(color)),
         text_color: Some(theme.colors().secondary.container_text),
         border: border::rounded(tokens::shape::CORNER_FULL),
         ..iced_widget::container::Style::default()
@@ -908,6 +1013,7 @@ fn navigation_state_layer_color(theme: &Theme, layer: NavigationStateLayer) -> C
 #[cfg(test)]
 mod tests {
     use super::*;
+    use iced_widget::core::time::Duration;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Page {
@@ -978,17 +1084,17 @@ mod tests {
         assert_eq!(state.selection().progress(Page::Two), 0.0);
         assert_eq!(state.selection().progress(Page::One), 1.0);
 
-        let still_animating = state.advance(
-            start + duration_ms(tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS / 2),
-        );
+        let still_animating = state.advance(start + Duration::from_millis(50));
 
         assert!(still_animating);
         assert!(state.selection().progress(Page::Two) > 0.0);
         assert!(state.selection().progress(Page::One) < 1.0);
-
-        let finished = state.advance(
-            start + duration_ms(tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS),
+        assert_ne!(
+            state.selection().size_progress(Page::Two),
+            state.selection().alpha_progress(Page::Two)
         );
+
+        let finished = state.advance(start + Duration::from_millis(500));
 
         assert!(!finished);
         assert!(!state.is_animating());
@@ -1002,15 +1108,13 @@ mod tests {
         let mut state = NavigationState::new(Page::One);
 
         state.select(Page::Two, start, AdaptiveLayout::NavigationRail);
-        let _ = state.advance(
-            start + duration_ms(tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS / 2),
-        );
+        let _ = state.advance(start + Duration::from_millis(50));
 
         let two_progress = state.selection().progress(Page::Two);
 
         state.select(
             Page::One,
-            start + duration_ms(tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS / 2),
+            start + Duration::from_millis(50),
             AdaptiveLayout::NavigationRail,
         );
 
@@ -1027,7 +1131,7 @@ mod tests {
         assert_eq!(animated_indicator_width(target, 0.0), 0.0);
         assert_eq!(animated_indicator_width(target, 0.5), target / 2.0);
         assert_eq!(animated_indicator_width(target, 1.0), target);
-        assert_eq!(animated_indicator_width(target, 2.0), target);
+        assert_eq!(animated_indicator_width(target, 2.0), target * 2.0);
     }
 
     #[test]
@@ -1088,5 +1192,18 @@ mod tests {
             selected_pressed.border.radius.top_left,
             tokens::shape::CORNER_FULL
         );
+    }
+
+    #[test]
+    fn navigation_item_button_leaves_feedback_to_indicator() {
+        let theme = Theme::Light;
+
+        let hovered = navigation_button(&theme, button::Status::Hovered);
+        let pressed = navigation_button(&theme, button::Status::Pressed);
+
+        assert_eq!(hovered.background, None);
+        assert_eq!(pressed.background, None);
+        assert_eq!(hovered.shadow, shadow_from_level(0, Color::TRANSPARENT));
+        assert_eq!(pressed.shadow, shadow_from_level(0, Color::TRANSPARENT));
     }
 }
