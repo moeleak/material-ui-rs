@@ -4,7 +4,7 @@ use iced_widget::button;
 use iced_widget::core::text as core_text;
 use iced_widget::core::{Background, Color, Element, Length, Padding, alignment, border};
 use iced_widget::text::{self, LineHeight};
-use iced_widget::{Button, Column, Container, Row, Text};
+use iced_widget::{Button, Column, Container, Row, Space, Stack, Text};
 
 use crate::button as button_style;
 use crate::utils::{mix, shadow_from_level};
@@ -352,22 +352,14 @@ where
 {
     let progress = selection.progress(destination.id);
     let scale = tokens::component::navigation_bar::LABEL_TEXT;
-    let icon = destination_icon::<Renderer>(
+    let indicator = indicator_icon_stack(
         destination.icon,
         tokens::component::navigation_bar::ICON_SIZE,
+        tokens::component::navigation_bar::ACTIVE_INDICATOR_WIDTH,
+        tokens::component::navigation_bar::ACTIVE_INDICATOR_HEIGHT,
         progress,
         false,
     );
-    let indicator = Container::new(icon)
-        .width(Length::Fixed(
-            tokens::component::navigation_bar::ACTIVE_INDICATOR_WIDTH,
-        ))
-        .height(Length::Fixed(
-            tokens::component::navigation_bar::ACTIVE_INDICATOR_HEIGHT,
-        ))
-        .align_x(alignment::Horizontal::Center)
-        .align_y(alignment::Vertical::Center)
-        .style(move |theme| active_indicator(theme, progress));
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
         color: Some(bar_or_rail_label_color(theme, progress)),
     });
@@ -416,22 +408,14 @@ where
 {
     let progress = selection.progress(destination.id);
     let scale = tokens::component::navigation_rail::LABEL_TEXT;
-    let icon = destination_icon::<Renderer>(
+    let indicator = indicator_icon_stack(
         destination.icon,
         tokens::component::navigation_rail::ICON_SIZE,
+        tokens::component::navigation_rail::ACTIVE_INDICATOR_WIDTH,
+        tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT,
         progress,
         false,
     );
-    let indicator = Container::new(icon)
-        .width(Length::Fixed(
-            tokens::component::navigation_rail::ACTIVE_INDICATOR_WIDTH,
-        ))
-        .height(Length::Fixed(
-            tokens::component::navigation_rail::ACTIVE_INDICATOR_HEIGHT,
-        ))
-        .align_x(alignment::Horizontal::Center)
-        .align_y(alignment::Vertical::Center)
-        .style(move |theme| active_indicator(theme, progress));
     let label = type_text(destination.label, scale).style(move |theme| text::Style {
         color: Some(bar_or_rail_label_color(theme, progress)),
     });
@@ -490,7 +474,7 @@ where
         .align_y(alignment::Vertical::Center)
         .push(icon)
         .push(label);
-    let indicator = Container::new(content)
+    let content = Container::new(content)
         .width(Length::Fixed(
             tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
         ))
@@ -503,7 +487,29 @@ where
             bottom: 0.0,
             left: tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE,
         })
-        .style(move |theme| active_indicator(theme, progress));
+        .align_y(alignment::Vertical::Center);
+    let indicator = Stack::new()
+        .width(Length::Fixed(
+            tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
+        ))
+        .height(Length::Fixed(
+            tokens::component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT,
+        ))
+        .push(
+            Space::new()
+                .width(Length::Fixed(
+                    tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
+                ))
+                .height(Length::Fixed(
+                    tokens::component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT,
+                )),
+        )
+        .push(indicator_layer(
+            tokens::component::navigation_drawer::ACTIVE_INDICATOR_WIDTH,
+            tokens::component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT,
+            progress,
+        ))
+        .push(content);
 
     Button::new(indicator)
         .width(Length::Fixed(
@@ -515,6 +521,67 @@ where
         .padding(Padding::ZERO)
         .style(navigation_button)
         .on_press(on_select(destination.id))
+}
+
+fn indicator_icon_stack<'a, Message, Renderer>(
+    icon: &'static str,
+    icon_size: f32,
+    indicator_width: f32,
+    indicator_height: f32,
+    progress: f32,
+    drawer: bool,
+) -> Stack<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+{
+    Stack::new()
+        .width(Length::Fixed(indicator_width))
+        .height(Length::Fixed(indicator_height))
+        .push(
+            Space::new()
+                .width(Length::Fixed(indicator_width))
+                .height(Length::Fixed(indicator_height)),
+        )
+        .push(indicator_layer(indicator_width, indicator_height, progress))
+        .push(
+            Container::new(destination_icon::<Renderer>(
+                icon, icon_size, progress, drawer,
+            ))
+            .width(Length::Fixed(indicator_width))
+            .height(Length::Fixed(indicator_height))
+            .align_x(alignment::Horizontal::Center)
+            .align_y(alignment::Vertical::Center),
+        )
+}
+
+fn indicator_layer<'a, Message, Renderer>(
+    target_width: f32,
+    height: f32,
+    progress: f32,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    let indicator = Container::new(Space::new())
+        .width(Length::Fixed(animated_indicator_width(
+            target_width,
+            progress,
+        )))
+        .height(Length::Fixed(height))
+        .style(active_indicator);
+
+    Container::new(indicator)
+        .width(Length::Fixed(target_width))
+        .height(Length::Fixed(height))
+        .align_x(alignment::Horizontal::Center)
+        .align_y(alignment::Vertical::Center)
+}
+
+fn animated_indicator_width(target_width: f32, progress: f32) -> f32 {
+    // AndroidX Material3 measures the selected indicator width from animation progress.
+    target_width * progress.clamp(0.0, 1.0)
 }
 
 fn destination_icon<'a, Renderer>(
@@ -558,10 +625,7 @@ where
 fn navigation_button(theme: &Theme, status: button::Status) -> button::Style {
     let mut style = button_style::text(theme, status);
     style.text_color = theme.colors().surface.text;
-
-    if matches!(status, button::Status::Active | button::Status::Disabled) {
-        style.background = None;
-    }
+    style.background = None;
 
     style
 }
@@ -611,13 +675,9 @@ fn navigation_drawer_container(theme: &Theme) -> iced_widget::container::Style {
     }
 }
 
-fn active_indicator(theme: &Theme, progress: f32) -> iced_widget::container::Style {
-    let progress = progress.clamp(0.0, 1.0);
-    let mut background = theme.colors().secondary.container;
-    background.a *= progress;
-
+fn active_indicator(theme: &Theme) -> iced_widget::container::Style {
     iced_widget::container::Style {
-        background: Some(Background::Color(background)),
+        background: Some(Background::Color(theme.colors().secondary.container)),
         text_color: Some(theme.colors().secondary.container_text),
         border: border::rounded(tokens::shape::CORNER_FULL),
         ..iced_widget::container::Style::default()
@@ -715,5 +775,16 @@ mod tests {
         assert_eq!(selection.progress(Page::Two), 0.25);
         assert_eq!(selection.progress(Page::One), 0.75);
         assert_eq!(Selection::new(Page::One).progress(Page::One), 1.0);
+    }
+
+    #[test]
+    fn active_indicator_width_follows_selection_progress() {
+        let target = tokens::component::navigation_bar::ACTIVE_INDICATOR_WIDTH;
+
+        assert_eq!(animated_indicator_width(target, -1.0), 0.0);
+        assert_eq!(animated_indicator_width(target, 0.0), 0.0);
+        assert_eq!(animated_indicator_width(target, 0.5), target / 2.0);
+        assert_eq!(animated_indicator_width(target, 1.0), target);
+        assert_eq!(animated_indicator_width(target, 2.0), target);
     }
 }
