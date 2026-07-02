@@ -4,13 +4,14 @@ use material::widget::page;
 
 use super::super::{Message, Showcase};
 
+const TOP_APP_BAR_STATUS_INSET: f32 = 24.0;
 const STRUCTURE_PREVIEW_MAX_WIDTH: f32 = 640.0;
 const STRUCTURE_PREVIEW_HORIZONTAL_RESERVE: f32 = 160.0;
 const STRUCTURE_PREVIEW_MIN_WIDTH: f32 = 320.0;
 
 pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     page::sections([
-        page::section("Top app bars", top_app_bars(state)).into(),
+        page::section("Top app bars", top_app_bars()).into(),
         page::section("Search view", search_view(state)).into(),
         page::section("Bottom app bar", bottom_app_bar()).into(),
         page::section("Bottom sheets", bottom_sheets(state)).into(),
@@ -18,10 +19,9 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     .into()
 }
 
-fn top_app_bars(state: &Showcase) -> material::Element<'static, Message> {
-    centered_preview(
-        structure_preview_width(state),
-        page::stack([
+fn top_app_bars() -> material::Element<'static, Message> {
+    page::stack([
+        top_app_bar_preview(
             material::widget::app_bar::small(
                 "Small",
                 Some(
@@ -39,6 +39,9 @@ fn top_app_bars(state: &Showcase) -> material::Element<'static, Message> {
                 ],
             )
             .into(),
+        )
+        .into(),
+        top_app_bar_preview(
             material::widget::app_bar::medium(
                 "Medium",
                 Some(
@@ -56,6 +59,9 @@ fn top_app_bars(state: &Showcase) -> material::Element<'static, Message> {
                 ],
             )
             .into(),
+        )
+        .into(),
+        top_app_bar_preview(
             material::widget::app_bar::large(
                 "Large",
                 Some(
@@ -73,9 +79,25 @@ fn top_app_bars(state: &Showcase) -> material::Element<'static, Message> {
                 ],
             )
             .into(),
-        ])
-        .spacing(12),
-    )
+        )
+        .into(),
+    ])
+    .spacing(12)
+    .into()
+}
+
+fn top_app_bar_preview(
+    app_bar: material::Element<'static, Message>,
+) -> material::Element<'static, Message> {
+    page::stack([
+        material::Container::new(iced::widget::Space::new())
+            .height(Length::Fixed(TOP_APP_BAR_STATUS_INSET))
+            .width(Length::Fill)
+            .style(material::container::surface)
+            .into(),
+        app_bar,
+    ])
+    .spacing(0)
     .into()
 }
 
