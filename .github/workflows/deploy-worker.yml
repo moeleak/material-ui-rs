@@ -33,13 +33,20 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('Cargo.toml', 'Cargo.toml.orig') }}
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('Cargo.toml', 'Cargo.toml.orig', 'flake.nix', 'flake.lock', 'web/index.html', '.github/workflows/deploy-worker.yml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-wasm-
 
       - name: Build WASM showcase
         env:
           NO_COLOR: false
+          CARGO_INCREMENTAL: "0"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_DEBUG: "0"
+          CARGO_PROFILE_RELEASE_LTO: fat
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: z
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: "false"
+          CARGO_PROFILE_RELEASE_PANIC: abort
         run: nix develop -c trunk build web/index.html --release --dist dist --public-url /
 
       - name: Deploy Worker
