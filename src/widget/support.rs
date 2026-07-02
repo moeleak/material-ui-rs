@@ -271,6 +271,7 @@ pub(super) struct TextFieldState<Paragraph: core_text::Paragraph> {
     pub(super) label: core_widget::text::State<Paragraph>,
     pub(super) label_float: AnimatedScalar,
     pub(super) is_focused: bool,
+    pub(super) ime_preedit_active: bool,
 }
 
 impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
@@ -279,10 +280,48 @@ impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
             label: core_widget::text::State::<Paragraph>::default(),
             label_float: AnimatedScalar::new(bool_value(is_populated)),
             is_focused: false,
+            ime_preedit_active: false,
         }
     }
 
     pub(super) fn is_animating(&self) -> bool {
         self.label_float.is_animating()
+    }
+
+    pub(super) fn set_ime_preedit(&mut self, content: &str) -> bool {
+        let active = !content.is_empty();
+        let changed = self.ime_preedit_active != active;
+
+        self.ime_preedit_active = active;
+
+        changed
+    }
+
+    pub(super) fn clear_ime_preedit(&mut self) -> bool {
+        let changed = self.ime_preedit_active;
+
+        self.ime_preedit_active = false;
+
+        changed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type TestParagraph = <iced_widget::Renderer as core_text::Renderer>::Paragraph;
+
+    #[test]
+    fn text_field_state_tracks_active_ime_preedit() {
+        let mut state = TextFieldState::<TestParagraph>::new(false);
+
+        assert!(!state.ime_preedit_active);
+        assert!(state.set_ime_preedit("pin yin"));
+        assert!(state.ime_preedit_active);
+        assert!(!state.set_ime_preedit("more"));
+        assert!(state.clear_ime_preedit());
+        assert!(!state.ime_preedit_active);
+        assert!(!state.clear_ime_preedit());
     }
 }

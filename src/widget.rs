@@ -12,7 +12,8 @@ use iced_widget::core::widget as core_widget;
 use iced_widget::core::widget::tree::{self, Tree};
 use iced_widget::core::{
     Background, Border, Clipboard, Color, Element, Event, Layout, Length, Padding, Pixels, Point,
-    Rectangle, Shell, Size, Widget, alignment, border, layout, mouse, renderer, touch, window,
+    Rectangle, Shell, Size, Widget, alignment, border, input_method, layout, mouse, renderer,
+    touch, window,
 };
 use iced_widget::radio as iced_radio;
 use iced_widget::rule as iced_rule;
@@ -22,8 +23,8 @@ use iced_widget::text_input as iced_text_input;
 use iced_widget::toggler as iced_toggler;
 use iced_widget::tooltip as iced_tooltip;
 use iced_widget::{
-    Button, Container, ProgressBar, Rule, Slider, Text,
-    TextInput as IcedTextInput, TextEditor as IcedTextEditor, Tooltip,
+    Button, Container, ProgressBar, Rule, Slider, Text, TextInput as IcedTextInput,
+    TextEditor as IcedTextEditor, Tooltip,
 };
 
 use crate::utils::mix;
@@ -771,6 +772,16 @@ pub mod text_input {
         style
     }
 
+    fn caretless_input_layer_style(
+        theme: &Theme,
+        _status: iced_text_input::Status,
+    ) -> iced_text_input::Style {
+        input_layer_style(
+            theme,
+            iced_text_input::Status::Focused { is_hovered: false },
+        )
+    }
+
     fn status_style(
         theme: &Theme,
         is_enabled: bool,
@@ -876,8 +887,10 @@ pub mod text_input {
         Renderer: iced_widget::core::Renderer + core_text::Renderer,
     {
         label: text::Fragment<'a>,
+        value: String,
         is_populated: bool,
         is_enabled: bool,
+        is_secure: bool,
         width: Length,
         font: Option<Renderer::Font>,
         label_mode: LabelMode,
@@ -892,6 +905,7 @@ pub mod text_input {
             f.debug_struct("TextInput")
                 .field("is_populated", &self.is_populated)
                 .field("is_enabled", &self.is_enabled)
+                .field("is_secure", &self.is_secure)
                 .field("width", &self.width)
                 .field("label_mode", &self.label_mode)
                 .finish_non_exhaustive()
@@ -932,8 +946,10 @@ pub mod text_input {
 
             Self {
                 label: label.into_fragment(),
+                value: value.to_owned(),
                 is_populated: !value.is_empty(),
                 is_enabled: false,
+                is_secure: false,
                 width: Length::Fill,
                 font: None,
                 label_mode,
@@ -947,6 +963,7 @@ pub mod text_input {
         }
 
         pub fn secure(mut self, is_secure: bool) -> Self {
+            self.is_secure = is_secure;
             self.input = self.input.secure(is_secure);
             self
         }
@@ -1148,6 +1165,23 @@ pub mod text_input {
                     ) =>
                 {
                     state.is_focused = false;
+                    if state.clear_ime_preedit() {
+                        shell.request_redraw();
+                    }
+                }
+                Event::InputMethod(input_method::Event::Preedit(content, _)) => {
+                    if state.set_ime_preedit(content) {
+                        shell.request_redraw();
+                    }
+                }
+                Event::InputMethod(
+                    input_method::Event::Opened
+                    | input_method::Event::Closed
+                    | input_method::Event::Commit(_),
+                ) => {
+                    if state.clear_ime_preedit() {
+                        shell.request_redraw();
+                    }
                 }
                 Event::Window(window::Event::RedrawRequested(now)) => {
                     if state.label_float.advance(*now) {
@@ -1237,13 +1271,46 @@ pub mod text_input {
                 theme.colors().surface.container.high,
             );
 
+            let input_layout = layout.children().next().unwrap();
+            let caretless_input;
+            let input = if state.ime_preedit_active && self.is_enabled {
+                // Keep iced_winit's IME preedit overlay, but suppress iced's own
+                // blinking caret so composition does not show two insertion marks.
+                let mut input = IcedTextInput::new("", self.value.as_str())
+                    .width(Length::Fill)
+                    .padding(Padding {
+                        top: tokens::component::text_field::TOP_SPACE,
+                        right: tokens::component::text_field::TRAILING_SPACE,
+                        bottom: tokens::component::text_field::BOTTOM_SPACE,
+                        left: tokens::component::text_field::LEADING_SPACE,
+                    })
+                    .size(tokens::component::text_field::INPUT_TEXT_SIZE)
+                    .line_height(absolute_line_height(
+                        tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
+                    ))
+                    .style(caretless_input_layer_style);
+
+                if self.is_secure {
+                    input = input.secure(true);
+                }
+
+                if let Some(font) = self.font {
+                    input = input.font(font);
+                }
+
+                caretless_input = input;
+                &caretless_input
+            } else {
+                &self.input
+            };
+
             <IcedTextInput<'_, Message, Theme, Renderer> as Widget<Message, Theme, Renderer>>::draw(
-                &self.input,
+                input,
                 &tree.children[0],
                 renderer,
                 theme,
                 defaults,
-                layout.children().next().unwrap(),
+                input_layout,
                 cursor,
                 viewport,
             );
