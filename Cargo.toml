@@ -39,7 +39,7 @@ keywords = [
 ]
 categories = ["gui"]
 license = "MIT"
-repository = "https://git.pml68.dev/iced_material"
+repository = "https://github.com/moeleak/iced_material"
 
 [features]
 animate = ["dep:iced_anim"]
