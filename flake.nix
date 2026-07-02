@@ -32,12 +32,19 @@
             rustfmt
             rust-analyzer
             cargo
+            lld
+            trunk
+            binaryen
+            wasm-bindgen-cli
           ]
           ++ (lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ]);
       in
       {
         devShells.default = pkgs.mkShell {
           packages = rustToolchain;
+          shellHook = ''
+            export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="${pkgs.lld}/bin/wasm-ld"
+          '';
         };
 
         packages.default = rustPlatform.buildRustPackage {

@@ -92,6 +92,21 @@ cargo check --examples
 The quick-start app lives in `examples/quickstart/app.rs`; the full widget
 showcase lives in `examples/showcase/app.rs`.
 
+Build or serve the WebAssembly showcase with Trunk:
+
+```sh
+nix develop -c trunk serve web/index.html
+nix develop -c trunk build web/index.html --release --dist dist --public-url /
+```
+
+The Nix shell provides Trunk, the WebAssembly linker, `wasm-opt`, and
+`wasm-bindgen`. The GitHub Actions workflow builds the Trunk `dist/` output in
+the same shell and deploys it to Cloudflare Workers Static Assets. Configure
+these repository secrets before deploying:
+
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`
+
 ## License
 
 MIT

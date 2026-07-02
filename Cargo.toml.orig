@@ -55,6 +55,10 @@ path = "examples/quickstart/app.rs"
 name = "showcase"
 path = "examples/showcase/app.rs"
 
+[[bin]]
+name = "showcase_web"
+path = "web/showcase_web.rs"
+
 [lints.rust]
 missing_debug_implementations = "deny"
 unsafe_code = "deny"

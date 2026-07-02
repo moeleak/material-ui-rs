@@ -66,6 +66,10 @@ path = "examples/quickstart/app.rs"
 name = "showcase"
 path = "examples/showcase/app.rs"
 
+[[bin]]
+name = "showcase_web"
+path = "web/showcase_web.rs"
+
 [dependencies.iced_anim]
 version = "0.3"
 features = ["derive"]
