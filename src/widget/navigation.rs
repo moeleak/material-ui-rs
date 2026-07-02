@@ -10,8 +10,8 @@ use iced_widget::core::touch;
 use iced_widget::core::widget::tree::{self, Tree};
 use iced_widget::core::widget::Operation;
 use iced_widget::core::{
-    alignment, border, Background, Clipboard, Color, Element, Event, Font, Layout, Length, Padding,
-    Rectangle, Shell, Size, Vector, Widget,
+    alignment, border, window, Background, Clipboard, Color, Element, Event, Font, Layout, Length,
+    Padding, Rectangle, Shell, Size, Vector, Widget,
 };
 use iced_widget::text::{self, LineHeight};
 use iced_widget::{Button, Column, Container, Row, Space, Stack, Text};
@@ -242,7 +242,7 @@ impl<Id: Copy + Eq> NavigationState<Id> {
         }
     }
 
-    pub fn select(&mut self, selected: Id, now: Instant, _layout: AdaptiveLayout) {
+    pub fn select(&mut self, selected: Id, now: Instant, layout: AdaptiveLayout) {
         if selected == self.selected {
             self.start_activation_pulse(now);
             return;
@@ -263,10 +263,11 @@ impl<Id: Copy + Eq> NavigationState<Id> {
         self.previous_alpha_start = previous_alpha_start;
         self.size_progress = AnimatedScalar::new(0.0);
         self.alpha_progress = AnimatedScalar::new(0.0);
+        let duration = duration_ms(layout.item_animation_duration_ms());
         self.size_progress
-            .set_spring_target(1.0, now, tokens::motion::EXPRESSIVE_FAST_SPATIAL);
+            .set_target(1.0, now, duration, tokens::motion::EASING_LEGACY);
         self.alpha_progress
-            .set_spring_target(1.0, now, tokens::motion::EXPRESSIVE_DEFAULT_EFFECTS);
+            .set_target(1.0, now, duration, tokens::motion::EASING_LEGACY);
         self.start_activation_pulse(now);
     }
 
@@ -1440,10 +1441,74 @@ impl NavigationIndicatorPlacement {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct NavigationPressSurfaceState {
     is_hovered: bool,
     is_pressed: bool,
+    state_layer_opacity: AnimatedScalar,
+}
+
+impl Default for NavigationPressSurfaceState {
+    fn default() -> Self {
+        Self {
+            is_hovered: false,
+            is_pressed: false,
+            state_layer_opacity: AnimatedScalar::new(0.0),
+        }
+    }
+}
+
+impl NavigationPressSurfaceState {
+    fn sync_hover(&mut self, is_hovered: bool, now: Instant) -> bool {
+        if self.is_hovered == is_hovered {
+            return false;
+        }
+
+        self.is_hovered = is_hovered;
+
+        if !self.is_pressed {
+            self.animate_to_interaction_target(now);
+        }
+
+        true
+    }
+
+    fn press(&mut self) {
+        self.is_pressed = true;
+        self.state_layer_opacity = AnimatedScalar::new(PRESSED_LAYER_OPACITY);
+    }
+
+    fn release(&mut self, is_hovered: bool, now: Instant) {
+        self.is_pressed = false;
+        self.is_hovered = is_hovered;
+        self.animate_to_interaction_target(now);
+    }
+
+    fn cancel(&mut self, now: Instant) {
+        self.is_pressed = false;
+        self.is_hovered = false;
+        self.animate_to_interaction_target(now);
+    }
+
+    fn advance(&mut self, now: Instant) -> bool {
+        self.state_layer_opacity.advance(now)
+    }
+
+    fn opacity(&self, activation_progress: f32) -> f32 {
+        navigation_surface_state_layer_opacity_from_interaction(
+            self.state_layer_opacity.value,
+            activation_progress,
+        )
+    }
+
+    fn animate_to_interaction_target(&mut self, now: Instant) {
+        self.state_layer_opacity.set_target(
+            navigation_interaction_state_layer_target(self.is_hovered, self.is_pressed),
+            now,
+            duration_ms(tokens::motion::DURATION_SHORT2_MS),
+            tokens::motion::EASING_STANDARD,
+        );
+    }
 }
 
 impl<Message, Renderer> Widget<Message, Theme, Renderer>
@@ -1526,10 +1591,13 @@ where
         }
 
         let state = tree.state.downcast_mut::<NavigationPressSurfaceState>();
+        let now = match event {
+            Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
+            _ => None,
+        };
         let is_hovered = cursor.is_over(layout.bounds());
 
-        if state.is_hovered != is_hovered {
-            state.is_hovered = is_hovered;
+        if state.sync_hover(is_hovered, now.unwrap_or_else(Instant::now)) {
             shell.request_redraw();
         }
 
@@ -1537,7 +1605,7 @@ where
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerPressed { .. }) => {
                 if is_hovered {
-                    state.is_pressed = true;
+                    state.press();
                     shell.request_redraw();
                     shell.capture_event();
                 }
@@ -1545,7 +1613,7 @@ where
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerLifted { .. }) => {
                 if state.is_pressed {
-                    state.is_pressed = false;
+                    state.release(is_hovered, now.unwrap_or_else(Instant::now));
                     shell.request_redraw();
 
                     if is_hovered {
@@ -1557,11 +1625,17 @@ where
             }
             Event::Touch(touch::Event::FingerLost { .. }) => {
                 if state.is_pressed {
-                    state.is_pressed = false;
+                    state.cancel(now.unwrap_or_else(Instant::now));
                     shell.request_redraw();
                 }
             }
             _ => {}
+        }
+
+        if let Some(now) = now {
+            if state.advance(now) {
+                shell.request_redraw();
+            }
         }
     }
 
@@ -1611,11 +1685,7 @@ where
         );
 
         let state = tree.state.downcast_ref::<NavigationPressSurfaceState>();
-        let opacity = navigation_surface_state_layer_opacity(
-            state.is_hovered,
-            state.is_pressed,
-            self.activation_progress,
-        );
+        let opacity = state.opacity(self.activation_progress);
 
         if opacity <= 0.0 {
             return;
@@ -1662,20 +1732,33 @@ where
     }
 }
 
+#[cfg(test)]
 fn navigation_surface_state_layer_opacity(
     is_hovered: bool,
     is_pressed: bool,
     activation_progress: f32,
 ) -> f32 {
-    let interaction = if is_pressed {
+    navigation_surface_state_layer_opacity_from_interaction(
+        navigation_interaction_state_layer_target(is_hovered, is_pressed),
+        activation_progress,
+    )
+}
+
+fn navigation_interaction_state_layer_target(is_hovered: bool, is_pressed: bool) -> f32 {
+    if is_pressed {
         PRESSED_LAYER_OPACITY
     } else if is_hovered {
         HOVERED_LAYER_OPACITY
     } else {
         0.0
-    };
+    }
+}
 
-    interaction.max(activation_progress.clamp(0.0, 1.0) * PRESSED_LAYER_OPACITY)
+fn navigation_surface_state_layer_opacity_from_interaction(
+    interaction_opacity: f32,
+    activation_progress: f32,
+) -> f32 {
+    interaction_opacity.max(activation_progress.clamp(0.0, 1.0) * PRESSED_LAYER_OPACITY)
 }
 
 fn indicator_layer<'a, Message, Renderer>(
@@ -2236,7 +2319,7 @@ mod tests {
         assert!(state.selection().progress(Page::Two) > 0.0);
         assert!(state.selection().progress(Page::One) < 1.0);
         assert!(state.selection().activation_progress(Page::Two) < 1.0);
-        assert_ne!(
+        assert_eq!(
             state.selection().size_progress(Page::Two),
             state.selection().alpha_progress(Page::Two)
         );
@@ -2248,6 +2331,41 @@ mod tests {
         assert_eq!(state.selection().progress(Page::Two), 1.0);
         assert_eq!(state.selection().progress(Page::One), 0.0);
         assert_eq!(state.selection().activation_progress(Page::Two), 0.0);
+    }
+
+    #[test]
+    fn navigation_selection_timing_matches_androidx_material_durations() {
+        let start = Instant::now();
+        let mut bar = NavigationState::new(Page::One);
+        let mut rail = NavigationState::new(Page::One);
+
+        bar.select(Page::Two, start, AdaptiveLayout::NavigationBar);
+        rail.select(Page::Two, start, AdaptiveLayout::NavigationRail);
+
+        let _ = bar.advance(
+            start
+                + Duration::from_millis(u64::from(
+                    tokens::component::navigation_bar::ITEM_ANIMATION_DURATION_MS + 20,
+                )),
+        );
+        let _ = rail.advance(
+            start
+                + Duration::from_millis(u64::from(
+                    tokens::component::navigation_bar::ITEM_ANIMATION_DURATION_MS + 20,
+                )),
+        );
+
+        assert_eq!(bar.selection().progress(Page::Two), 1.0);
+        assert!(rail.selection().progress(Page::Two) < 1.0);
+
+        let _ = rail.advance(
+            start
+                + Duration::from_millis(u64::from(
+                    tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS + 20,
+                )),
+        );
+
+        assert_eq!(rail.selection().progress(Page::Two), 1.0);
     }
 
     #[test]
@@ -2573,6 +2691,34 @@ mod tests {
             ),
             state_layer(theme.colors().surface.text, PRESSED_LAYER_OPACITY)
         );
+    }
+
+    #[test]
+    fn navigation_press_surface_keeps_release_feedback_visible() {
+        let start = Instant::now();
+        let mut state = NavigationPressSurfaceState::default();
+
+        assert!(state.sync_hover(true, start));
+        state.press();
+
+        assert_eq!(
+            state.opacity(0.0),
+            tokens::state::PRESSED_STATE_LAYER_OPACITY
+        );
+
+        state.release(false, start);
+        let still_animating = state.advance(start + Duration::from_millis(50));
+
+        assert!(still_animating);
+        assert!(state.opacity(0.0) > 0.0);
+        assert!(state.opacity(0.0) < tokens::state::PRESSED_STATE_LAYER_OPACITY);
+
+        let finished = state.advance(
+            start + Duration::from_millis(u64::from(tokens::motion::DURATION_SHORT2_MS) + 20),
+        );
+
+        assert!(!finished);
+        assert_eq!(state.opacity(0.0), 0.0);
     }
 
     #[test]
