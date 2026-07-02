@@ -96,6 +96,28 @@ pub fn contains_cjk(content: &str) -> bool {
     content.chars().any(is_cjk_codepoint)
 }
 
+pub fn material_symbol_codepoint(name: &str) -> Option<char> {
+    let codepoint = match name {
+        "info" => 0xe88e,
+        "input" => 0xe890,
+        "layers" => 0xe53b,
+        "menu" => 0xe5d2,
+        "navigation" => 0xe55d,
+        "tune" => 0xe429,
+        _ => return None,
+    };
+
+    char::from_u32(codepoint)
+}
+
+fn material_symbol_fragment<'a>(name: impl text::IntoFragment<'a>) -> text::Fragment<'a> {
+    let fragment = name.into_fragment();
+
+    material_symbol_codepoint(fragment.as_ref())
+        .map(|codepoint| text::Fragment::Owned(codepoint.to_string()))
+        .unwrap_or(fragment)
+}
+
 fn is_cjk_codepoint(character: char) -> bool {
     matches!(
         character,
@@ -123,7 +145,7 @@ where
     Renderer: core_text::Renderer,
     Font: Into<Renderer::Font>,
 {
-    Text::new(name)
+    Text::new(material_symbol_fragment(name))
         .font(MATERIAL_SYMBOLS_ROUNDED)
         .size(size)
         .line_height(LineHeight::Absolute(size.into()))
@@ -166,6 +188,26 @@ mod tests {
         assert_eq!(
             MATERIAL_SYMBOLS_ROUNDED.family,
             Family::Name(MATERIAL_SYMBOLS_ROUNDED_FAMILY)
+        );
+    }
+
+    #[test]
+    fn material_symbol_names_resolve_to_google_codepoints() {
+        assert_eq!(material_symbol_codepoint("input"), Some('\u{e890}'));
+        assert_eq!(material_symbol_codepoint("tune"), Some('\u{e429}'));
+        assert_eq!(material_symbol_codepoint("info"), Some('\u{e88e}'));
+        assert_eq!(material_symbol_codepoint("layers"), Some('\u{e53b}'));
+        assert_eq!(material_symbol_codepoint("navigation"), Some('\u{e55d}'));
+        assert_eq!(material_symbol_codepoint("menu"), Some('\u{e5d2}'));
+        assert_eq!(material_symbol_codepoint("unknown_symbol"), None);
+    }
+
+    #[test]
+    fn material_symbol_fragment_falls_back_to_ligature_text_for_unknown_names() {
+        assert_eq!(material_symbol_fragment("input").as_ref(), "\u{e890}");
+        assert_eq!(
+            material_symbol_fragment("unknown_symbol").as_ref(),
+            "unknown_symbol"
         );
     }
 

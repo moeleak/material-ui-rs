@@ -957,11 +957,14 @@ mod tests {
     #[test]
     fn navigation_uses_material_symbol_icon_names() {
         assert_eq!(material::fonts::all().len(), 7);
-        assert_eq!(NAV_DESTINATIONS[0].icon, "input");
-        assert_eq!(NAV_DESTINATIONS[1].icon, "tune");
-        assert_eq!(NAV_DESTINATIONS[2].icon, "info");
-        assert_eq!(NAV_DESTINATIONS[3].icon, "layers");
-        assert_eq!(NAV_DESTINATIONS[4].icon, "navigation");
+        assert_eq!(
+            NAV_DESTINATIONS.map(|destination| destination.icon),
+            ["input", "tune", "info", "layers", "navigation"]
+        );
+
+        for destination in NAV_DESTINATIONS {
+            assert!(material::fonts::material_symbol_codepoint(destination.icon).is_some());
+        }
     }
 
     #[test]
