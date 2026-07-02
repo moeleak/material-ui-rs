@@ -1,9 +1,9 @@
 use iced_widget::checkbox::{Catalog, Status, Style, StyleFn};
-use iced_widget::core::{border, Background, Border, Color};
+use iced_widget::core::{Background, Border, Color, border};
 
 use super::Theme;
 use crate::tokens;
-use crate::utils::{state_layer, HOVERED_LAYER_OPACITY};
+use crate::utils::{HOVERED_LAYER_OPACITY, state_layer};
 
 impl Catalog for Theme {
     type Class<'a> = StyleFn<'a, Self>;

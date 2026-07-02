@@ -1,12 +1,12 @@
 //! Material 3 list item constructors with token-backed layout defaults.
 
 use iced_widget::core::text as core_text;
-use iced_widget::core::{alignment, Length, Padding};
+use iced_widget::core::{Length, Padding, alignment};
 use iced_widget::text;
 use iced_widget::{Column, Container, Row, Text};
 
 use super::absolute_line_height;
-use crate::{list as list_style, text as text_style, tokens, Theme};
+use crate::{Theme, list as list_style, text as text_style, tokens};
 
 pub fn one_line<'a, Message, Renderer>(
     label: impl text::IntoFragment<'a>,
@@ -152,9 +152,7 @@ where
         )
 }
 
-fn label_text<'a, Renderer>(
-    label: impl text::IntoFragment<'a>,
-) -> Text<'a, Theme, Renderer>
+fn label_text<'a, Renderer>(label: impl text::IntoFragment<'a>) -> Text<'a, Theme, Renderer>
 where
     Renderer: core_text::Renderer,
 {
@@ -166,9 +164,7 @@ where
         .style(text_style::surface)
 }
 
-fn leading_icon<'a, Renderer>(
-    icon: impl text::IntoFragment<'a>,
-) -> Text<'a, Theme, Renderer>
+fn leading_icon<'a, Renderer>(icon: impl text::IntoFragment<'a>) -> Text<'a, Theme, Renderer>
 where
     Renderer: core_text::Renderer,
 {

@@ -1,7 +1,7 @@
 use iced_widget::markdown::{Catalog, Settings, Style};
 use iced_widget::theme::Base;
 
-use super::{container, Theme};
+use super::{Theme, container};
 
 impl Catalog for Theme {
     fn code_block<'a>() -> <Self as iced_widget::container::Catalog>::Class<'a> {

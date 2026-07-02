@@ -1,7 +1,7 @@
 use iced_widget::container::Style;
-use iced_widget::core::{border, Background};
+use iced_widget::core::{Background, border};
 
-use crate::{tokens, Theme};
+use crate::{Theme, tokens};
 
 pub fn default(theme: &Theme) -> Style {
     let error = theme.colors().error;
@@ -24,7 +24,10 @@ mod tests {
         let colors = theme.colors();
         let style = default(&theme);
 
-        assert_eq!(style.background, Some(Background::Color(colors.error.color)));
+        assert_eq!(
+            style.background,
+            Some(Background::Color(colors.error.color))
+        );
         assert_eq!(style.text_color, Some(colors.error.text));
         assert_eq!(
             style.border.radius,

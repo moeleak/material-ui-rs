@@ -23,8 +23,8 @@ use iced_widget::text_input as iced_text_input;
 use iced_widget::toggler as iced_toggler;
 use iced_widget::tooltip as iced_tooltip;
 use iced_widget::{
-    Button, Container, ProgressBar, Rule, Slider, Text, TextInput as IcedTextInput,
-    TextEditor as IcedTextEditor, Tooltip,
+    Button, Container, ProgressBar, Rule, Slider, Text, TextEditor as IcedTextEditor,
+    TextInput as IcedTextInput, Tooltip,
 };
 
 use crate::utils::mix;
@@ -36,14 +36,15 @@ use crate::{
     text_input as text_input_style, toggler as toggler_style, tooltip as tooltip_style,
 };
 
-mod support;
 pub mod badge;
 pub mod card;
 pub mod combo_box;
 pub mod data_table;
 pub mod list;
 pub mod navigation;
+pub mod page;
 pub mod select;
+mod support;
 
 use support::{
     AnimatedScalar, SelectionState, TextFieldState, alpha_border, alpha_color, bool_value,
@@ -3311,15 +3312,31 @@ mod tests {
             |_| Message::Pressed,
             content,
         );
+        let content = Text::new("Navigation suite menu content");
+        let state = navigation::NavigationState::new(Page::First);
+        let _: TestElement<'_> = navigation::navigation_suite_with_menu(
+            "Navigation",
+            1080.0,
+            980.0,
+            &destinations,
+            &state,
+            |_| Message::Pressed,
+            Message::Pressed,
+            content,
+        );
+        let content = Text::new("Navigation suite builder content");
+        let _: TestElement<'_> = navigation::suite(&destinations, &state)
+            .window_size(Size::new(1080.0, 980.0))
+            .with_menu("Navigation", Message::Pressed)
+            .view(|_| Message::Pressed, content);
     }
 
     #[test]
     fn material_pick_list_constructor_compiles_to_element() {
         let options = ["Assist", "Suggestion", "Filter"];
-        let _: TestElement<'_> =
-            pick_list::outlined(options, Some("Assist"), |_| Message::Pressed)
-                .placeholder("Choose")
-                .into();
+        let _: TestElement<'_> = pick_list::outlined(options, Some("Assist"), |_| Message::Pressed)
+            .placeholder("Choose")
+            .into();
     }
 
     #[test]
@@ -3337,21 +3354,17 @@ mod tests {
     fn material_combo_box_with_input_constructor_compiles_to_element() {
         let options = combo_box::State::new(vec!["Assist", "Suggestion", "Filter"]);
         let _: TestElement<'_> =
-            combo_box::outlined_with_input(&options, "Choose", "xxx", None, |_| {
-                Message::Pressed
-            })
-            .on_input(|_| Message::Pressed)
-            .into();
+            combo_box::outlined_with_input(&options, "Choose", "xxx", None, |_| Message::Pressed)
+                .on_input(|_| Message::Pressed)
+                .into();
     }
 
     #[test]
     fn material_list_item_constructors_compile_to_elements() {
         let _: TestElement<'_> = list::one_line("Single line").into();
-        let _: TestElement<'_> =
-            list::one_line_with_leading_icon("*", "With leading icon").into();
+        let _: TestElement<'_> = list::one_line_with_leading_icon("*", "With leading icon").into();
         let _: TestElement<'_> = list::two_line("Two line", "Supporting text").into();
-        let _: TestElement<'_> =
-            list::two_line_with_trailing("Inventory", "In stock", "42").into();
+        let _: TestElement<'_> = list::two_line_with_trailing("Inventory", "In stock", "42").into();
         let _: TestElement<'_> =
             list::three_line("Three line", "Supporting text", "Second supporting line").into();
     }

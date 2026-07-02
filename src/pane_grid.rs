@@ -1,8 +1,8 @@
-use iced_widget::core::{border, Background};
+use iced_widget::core::{Background, border};
 use iced_widget::pane_grid::{Catalog, Highlight, Line, Style, StyleFn};
 
 use super::Theme;
-use crate::utils::{mix, HOVERED_LAYER_OPACITY};
+use crate::utils::{HOVERED_LAYER_OPACITY, mix};
 
 impl Catalog for Theme {
     type Class<'a> = StyleFn<'a, Self>;

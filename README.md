@@ -13,11 +13,43 @@ iced = "0.14"
 iced_material = "0.14.2"
 ```
 
+Run the 91-line animated quick start app:
+
+```sh
+cargo run --example quickstart
+```
+
 ```rust
+use iced::Size;
 use iced_material as material;
 
-fn view<'a, Message>() -> iced::Element<'a, Message, material::Theme> {
-    material::widget::button::filled("Button").into()
+fn main() -> iced::Result {
+    material::application(boot, update, view)
+        .title("iced_material quick start")
+        .subscription(subscription)
+        .window(material::window_with_min_size(
+            Size::new(1080.0, 980.0),
+            Size::new(420.0, 720.0),
+        ))
+        .run()
+}
+```
+
+Core view composition uses page, menu navigation, and widget helpers:
+
+```rust
+use material::widget::{button, navigation, page};
+
+fn view(app: &App) -> material::Element<'_, Message> {
+    let content = page::surface(
+        page::header("Home", "A small Material app"),
+        button::filled("Increment").on_press(Message::Increment),
+    );
+
+    navigation::suite(&destinations, &app.navigation)
+        .dimensions(1080.0, 980.0)
+        .with_menu("Quick start", Message::Menu)
+        .view(Message::Open, content)
 }
 ```
 
@@ -29,12 +61,13 @@ The crate provides Material-sized constructors and token-backed styles for:
 - Text input, text editor, select, and searchable combo box
 - Checkbox, switch, radio, slider, and progress indicator
 - Dividers, tooltips, badges, lists, cards, and data tables
+- Application, centered window, page surface, and adaptive navigation helpers
 - Material color schemes, typography tokens, shape tokens, elevation, and motion constants
 - Bundled Roboto and Material Symbols Rounded font helpers
 
 ## Features
 
-- `default`: Enables SVG support.
+- `default`: Enables SVG support and Material animations.
 - `serde`: Adds `serde` support for theme data.
 - `animate`: Enables integration with `iced_anim`.
 - `crisp`: Enables pixel snapping for crisp edges.
@@ -55,7 +88,8 @@ cargo test --all-features
 cargo check --examples
 ```
 
-The full widget showcase lives in `examples/example.rs`.
+The quick-start app lives in `examples/quickstart/app.rs`; the full widget
+showcase lives in `examples/showcase/app.rs`.
 
 ## License
 

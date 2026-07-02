@@ -1,8 +1,8 @@
 use iced_dialog::dialog::{Catalog, Style, StyleFn};
 use iced_widget::container;
-use iced_widget::core::{border, Background};
+use iced_widget::core::{Background, border};
 
-use super::{text, Theme};
+use super::{Theme, text};
 use crate::tokens;
 use crate::utils::shadow_from_level;
 

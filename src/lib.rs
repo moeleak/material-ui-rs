@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 
 use iced_widget::core::{
-    color,
+    Color, color,
     theme::{Base, Mode, Style},
-    Color,
 };
 use utils::{lightness, mix};
 
 pub mod animation;
+pub mod application;
 pub mod badge;
 pub mod button;
 pub mod checkbox;
@@ -16,9 +16,9 @@ pub mod container;
 #[cfg(feature = "dialog")]
 pub mod dialog;
 pub mod fonts;
+pub mod list;
 #[cfg(feature = "markdown")]
 pub mod markdown;
-pub mod list;
 pub mod menu;
 pub mod pane_grid;
 pub mod pick_list;
@@ -42,6 +42,18 @@ pub mod tokens;
 pub mod tooltip;
 pub mod utils;
 pub mod widget;
+
+pub use application::{
+    application, window, window_settings, window_with_min_size, with_material_fonts,
+};
+
+/// An [`iced::Element`] that uses the bundled [`Theme`] by default.
+pub type Element<'a, Message, T = crate::Theme, Renderer = iced::Renderer> =
+    iced::Element<'a, Message, T, Renderer>;
+
+/// An [`iced::widget::Container`] that uses the bundled [`Theme`] by default.
+pub type Container<'a, Message, T = crate::Theme, Renderer = iced::Renderer> =
+    iced::widget::Container<'a, Message, T, Renderer>;
 
 #[allow(clippy::cast_precision_loss)]
 macro_rules! from_argb {

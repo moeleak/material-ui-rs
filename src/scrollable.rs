@@ -1,11 +1,11 @@
-use iced_widget::core::{border, Background, Border, Shadow};
+use iced_widget::core::{Background, Border, Shadow, border};
 use iced_widget::scrollable::{AutoScroll, Catalog, Rail, Scroller, Status, Style, StyleFn};
 
+use super::Theme;
 use super::container::surface_container;
 use super::utils::mix;
-use super::Theme;
 use crate::utils::{
-    disabled_container, disabled_text, HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY,
+    HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, disabled_container, disabled_text,
 };
 
 impl Catalog for Theme {

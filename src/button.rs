@@ -1,13 +1,13 @@
 use iced_widget::button::{Catalog, Status, Style, StyleFn};
-use iced_widget::core::{border, Background, Border, Color};
+use iced_widget::core::{Background, Border, Color, border};
 
+use crate::Theme;
 use crate::tokens;
 use crate::tokens::component::button::ElevationLevels;
 use crate::utils::{
-    disabled_container, disabled_text, mix, shadow_from_level, state_layer, HOVERED_LAYER_OPACITY,
-    PRESSED_LAYER_OPACITY,
+    HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, disabled_container, disabled_text, mix,
+    shadow_from_level, state_layer,
 };
-use crate::Theme;
 
 impl Catalog for Theme {
     type Class<'a> = StyleFn<'a, Self>;

@@ -1,4 +1,4 @@
-use iced_widget::core::{border, Background};
+use iced_widget::core::{Background, border};
 use iced_widget::overlay::menu::{Catalog, Style, StyleFn};
 
 use super::Theme;

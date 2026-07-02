@@ -1,5 +1,5 @@
 use iced_widget::container::{Catalog, Style, StyleFn};
-use iced_widget::core::{border, Background, Border};
+use iced_widget::core::{Background, Border, border};
 
 use super::Theme;
 use crate::tokens;

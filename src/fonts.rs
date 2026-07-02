@@ -1,12 +1,12 @@
 //! Bundled Material typefaces and icon fonts.
 
+use iced_widget::Text;
+use iced_widget::core::Font;
 use iced_widget::core::font::{Family, Stretch, Style, Weight};
 use iced_widget::core::text as core_text;
-use iced_widget::core::Font;
 use iced_widget::text::{self, LineHeight};
-use iced_widget::Text;
 
-use crate::{tokens, Theme};
+use crate::{Theme, tokens};
 
 use std::borrow::Cow;
 

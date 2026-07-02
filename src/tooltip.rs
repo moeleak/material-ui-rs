@@ -1,9 +1,9 @@
 use iced_widget::container::Style;
-use iced_widget::core::{border, Background, Shadow};
+use iced_widget::core::{Background, Shadow, border};
 
+use crate::Theme;
 use crate::tokens;
 use crate::utils::shadow_from_level;
-use crate::Theme;
 
 pub fn plain(theme: &Theme) -> Style {
     let inverse = theme.colors().inverse;

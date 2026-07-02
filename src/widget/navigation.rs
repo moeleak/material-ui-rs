@@ -7,22 +7,22 @@ use iced_widget::core::renderer;
 use iced_widget::core::text as core_text;
 use iced_widget::core::time::Instant;
 use iced_widget::core::touch;
-use iced_widget::core::widget::tree::{self, Tree};
 use iced_widget::core::widget::Operation;
+use iced_widget::core::widget::tree::{self, Tree};
 use iced_widget::core::{
-    alignment, border, window, Background, Clipboard, Color, Element, Event, Font, Layout, Length,
-    Padding, Rectangle, Shell, Size, Vector, Widget,
+    Background, Clipboard, Color, Element, Event, Font, Layout, Length, Padding, Rectangle, Shell,
+    Size, Vector, Widget, alignment, border, window,
 };
 use iced_widget::text::{self, LineHeight};
 use iced_widget::{Button, Column, Container, Row, Space, Stack, Text};
 
 use super::badge as badge_widget;
-use super::support::{alpha_color, duration_ms, lerp, AnimatedScalar};
+use super::support::{AnimatedScalar, alpha_color, duration_ms, lerp};
 use crate::button as button_style;
 use crate::utils::{
-    mix, shadow_from_level, state_layer, HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY,
+    HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, mix, shadow_from_level, state_layer,
 };
-use crate::{fonts, tokens, Theme};
+use crate::{Theme, fonts, tokens};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdaptiveLayout {
@@ -196,6 +196,7 @@ pub struct NavigationState<Id> {
     size_progress: AnimatedScalar,
     alpha_progress: AnimatedScalar,
     activation_progress: AnimatedScalar,
+    rail_expansion: NavigationRailExpansionState,
 }
 
 impl<Id: Copy + Eq> NavigationState<Id> {
@@ -210,6 +211,7 @@ impl<Id: Copy + Eq> NavigationState<Id> {
             size_progress: AnimatedScalar::new(1.0),
             alpha_progress: AnimatedScalar::new(1.0),
             activation_progress: AnimatedScalar::new(0.0),
+            rail_expansion: NavigationRailExpansionState::new(false),
         }
     }
 
@@ -271,17 +273,59 @@ impl<Id: Copy + Eq> NavigationState<Id> {
         self.start_activation_pulse(now);
     }
 
+    pub fn select_for_size(&mut self, selected: Id, now: Instant, size: Size) {
+        self.select(selected, now, adaptive_layout(size.width, size.height));
+    }
+
+    pub fn select_now_for_size(&mut self, selected: Id, size: Size) {
+        self.select_for_size(selected, Instant::now(), size);
+    }
+
+    pub fn toggle_menu(&mut self, now: Instant) {
+        self.rail_expansion.toggle(now);
+    }
+
+    pub fn toggle_menu_now(&mut self) {
+        self.toggle_menu(Instant::now());
+    }
+
+    pub fn is_menu_open(&self) -> bool {
+        self.rail_expansion.is_open()
+    }
+
+    pub fn is_menu_visible(&self) -> bool {
+        self.rail_expansion.is_visible()
+    }
+
+    pub fn menu_progress(&self) -> f32 {
+        self.rail_expansion.progress()
+    }
+
     pub fn is_animating(&self) -> bool {
         self.previous.is_some()
             || (self.activation_progress.value - self.activation_progress.to).abs() > 0.001
+            || self.rail_expansion.is_animating()
+    }
+
+    pub fn subscription<Message, F>(&self, on_frame: F) -> iced::Subscription<Message>
+    where
+        Message: 'static,
+        F: Fn(Instant) -> Message + Send + Clone + 'static,
+    {
+        if self.is_animating() {
+            iced::window::frames().map(on_frame)
+        } else {
+            iced::Subscription::none()
+        }
     }
 
     pub fn advance(&mut self, now: Instant) -> bool {
-        let animating = self.size_progress.advance(now)
+        let navigation_animating = self.size_progress.advance(now)
             | self.alpha_progress.advance(now)
             | self.activation_progress.advance(now);
+        let menu_animating = self.rail_expansion.advance(now);
 
-        if !animating {
+        if !navigation_animating {
             self.size_progress.value = 1.0;
             self.alpha_progress.value = 1.0;
             self.previous = None;
@@ -289,10 +333,13 @@ impl<Id: Copy + Eq> NavigationState<Id> {
             self.previous_size_start = 0.0;
             self.selected_alpha_start = 1.0;
             self.previous_alpha_start = 0.0;
-            false
-        } else {
-            true
         }
+
+        navigation_animating | menu_animating
+    }
+
+    pub fn advance_frame(&mut self, now: Instant) {
+        let _ = self.advance(now);
     }
 
     fn start_activation_pulse(&mut self, now: Instant) {
@@ -459,6 +506,145 @@ pub fn navigation_rail_min_height(destination_count: usize, has_header: bool) ->
         + tokens::component::navigation_rail::VERTICAL_PADDING
 }
 
+/// Starts a builder for an adaptive navigation suite.
+///
+/// Use [`Suite::layout`] or [`Suite::window_size`] to select the adaptive
+/// layout, then call [`Suite::view`] or [`Suite::with_menu`].
+pub fn suite<'a, Id>(
+    destinations: &'a [Destination<Id>],
+    state: &'a NavigationState<Id>,
+) -> Suite<'a, Id> {
+    Suite::new(destinations, state)
+}
+
+/// A builder for a navigation bar/rail shell around page content.
+#[derive(Debug, Clone, Copy)]
+pub struct Suite<'a, Id> {
+    destinations: &'a [Destination<Id>],
+    state: &'a NavigationState<Id>,
+    layout: AdaptiveLayout,
+}
+
+impl<'a, Id> Suite<'a, Id> {
+    /// Creates a navigation suite builder.
+    ///
+    /// The default layout is [`AdaptiveLayout::NavigationRail`]. Call
+    /// [`layout`](Self::layout), [`window_size`](Self::window_size), or
+    /// [`dimensions`](Self::dimensions) for adaptive behavior.
+    pub fn new(destinations: &'a [Destination<Id>], state: &'a NavigationState<Id>) -> Self {
+        Self {
+            destinations,
+            state,
+            layout: AdaptiveLayout::NavigationRail,
+        }
+    }
+
+    /// Uses the provided adaptive layout.
+    pub fn layout(mut self, layout: AdaptiveLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Chooses the adaptive layout for the provided window size.
+    pub fn window_size(mut self, size: Size) -> Self {
+        self.layout = adaptive_layout(size.width, size.height);
+        self
+    }
+
+    /// Chooses the adaptive layout for the provided dimensions.
+    pub fn dimensions(mut self, width: f32, height: f32) -> Self {
+        self.layout = adaptive_layout(width, height);
+        self
+    }
+
+    /// Adds a menu button and expandable rail behavior.
+    pub fn with_menu<Message>(
+        self,
+        headline: &'static str,
+        on_menu: Message,
+    ) -> SuiteWithMenu<'a, Id, Message> {
+        SuiteWithMenu {
+            suite: self,
+            headline,
+            on_menu,
+        }
+    }
+
+    /// Builds the navigation suite around the provided content.
+    pub fn view<Message, Renderer, F>(
+        self,
+        on_select: F,
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Element<'a, Message, Theme, Renderer>
+    where
+        Id: Copy + Eq + 'a,
+        Message: Clone + 'a,
+        Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+        Font: Into<Renderer::Font>,
+        F: Fn(Id) -> Message + Clone + 'a,
+    {
+        navigation_suite_for_layout(
+            self.layout,
+            self.destinations,
+            self.state.selection(),
+            on_select,
+            content,
+        )
+    }
+}
+
+/// A navigation suite builder with menu behavior enabled.
+#[derive(Debug, Clone, Copy)]
+pub struct SuiteWithMenu<'a, Id, Message> {
+    suite: Suite<'a, Id>,
+    headline: &'static str,
+    on_menu: Message,
+}
+
+impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
+    /// Uses the provided adaptive layout.
+    pub fn layout(mut self, layout: AdaptiveLayout) -> Self {
+        self.suite = self.suite.layout(layout);
+        self
+    }
+
+    /// Chooses the adaptive layout for the provided window size.
+    pub fn window_size(mut self, size: Size) -> Self {
+        self.suite = self.suite.window_size(size);
+        self
+    }
+
+    /// Chooses the adaptive layout for the provided dimensions.
+    pub fn dimensions(mut self, width: f32, height: f32) -> Self {
+        self.suite = self.suite.dimensions(width, height);
+        self
+    }
+
+    /// Builds the navigation suite around the provided content.
+    pub fn view<Renderer, F>(
+        self,
+        on_select: F,
+        content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    ) -> Element<'a, Message, Theme, Renderer>
+    where
+        Id: Copy + Eq + 'a,
+        Message: Clone + 'a,
+        Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+        Font: Into<Renderer::Font>,
+        F: Fn(Id) -> Message + Clone + 'a,
+    {
+        navigation_suite_for_layout_with_menu(
+            self.headline,
+            self.suite.layout,
+            self.suite.destinations,
+            self.suite.state,
+            on_select,
+            self.on_menu,
+            content,
+        )
+    }
+}
+
 pub fn navigation_suite<'a, Id, Message, Renderer, F>(
     width: f32,
     height: f32,
@@ -510,6 +696,80 @@ where
             .width(Length::Fill)
             .height(Length::Fill)
             .push(navigation_rail(destinations, selection, on_select))
+            .push(content)
+            .into(),
+    }
+}
+
+pub fn navigation_suite_with_menu<'a, Id, Message, Renderer, F>(
+    headline: &'static str,
+    width: f32,
+    height: f32,
+    destinations: &'a [Destination<Id>],
+    state: &NavigationState<Id>,
+    on_select: F,
+    on_menu: Message,
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Id: Copy + Eq + 'a,
+    Message: Clone + 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+    F: Fn(Id) -> Message + Clone + 'a,
+{
+    navigation_suite_for_layout_with_menu(
+        headline,
+        adaptive_layout(width, height),
+        destinations,
+        state,
+        on_select,
+        on_menu,
+        content,
+    )
+}
+
+pub fn navigation_suite_for_layout_with_menu<'a, Id, Message, Renderer, F>(
+    headline: &'static str,
+    layout: AdaptiveLayout,
+    destinations: &'a [Destination<Id>],
+    state: &NavigationState<Id>,
+    on_select: F,
+    on_menu: Message,
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Id: Copy + Eq + 'a,
+    Message: Clone + 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+    F: Fn(Id) -> Message + Clone + 'a,
+{
+    let content = content.into();
+    let selection = state.selection();
+
+    match layout {
+        AdaptiveLayout::NavigationBar => Column::new()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .push(content)
+            .push(navigation_bar(destinations, selection, on_select))
+            .into(),
+        AdaptiveLayout::NavigationRail => Row::new()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .push(if state.is_menu_visible() {
+                navigation_rail_expanded_with_menu_at_width(
+                    headline,
+                    destinations,
+                    selection,
+                    on_select,
+                    on_menu,
+                    navigation_rail_expanded_width_for_progress(state.menu_progress()),
+                )
+            } else {
+                navigation_rail_with_menu(destinations, selection, on_select, on_menu)
+            })
             .push(content)
             .into(),
     }
@@ -1940,7 +2200,9 @@ fn navigation_rail_expanded_progress_for_width(width: f32) -> f32 {
 }
 
 fn navigation_rail_expanded_label_alpha_for_width(width: f32) -> f32 {
-    navigation_rail_expanded_progress_for_width(width)
+    let progress = navigation_rail_expanded_progress_for_width(width);
+
+    ((progress - 0.6) / 0.4).clamp(0.0, 1.0)
 }
 
 fn navigation_rail_expanded_header_leading_space() -> f32 {
@@ -2255,6 +2517,11 @@ mod tests {
         Two,
     }
 
+    #[derive(Debug, Clone)]
+    enum Message {
+        Frame,
+    }
+
     #[test]
     fn window_size_classes_use_material_breakpoints() {
         assert_eq!(width_class(599.0), WindowWidthClass::Compact);
@@ -2313,6 +2580,40 @@ mod tests {
 
         assert_eq!(small.badge, Some(Badge::Small));
         assert_eq!(large.badge, Some(Badge::Large("3")));
+    }
+
+    #[test]
+    fn navigation_state_exposes_animation_subscription() {
+        let state = NavigationState::new(Page::One);
+        let _: iced::Subscription<Message> = state.subscription(|_| Message::Frame);
+    }
+
+    #[test]
+    fn navigation_state_selects_using_window_size() {
+        let start = Instant::now();
+        let mut state = NavigationState::new(Page::One);
+
+        state.select_for_size(Page::Two, start, Size::new(1080.0, 980.0));
+
+        assert_eq!(state.selected(), Page::Two);
+        assert!(state.is_animating());
+        assert_eq!(state.selection().progress(Page::Two), 0.0);
+    }
+
+    #[test]
+    fn navigation_state_toggles_menu_expansion() {
+        let start = Instant::now();
+        let mut state = NavigationState::new(Page::One);
+
+        state.toggle_menu(start);
+
+        assert!(state.is_menu_open());
+        assert!(state.is_menu_visible());
+        assert!(state.is_animating());
+
+        state.advance_frame(start + Duration::from_millis(50));
+
+        assert!(state.menu_progress() > 0.0);
     }
 
     #[test]
@@ -2505,6 +2806,10 @@ mod tests {
 
     #[test]
     fn navigation_rail_expanded_geometry_matches_material_expressive_attributes() {
+        fn assert_close(actual: f32, expected: f32) {
+            assert!((actual - expected).abs() < 0.000_1);
+        }
+
         assert_eq!(
             navigation_rail_expanded_container_width(0.0),
             tokens::component::navigation_rail::CONTAINER_WIDTH
@@ -2551,9 +2856,21 @@ mod tests {
         );
         assert_eq!(
             navigation_rail_expanded_label_alpha_for_width(
-                tokens::component::navigation_rail::EXPANDED_CONTAINER_WIDTH
+                navigation_rail_expanded_width_for_progress(0.5)
             ),
-            1.0
+            0.0
+        );
+        assert_close(
+            navigation_rail_expanded_label_alpha_for_width(
+                navigation_rail_expanded_width_for_progress(0.8),
+            ),
+            0.5,
+        );
+        assert_close(
+            navigation_rail_expanded_label_alpha_for_width(
+                tokens::component::navigation_rail::EXPANDED_CONTAINER_WIDTH,
+            ),
+            1.0,
         );
         assert_eq!(
             navigation_rail_expanded_indicator_height_for_progress(0.0),

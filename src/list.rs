@@ -1,7 +1,7 @@
 use iced_widget::container::Style;
-use iced_widget::core::{border, Background};
+use iced_widget::core::{Background, border};
 
-use crate::{tokens, Theme};
+use crate::{Theme, tokens};
 
 pub fn item(theme: &Theme) -> Style {
     let surface = theme.colors().surface;
@@ -38,7 +38,10 @@ mod tests {
         let colors = theme.colors();
         let style = item(&theme);
 
-        assert_eq!(style.background, Some(Background::Color(colors.surface.color)));
+        assert_eq!(
+            style.background,
+            Some(Background::Color(colors.surface.color))
+        );
         assert_eq!(style.text_color, Some(colors.surface.text));
         assert_eq!(
             style.border.radius,

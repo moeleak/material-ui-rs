@@ -1,4 +1,4 @@
-use iced_widget::core::{border, Background, Color};
+use iced_widget::core::{Background, Color, border};
 use iced_widget::slider::{Catalog, Handle, HandleShape, Rail, Status, Style, StyleFn};
 
 use super::Theme;

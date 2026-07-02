@@ -18,7 +18,7 @@ exclude = [
 ]
 
 [features]
-default = ["svg"]
+default = ["svg", "animate"]
 # Provides `serde` support.
 serde = ["serde/derive"]
 # Provides support for animating with `iced_anim`.
@@ -37,6 +37,7 @@ svg = ["iced_widget/svg"]
 qr_code = ["iced_widget/qr_code"]
 
 [dependencies]
+iced = "0.14"
 iced_widget = "0.14"
 iced_winit = "0.14"
 iced_anim = { version = "0.3", optional = true, features = ["derive"] }
@@ -44,12 +45,13 @@ iced_dialog = { version = "0.14", optional = true }
 iced_selection = { version = "0.5", optional = true }
 serde = { version = "1.0", optional = true }
 
-[dev-dependencies]
-iced = "0.14"
+[[example]]
+name = "quickstart"
+path = "examples/quickstart/app.rs"
 
 [[example]]
-name = "example"
-path = "examples/example.rs"
+name = "showcase"
+path = "examples/showcase/app.rs"
 
 [lints.rust]
 missing_debug_implementations = "deny"

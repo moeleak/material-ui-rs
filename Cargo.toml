@@ -45,7 +45,7 @@ repository = "https://github.com/moeleak/iced_material"
 [features]
 animate = ["dep:iced_anim"]
 crisp = ["iced_widget/crisp"]
-default = ["svg"]
+default = ["svg", "animate"]
 dialog = ["dep:iced_dialog"]
 markdown = ["iced_widget/markdown"]
 qr_code = ["iced_widget/qr_code"]
@@ -58,8 +58,12 @@ name = "iced_material"
 path = "src/lib.rs"
 
 [[example]]
-name = "example"
-path = "examples/example.rs"
+name = "quickstart"
+path = "examples/quickstart/app.rs"
+
+[[example]]
+name = "showcase"
+path = "examples/showcase/app.rs"
 
 [dependencies.iced_anim]
 version = "0.3"
@@ -69,6 +73,9 @@ optional = true
 [dependencies.iced_dialog]
 version = "0.14"
 optional = true
+
+[dependencies.iced]
+version = "0.14"
 
 [dependencies.iced_selection]
 version = "0.5"
@@ -83,9 +90,6 @@ version = "0.14"
 [dependencies.serde]
 version = "1.0"
 optional = true
-
-[dev-dependencies.iced]
-version = "0.14"
 
 [lints.clippy]
 default_trait_access = "deny"
