@@ -446,6 +446,65 @@ pub mod component {
         pub const TRAILING_ICON_SIZE: f32 = 24.0;
     }
 
+    pub mod navigation_bar {
+        pub const CONTAINER_HEIGHT: f32 = 80.0;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 2;
+        pub const ACTIVE_INDICATOR_WIDTH: f32 = 64.0;
+        pub const ACTIVE_INDICATOR_HEIGHT: f32 = 32.0;
+        pub const ACTIVE_INDICATOR_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const ICON_SIZE: f32 = 24.0;
+        pub const LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_MEDIUM;
+        pub const ITEM_HORIZONTAL_PADDING: f32 = 8.0;
+        pub const INDICATOR_TO_LABEL_PADDING: f32 = 4.0;
+        pub const INDICATOR_VERTICAL_OFFSET: f32 = 12.0;
+        pub const ITEM_ANIMATION_DURATION_MS: u16 = super::super::motion::DURATION_SHORT2_MS;
+    }
+
+    pub mod navigation_rail {
+        pub const CONTAINER_WIDTH: f32 = 80.0;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 0;
+        pub const ACTIVE_INDICATOR_WIDTH: f32 = 56.0;
+        pub const ACTIVE_INDICATOR_HEIGHT: f32 = 32.0;
+        pub const ACTIVE_INDICATOR_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const ICON_SIZE: f32 = 24.0;
+        pub const LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_MEDIUM;
+        pub const NO_LABEL_ACTIVE_INDICATOR_HEIGHT: f32 = 56.0;
+        pub const ITEM_WIDTH: f32 = CONTAINER_WIDTH;
+        pub const ITEM_HEIGHT: f32 = NO_LABEL_ACTIVE_INDICATOR_HEIGHT;
+        pub const VERTICAL_PADDING: f32 = 4.0;
+        pub const ITEM_VERTICAL_PADDING: f32 = 4.0;
+        pub const HEADER_PADDING: f32 = 8.0;
+        pub const ITEM_ANIMATION_DURATION_MS: u16 = super::super::motion::DURATION_SHORT3_MS;
+    }
+
+    pub mod navigation_drawer {
+        pub const CONTAINER_WIDTH: f32 = 360.0;
+        pub const MINIMUM_CONTAINER_WIDTH: f32 = 240.0;
+        pub const ACTIVE_INDICATOR_WIDTH: f32 = 336.0;
+        pub const ACTIVE_INDICATOR_HEIGHT: f32 = 56.0;
+        pub const ACTIVE_INDICATOR_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const ICON_SIZE: f32 = 24.0;
+        pub const LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_LARGE;
+        pub const HEADLINE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::TITLE_SMALL;
+        pub const ITEM_HORIZONTAL_PADDING: f32 = 12.0;
+        pub const ITEM_CONTENT_LEADING_SPACE: f32 = 16.0;
+        pub const ITEM_CONTENT_TRAILING_SPACE: f32 = 24.0;
+        pub const ICON_LABEL_SPACE: f32 = 12.0;
+        pub const MODAL_CONTAINER_ELEVATION_LEVEL: u8 = 1;
+        pub const STANDARD_CONTAINER_ELEVATION_LEVEL: u8 = 0;
+    }
+
+    pub mod adaptive_navigation {
+        pub const WIDTH_COMPACT_MAX: f32 = 600.0;
+        pub const WIDTH_MEDIUM_MAX: f32 = 840.0;
+        pub const HEIGHT_COMPACT_MAX: f32 = 480.0;
+        pub const HEIGHT_MEDIUM_MAX: f32 = 900.0;
+    }
+
     pub mod dialog {
         pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_LARGE;
         pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
@@ -782,6 +841,64 @@ mod tests {
         assert_eq!(component::select::MENU_LIST_ITEM_CONTAINER_HEIGHT, 48.0);
         assert_eq!(component::select::TRAILING_ICON_SIZE, 24.0);
         assert_eq!(component::select::TEXT_FIELD_DISABLED_OUTLINE_WIDTH, 1.0);
+        assert_eq!(component::navigation_bar::CONTAINER_HEIGHT, 80.0);
+        assert_eq!(component::navigation_bar::CONTAINER_ELEVATION_LEVEL, 2);
+        assert_eq!(component::navigation_bar::ACTIVE_INDICATOR_WIDTH, 64.0);
+        assert_eq!(component::navigation_bar::ACTIVE_INDICATOR_HEIGHT, 32.0);
+        assert_eq!(
+            component::navigation_bar::ACTIVE_INDICATOR_SHAPE,
+            shape::CORNER_FULL
+        );
+        assert_eq!(component::navigation_bar::ICON_SIZE, 24.0);
+        assert_eq!(
+            component::navigation_bar::LABEL_TEXT,
+            typography::LABEL_MEDIUM
+        );
+        assert_eq!(component::navigation_bar::ITEM_HORIZONTAL_PADDING, 8.0);
+        assert_eq!(component::navigation_bar::INDICATOR_TO_LABEL_PADDING, 4.0);
+        assert_eq!(component::navigation_bar::ITEM_ANIMATION_DURATION_MS, 100);
+        assert_eq!(component::navigation_rail::CONTAINER_WIDTH, 80.0);
+        assert_eq!(component::navigation_rail::CONTAINER_ELEVATION_LEVEL, 0);
+        assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_WIDTH, 56.0);
+        assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_HEIGHT, 32.0);
+        assert_eq!(component::navigation_rail::ICON_SIZE, 24.0);
+        assert_eq!(
+            component::navigation_rail::LABEL_TEXT,
+            typography::LABEL_MEDIUM
+        );
+        assert_eq!(component::navigation_rail::ITEM_WIDTH, 80.0);
+        assert_eq!(component::navigation_rail::ITEM_HEIGHT, 56.0);
+        assert_eq!(component::navigation_rail::VERTICAL_PADDING, 4.0);
+        assert_eq!(component::navigation_rail::ITEM_ANIMATION_DURATION_MS, 150);
+        assert_eq!(component::navigation_drawer::CONTAINER_WIDTH, 360.0);
+        assert_eq!(component::navigation_drawer::MINIMUM_CONTAINER_WIDTH, 240.0);
+        assert_eq!(component::navigation_drawer::ACTIVE_INDICATOR_WIDTH, 336.0);
+        assert_eq!(component::navigation_drawer::ACTIVE_INDICATOR_HEIGHT, 56.0);
+        assert_eq!(
+            component::navigation_drawer::ACTIVE_INDICATOR_SHAPE,
+            shape::CORNER_FULL
+        );
+        assert_eq!(
+            component::navigation_drawer::LABEL_TEXT,
+            typography::LABEL_LARGE
+        );
+        assert_eq!(
+            component::navigation_drawer::HEADLINE_TEXT,
+            typography::TITLE_SMALL
+        );
+        assert_eq!(component::navigation_drawer::ITEM_HORIZONTAL_PADDING, 12.0);
+        assert_eq!(
+            component::navigation_drawer::MODAL_CONTAINER_ELEVATION_LEVEL,
+            1
+        );
+        assert_eq!(
+            component::navigation_drawer::STANDARD_CONTAINER_ELEVATION_LEVEL,
+            0
+        );
+        assert_eq!(component::adaptive_navigation::WIDTH_COMPACT_MAX, 600.0);
+        assert_eq!(component::adaptive_navigation::WIDTH_MEDIUM_MAX, 840.0);
+        assert_eq!(component::adaptive_navigation::HEIGHT_COMPACT_MAX, 480.0);
+        assert_eq!(component::adaptive_navigation::HEIGHT_MEDIUM_MAX, 900.0);
         assert_eq!(component::dialog::CONTAINER_ELEVATION_LEVEL, 3);
         assert_eq!(component::data_table::CONTAINER_SHAPE, 4.0);
         assert_eq!(component::data_table::OUTLINE_WIDTH, 1.0);

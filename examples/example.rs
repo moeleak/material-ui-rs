@@ -1,5 +1,5 @@
 use iced::time::{Duration, Instant};
-use iced::widget::{column, row, text};
+use iced::widget::{column, row, scrollable, text};
 use iced::{Alignment, Color, Element, Length, Size, Subscription, window};
 use iced_material as material;
 use material::{ColorQuartet, ColorScheme, Inverse, Outline, Surface, SurfaceContainer, Theme};
@@ -14,12 +14,12 @@ pub fn main() -> iced::Result {
     let window_size = Size::new(1080.0, 980.0);
 
     iced::application(Demo::default, update, view)
-        .title("iced_material demo")
+        .title("iced_material example")
         .subscription(subscription)
         .theme(theme)
         .window(window::Settings {
             size: window_size,
-            min_size: Some(window_size),
+            min_size: Some(Size::new(420.0, 720.0)),
             position: window::Position::Centered,
             ..window::Settings::default()
         })
@@ -28,6 +28,7 @@ pub fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 enum Message {
+    Navigate(DemoPage),
     Increment,
     Decrement,
     TextChanged(String),
@@ -39,7 +40,17 @@ enum Message {
     EnabledChanged(bool),
     DarkModeChanged(bool),
     ChoiceSelected(RadioChoice),
+    WindowResized(Size),
     Frame(Instant),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DemoPage {
+    Inputs,
+    Controls,
+    Feedback,
+    Surfaces,
+    Navigation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +66,14 @@ struct InventoryRow {
     status: &'static str,
     count: u32,
 }
+
+const NAV_DESTINATIONS: [material::widget::navigation::Destination<DemoPage>; 5] = [
+    material::widget::navigation::Destination::new(DemoPage::Inputs, "I", "Inputs"),
+    material::widget::navigation::Destination::new(DemoPage::Controls, "C", "Controls"),
+    material::widget::navigation::Destination::new(DemoPage::Feedback, "F", "Feedback"),
+    material::widget::navigation::Destination::new(DemoPage::Surfaces, "S", "Surfaces"),
+    material::widget::navigation::Destination::new(DemoPage::Navigation, "N", "Navigation"),
+];
 
 const INVENTORY_ROWS: [InventoryRow; 3] = [
     InventoryRow {
@@ -76,6 +95,8 @@ const INVENTORY_ROWS: [InventoryRow; 3] = [
 
 #[derive(Debug)]
 struct Demo {
+    page: DemoPage,
+    window_size: Size,
     count: i32,
     note: String,
     editor_content: material::widget::text_editor::Content,
@@ -89,6 +110,8 @@ struct Demo {
     radio_choice: Option<RadioChoice>,
     visible_scheme: ColorScheme,
     animation: Option<ThemeAnimation>,
+    navigation_animation: Option<NavigationAnimation>,
+    navigation_progress: f32,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,11 +121,19 @@ struct ThemeAnimation {
     started_at: Instant,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct NavigationAnimation {
+    from: DemoPage,
+    started_at: Instant,
+}
+
 impl Default for Demo {
     fn default() -> Self {
         let initial_theme = Theme::Dark;
 
         Self {
+            page: DemoPage::Inputs,
+            window_size: Size::new(1080.0, 980.0),
             count: 0,
             note: String::new(),
             editor_content: material::widget::text_editor::Content::with_text(
@@ -121,6 +152,8 @@ impl Default for Demo {
             radio_choice: Some(RadioChoice::Standard),
             visible_scheme: initial_theme.colors(),
             animation: None,
+            navigation_animation: None,
+            navigation_progress: 1.0,
         }
     }
 }
@@ -129,10 +162,39 @@ impl Demo {
     fn theme(&self) -> Theme {
         Theme::new("Material 3 animated", self.visible_scheme)
     }
+
+    fn navigation_selection(&self) -> material::widget::navigation::Selection<DemoPage> {
+        if let Some(animation) = self.navigation_animation {
+            material::widget::navigation::Selection::transitioning(
+                self.page,
+                animation.from,
+                self.navigation_progress,
+            )
+        } else {
+            material::widget::navigation::Selection::new(self.page)
+        }
+    }
+
+    fn adaptive_navigation_layout(&self) -> material::widget::navigation::AdaptiveLayout {
+        material::widget::navigation::adaptive_layout(
+            self.window_size.width,
+            self.window_size.height,
+        )
+    }
 }
 
 fn update(state: &mut Demo, message: Message) {
     match message {
+        Message::Navigate(page) => {
+            if page != state.page {
+                state.navigation_animation = Some(NavigationAnimation {
+                    from: state.page,
+                    started_at: Instant::now(),
+                });
+                state.navigation_progress = 0.0;
+                state.page = page;
+            }
+        }
         Message::Increment => state.count += 1,
         Message::Decrement => state.count -= 1,
         Message::TextChanged(note) => state.note = note,
@@ -151,6 +213,7 @@ fn update(state: &mut Demo, message: Message) {
         Message::SliderChanged(progress) => state.progress = progress,
         Message::EnabledChanged(enabled) => state.enabled = enabled,
         Message::ChoiceSelected(choice) => state.radio_choice = Some(choice),
+        Message::WindowResized(size) => state.window_size = size,
         Message::DarkModeChanged(dark_mode) => {
             state.dark_mode = dark_mode;
 
@@ -186,6 +249,21 @@ fn update(state: &mut Demo, message: Message) {
                     );
                 }
             }
+
+            if let Some(animation) = state.navigation_animation {
+                let duration = navigation_animation_duration(state.adaptive_navigation_layout());
+                let progress = now
+                    .saturating_duration_since(animation.started_at)
+                    .as_secs_f32()
+                    / duration.as_secs_f32();
+
+                if progress >= 1.0 {
+                    state.navigation_progress = 1.0;
+                    state.navigation_animation = None;
+                } else {
+                    state.navigation_progress = emphasized_decelerate(progress);
+                }
+            }
         }
     }
 }
@@ -195,40 +273,85 @@ fn theme(state: &Demo) -> Theme {
 }
 
 fn subscription(state: &Demo) -> Subscription<Message> {
-    if state.animation.is_some() {
-        iced::window::frames().map(Message::Frame)
-    } else {
-        Subscription::none()
+    let mut subscriptions =
+        vec![iced::window::resize_events().map(|(_id, size)| Message::WindowResized(size))];
+
+    if state.animation.is_some() || state.navigation_animation.is_some() {
+        subscriptions.push(iced::window::frames().map(Message::Frame));
     }
+
+    Subscription::batch(subscriptions)
 }
 
 fn view(state: &Demo) -> Element<'_, Message, Theme> {
-    let body_large = material::tokens::typography::BODY_LARGE;
-    let body_medium = material::tokens::typography::BODY_MEDIUM;
-    let headline_large = material::tokens::typography::HEADLINE_LARGE;
-    let headline_medium = material::tokens::typography::HEADLINE_MEDIUM;
-    let title_medium = material::tokens::typography::TITLE_MEDIUM;
+    let selection = state.navigation_selection();
+    let content = page_content(state);
 
-    let header = column![
+    match state.adaptive_navigation_layout() {
+        material::widget::navigation::AdaptiveLayout::NavigationBar => column![
+            content,
+            material::widget::navigation::navigation_bar(
+                &NAV_DESTINATIONS,
+                selection,
+                Message::Navigate,
+            )
+        ]
+        .height(Length::Fill)
+        .into(),
+        material::widget::navigation::AdaptiveLayout::NavigationRail => row![
+            material::widget::navigation::navigation_rail(
+                &NAV_DESTINATIONS,
+                selection,
+                Message::Navigate,
+            ),
+            content,
+        ]
+        .height(Length::Fill)
+        .into(),
+    }
+}
+
+fn page_content(state: &Demo) -> Element<'_, Message, Theme> {
+    let content = match state.page {
+        DemoPage::Inputs => inputs_page(state),
+        DemoPage::Controls => controls_page(state),
+        DemoPage::Feedback => feedback_page(state),
+        DemoPage::Surfaces => surfaces_page(state),
+        DemoPage::Navigation => navigation_page(state),
+    };
+
+    let page = column![header(state.page), content]
+        .spacing(28)
+        .padding(28)
+        .width(Length::Fill)
+        .max_width(980);
+
+    scrollable(
+        material::widget::container::surface_container_high(page)
+            .width(Length::Fill)
+            .center_x(Length::Fill),
+    )
+    .height(Length::Fill)
+    .into()
+}
+
+fn header(page: DemoPage) -> Element<'static, Message, Theme> {
+    let body_large = material::tokens::typography::BODY_LARGE;
+    let headline_large = material::tokens::typography::HEADLINE_LARGE;
+
+    column![
         text("iced_material 0.14.2")
             .size(headline_large.size)
             .line_height(type_scale_line_height(headline_large)),
-        text("Material 3 inspired widgets running on iced 0.14")
+        text(page_label(page))
             .size(body_large.size)
             .line_height(type_scale_line_height(body_large)),
     ]
-    .spacing(6);
+    .spacing(6)
+    .into()
+}
 
-    let controls = row![
-        material::widget::button::outlined("Minus").on_press(Message::Decrement),
-        text(state.count)
-            .size(headline_medium.size)
-            .line_height(type_scale_line_height(headline_medium)),
-        material::widget::button::filled("Plus").on_press(Message::Increment),
-    ]
-    .spacing(12)
-    .align_y(Alignment::Center);
-
+fn inputs_page(state: &Demo) -> Element<'_, Message, Theme> {
     let input = material::widget::text_input::outlined("Write a note", &state.note)
         .on_input(Message::TextChanged);
 
@@ -255,41 +378,169 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
     )
     .on_input(Message::ComboInputChanged);
 
-    let dividers = column![
-        material::widget::rule::horizontal_full_width(),
-        row![
-            text("Full")
-                .size(body_large.size)
-                .line_height(type_scale_line_height(body_large)),
-            material::widget::rule::vertical_full_height(),
-            text("Inset")
-                .size(body_large.size)
-                .line_height(type_scale_line_height(body_large)),
-        ]
-        .height(Length::Fixed(32.0))
-        .spacing(16)
-        .align_y(Alignment::Center),
+    column![
+        section("Text fields", column![input, editor].spacing(16).into()),
         material::widget::rule::horizontal_inset(),
+        section(
+            "Selection fields",
+            column![select, combo_box].spacing(16).into()
+        ),
+        material::widget::rule::horizontal_inset(),
+        section("Dividers", dividers()),
     ]
-    .spacing(8);
+    .spacing(24)
+    .width(Length::Fill)
+    .into()
+}
 
-    let progress = column![
-        row![
-            text("Progress")
-                .size(body_large.size)
-                .line_height(type_scale_line_height(body_large))
-                .width(Length::Fill),
-            text(format!("{:.0}%", state.progress))
-                .size(body_large.size)
-                .line_height(type_scale_line_height(body_large)),
-        ]
-        .spacing(12),
-        material::widget::slider::continuous(0.0..=100.0, state.progress, Message::SliderChanged)
-            .step(1.0),
-        material::widget::progress_bar::linear(0.0..=100.0, state.progress),
+fn controls_page(state: &Demo) -> Element<'_, Message, Theme> {
+    column![
+        section("Counter", counter_controls(state)),
+        material::widget::rule::horizontal_inset(),
+        section("Actions", action_buttons(state)),
+        material::widget::rule::horizontal_inset(),
+        section("Chips", chips(state)),
+        material::widget::rule::horizontal_inset(),
+        section("Selection controls", selection_controls(state)),
     ]
-    .spacing(10);
+    .spacing(24)
+    .width(Length::Fill)
+    .into()
+}
 
+fn feedback_page(state: &Demo) -> Element<'_, Message, Theme> {
+    column![
+        section("Progress", progress_indicators(state)),
+        material::widget::rule::horizontal_inset(),
+        section("Badges", badges()),
+        material::widget::rule::horizontal_inset(),
+        section(
+            "Tooltip",
+            material::widget::tooltip::plain(
+                material::widget::button::assist_chip("Hint")
+                    .on_press_maybe(state.enabled.then_some(Message::Increment)),
+                "Material 3 plain tooltip",
+                material::widget::tooltip::Position::Top,
+            )
+            .into(),
+        ),
+    ]
+    .spacing(24)
+    .width(Length::Fill)
+    .into()
+}
+
+fn surfaces_page(_state: &Demo) -> Element<'static, Message, Theme> {
+    column![
+        section("Cards", cards()),
+        material::widget::rule::horizontal_inset(),
+        section("Lists", lists()),
+        material::widget::rule::horizontal_inset(),
+        section("Data table", data_table()),
+    ]
+    .spacing(24)
+    .width(Length::Fill)
+    .into()
+}
+
+fn navigation_page(state: &Demo) -> Element<'_, Message, Theme> {
+    let selection = state.navigation_selection();
+    let bar = material::widget::navigation::navigation_bar(
+        &NAV_DESTINATIONS,
+        selection,
+        Message::Navigate,
+    );
+    let rail = material::widget::navigation::navigation_rail(
+        &NAV_DESTINATIONS,
+        selection,
+        Message::Navigate,
+    )
+    .height(Length::Fixed(360.0));
+    let drawer = material::widget::navigation::navigation_drawer(
+        "Example",
+        &NAV_DESTINATIONS,
+        selection,
+        Message::Navigate,
+    )
+    .height(Length::Fixed(360.0));
+
+    column![
+        section("Navigation bar", bar.into()),
+        material::widget::rule::horizontal_inset(),
+        section("Navigation rail", rail.into()),
+        material::widget::rule::horizontal_inset(),
+        section("Navigation drawer", drawer.into()),
+    ]
+    .spacing(24)
+    .width(Length::Fill)
+    .into()
+}
+
+fn section<'a>(
+    title: &'static str,
+    body: Element<'a, Message, Theme>,
+) -> Element<'a, Message, Theme> {
+    let title_medium = material::tokens::typography::TITLE_MEDIUM;
+
+    column![
+        text(title)
+            .size(title_medium.size)
+            .line_height(type_scale_line_height(title_medium)),
+        body
+    ]
+    .spacing(12)
+    .width(Length::Fill)
+    .into()
+}
+
+fn counter_controls(state: &Demo) -> Element<'_, Message, Theme> {
+    let headline_medium = material::tokens::typography::HEADLINE_MEDIUM;
+
+    row![
+        material::widget::button::outlined("Minus").on_press(Message::Decrement),
+        text(state.count)
+            .size(headline_medium.size)
+            .line_height(type_scale_line_height(headline_medium)),
+        material::widget::button::filled("Plus").on_press(Message::Increment),
+    ]
+    .spacing(12)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn action_buttons(state: &Demo) -> Element<'_, Message, Theme> {
+    row![
+        material::widget::button::filled("Filled")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::filled_tonal("Tonal")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::text("Text")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::primary_fab("+")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+    ]
+    .spacing(12)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn chips(state: &Demo) -> Element<'_, Message, Theme> {
+    row![
+        material::widget::button::assist_chip("Assist")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::suggestion_chip("Suggestion")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::filter_chip("Filter")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+        material::widget::button::selected_filter_chip("Selected")
+            .on_press_maybe(state.enabled.then_some(Message::Increment)),
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn selection_controls(state: &Demo) -> Element<'_, Message, Theme> {
     let switches = column![
         material::widget::checkbox::standard(
             state.enabled,
@@ -327,37 +578,35 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
     .spacing(12)
     .align_y(Alignment::Center);
 
-    let actions = row![
-        material::widget::button::filled("Filled")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::filled_tonal("Tonal")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::text("Text")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::primary_fab("+")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-    ]
-    .spacing(12);
+    column![switches, radios].spacing(18).into()
+}
 
-    let chips = row![
-        material::widget::button::assist_chip("Assist")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::suggestion_chip("Suggestion")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::filter_chip("Filter")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::button::selected_filter_chip("Selected")
-            .on_press_maybe(state.enabled.then_some(Message::Increment)),
-        material::widget::tooltip::plain(
-            material::widget::button::assist_chip("Hint")
-                .on_press_maybe(state.enabled.then_some(Message::Increment)),
-            "Material 3 plain tooltip",
-            material::widget::tooltip::Position::Top,
-        ),
-    ]
-    .spacing(8);
+fn progress_indicators(state: &Demo) -> Element<'_, Message, Theme> {
+    let body_large = material::tokens::typography::BODY_LARGE;
 
-    let badges = row![
+    column![
+        row![
+            text("Progress")
+                .size(body_large.size)
+                .line_height(type_scale_line_height(body_large))
+                .width(Length::Fill),
+            text(format!("{:.0}%", state.progress))
+                .size(body_large.size)
+                .line_height(type_scale_line_height(body_large)),
+        ]
+        .spacing(12),
+        material::widget::slider::continuous(0.0..=100.0, state.progress, Message::SliderChanged)
+            .step(1.0),
+        material::widget::progress_bar::linear(0.0..=100.0, state.progress),
+    ]
+    .spacing(10)
+    .into()
+}
+
+fn badges() -> Element<'static, Message, Theme> {
+    let body_large = material::tokens::typography::BODY_LARGE;
+
+    row![
         text("Badges")
             .size(body_large.size)
             .line_height(type_scale_line_height(body_large)),
@@ -366,7 +615,13 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
         material::widget::badge::large("99+"),
     ]
     .spacing(12)
-    .align_y(Alignment::Center);
+    .align_y(Alignment::Center)
+    .into()
+}
+
+fn cards() -> Element<'static, Message, Theme> {
+    let body_medium = material::tokens::typography::BODY_MEDIUM;
+    let title_medium = material::tokens::typography::TITLE_MEDIUM;
 
     let elevated_card = material::widget::card::elevated(
         column![
@@ -381,7 +636,7 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
     )
     .padding(12)
     .height(Length::Fixed(78.0))
-    .width(Length::FillPortion(1));
+    .width(Length::Fill);
 
     let filled_card = material::widget::card::filled(
         column![
@@ -396,7 +651,7 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
     )
     .padding(12)
     .height(Length::Fixed(78.0))
-    .width(Length::FillPortion(1));
+    .width(Length::Fill);
 
     let outlined_card = material::widget::card::outlined(
         column![
@@ -411,21 +666,50 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
     )
     .padding(12)
     .height(Length::Fixed(78.0))
-    .width(Length::FillPortion(1));
+    .width(Length::Fill);
 
-    let cards = row![elevated_card, filled_card, outlined_card]
+    column![elevated_card, filled_card, outlined_card]
         .spacing(8)
-        .width(Length::Fill);
+        .width(Length::Fill)
+        .into()
+}
 
-    let lists = column![
+fn lists() -> Element<'static, Message, Theme> {
+    column![
         material::widget::list::one_line_with_leading_icon("*", "One-line list item"),
         material::widget::list::two_line_with_trailing("Messages", "Supporting text", "24"),
         material::widget::list::three_line("Three-line item", "Supporting text", "Second line"),
     ]
     .spacing(0)
-    .width(Length::Fill);
+    .width(Length::Fill)
+    .into()
+}
 
-    let data_table = material::widget::data_table::standard(
+fn dividers() -> Element<'static, Message, Theme> {
+    let body_large = material::tokens::typography::BODY_LARGE;
+
+    column![
+        material::widget::rule::horizontal_full_width(),
+        row![
+            text("Full")
+                .size(body_large.size)
+                .line_height(type_scale_line_height(body_large)),
+            material::widget::rule::vertical_full_height(),
+            text("Inset")
+                .size(body_large.size)
+                .line_height(type_scale_line_height(body_large)),
+        ]
+        .height(Length::Fixed(32.0))
+        .spacing(16)
+        .align_y(Alignment::Center),
+        material::widget::rule::horizontal_inset(),
+    ]
+    .spacing(8)
+    .into()
+}
+
+fn data_table() -> Element<'static, Message, Theme> {
+    material::widget::data_table::standard(
         [
             material::widget::data_table::column("Component", |row: InventoryRow| row.component)
                 .width(Length::FillPortion(2)),
@@ -437,31 +721,29 @@ fn view(state: &Demo) -> Element<'_, Message, Theme> {
         ],
         INVENTORY_ROWS,
     )
-    .width(Length::Fill);
+    .width(Length::Fill)
+    .into()
+}
 
-    let fields = column![
-        controls, input, editor, select, combo_box, dividers, data_table
-    ]
-        .spacing(20)
-        .width(Length::Fill);
+fn page_label(page: DemoPage) -> &'static str {
+    match page {
+        DemoPage::Inputs => "Inputs",
+        DemoPage::Controls => "Controls",
+        DemoPage::Feedback => "Feedback",
+        DemoPage::Surfaces => "Surfaces",
+        DemoPage::Navigation => "Navigation",
+    }
+}
 
-    let components = column![progress, switches, radios, actions, chips, badges, cards, lists]
-        .spacing(20)
-        .width(Length::Fill);
-
-    let panel = column![
-        header,
-        row![fields, components]
-            .spacing(32)
-            .align_y(Alignment::Start),
-    ]
-    .spacing(28)
-    .padding(28)
-    .max_width(980);
-
-    material::widget::container::surface_container_high(panel)
-        .center(Length::Fill)
-        .into()
+fn navigation_animation_duration(layout: material::widget::navigation::AdaptiveLayout) -> Duration {
+    match layout {
+        material::widget::navigation::AdaptiveLayout::NavigationBar => Duration::from_millis(
+            u64::from(material::tokens::component::navigation_bar::ITEM_ANIMATION_DURATION_MS),
+        ),
+        material::widget::navigation::AdaptiveLayout::NavigationRail => Duration::from_millis(
+            u64::from(material::tokens::component::navigation_rail::ITEM_ANIMATION_DURATION_MS),
+        ),
+    }
 }
 
 fn emphasized_decelerate(progress: f32) -> f32 {
@@ -617,5 +899,38 @@ mod tests {
 
         assert_eq!(demo.combo_choice, Some("Assist"));
         assert_eq!(demo.combo_input, "");
+    }
+
+    #[test]
+    fn navigation_starts_selection_animation() {
+        let mut demo = Demo::default();
+
+        update(&mut demo, Message::Navigate(DemoPage::Controls));
+
+        assert_eq!(demo.page, DemoPage::Controls);
+        assert_eq!(demo.navigation_progress, 0.0);
+        assert_eq!(
+            demo.navigation_animation.map(|animation| animation.from),
+            Some(DemoPage::Inputs)
+        );
+    }
+
+    #[test]
+    fn resize_updates_adaptive_layout_inputs() {
+        let mut demo = Demo::default();
+
+        update(&mut demo, Message::WindowResized(Size::new(500.0, 900.0)));
+
+        assert_eq!(
+            demo.adaptive_navigation_layout(),
+            material::widget::navigation::AdaptiveLayout::NavigationBar
+        );
+
+        update(&mut demo, Message::WindowResized(Size::new(900.0, 900.0)));
+
+        assert_eq!(
+            demo.adaptive_navigation_layout(),
+            material::widget::navigation::AdaptiveLayout::NavigationRail
+        );
     }
 }

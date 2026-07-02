@@ -41,6 +41,7 @@ pub mod card;
 pub mod combo_box;
 pub mod data_table;
 pub mod list;
+pub mod navigation;
 pub mod select;
 
 use support::{
@@ -3114,6 +3115,31 @@ mod tests {
 
         let legacy = Text::new("Legacy path");
         let _: TestElement<'_> = container::outlined_card(legacy).into();
+    }
+
+    #[test]
+    fn material_navigation_constructors_compile_to_elements() {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        enum Page {
+            First,
+            Second,
+        }
+
+        let destinations = [
+            navigation::Destination::new(Page::First, "1", "First"),
+            navigation::Destination::new(Page::Second, "2", "Second"),
+        ];
+        let selection = navigation::Selection::new(Page::First);
+
+        let _: TestElement<'_> =
+            navigation::navigation_bar(&destinations, selection, |_| Message::Pressed).into();
+        let _: TestElement<'_> =
+            navigation::navigation_rail(&destinations, selection, |_| Message::Pressed).into();
+        let _: TestElement<'_> =
+            navigation::navigation_drawer("Navigation", &destinations, selection, |_| {
+                Message::Pressed
+            })
+            .into();
     }
 
     #[test]
