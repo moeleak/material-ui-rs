@@ -392,7 +392,7 @@ pub mod component {
         pub const HANDLE_WIDTH: f32 = 20.0;
         pub const HANDLE_HEIGHT: f32 = 20.0;
         pub const HANDLE_RADIUS: f32 = HANDLE_WIDTH / 2.0;
-        pub const HANDLE_ELEVATION: u8 = 1;
+        pub const HANDLE_ELEVATION: f32 = 2.0;
         pub const STATE_LAYER_SIZE: f32 = 40.0;
         pub const LABEL_CONTAINER_HEIGHT: f32 = 28.0;
         pub const TICK_MARK_SIZE: f32 = 2.0;
@@ -1112,6 +1112,7 @@ mod tests {
         assert_eq!(component::slider::INACTIVE_TRACK_HEIGHT, 4.0);
         assert_eq!(component::slider::HANDLE_WIDTH, 20.0);
         assert_eq!(component::slider::HANDLE_HEIGHT, 20.0);
+        assert_eq!(component::slider::HANDLE_ELEVATION, 2.0);
         assert_eq!(component::slider::STATE_LAYER_SIZE, 40.0);
         assert_eq!(component::slider::LABEL_CONTAINER_HEIGHT, 28.0);
         assert_eq!(component::linear_progress::TRACK_HEIGHT, 4.0);
