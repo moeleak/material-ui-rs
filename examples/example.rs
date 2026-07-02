@@ -1,6 +1,6 @@
 use iced::time::{Duration, Instant};
 use iced::widget::{column, row, scrollable, text};
-use iced::{window, Alignment, Color, Element, Length, Size, Subscription};
+use iced::{Alignment, Color, Element, Length, Size, Subscription, window};
 use iced_material as material;
 use material::{ColorQuartet, ColorScheme, Inverse, Outline, Surface, SurfaceContainer, Theme};
 
@@ -48,6 +48,7 @@ enum Message {
     EnabledChanged(bool),
     DarkModeChanged(bool),
     ChoiceSelected(RadioChoice),
+    ToggleDrawer,
     WindowResized(Size),
     Frame(Instant),
 }
@@ -110,6 +111,7 @@ const INVENTORY_ROWS: [InventoryRow; 3] = [
 #[derive(Debug)]
 struct Demo {
     navigation: material::widget::navigation::NavigationState<DemoPage>,
+    rail_expansion: material::widget::navigation::NavigationRailExpansionState,
     window_size: Size,
     count: i32,
     note: String,
@@ -139,6 +141,7 @@ impl Default for Demo {
 
         Self {
             navigation: material::widget::navigation::NavigationState::new(DemoPage::Inputs),
+            rail_expansion: material::widget::navigation::NavigationRailExpansionState::new(false),
             window_size: Size::new(1080.0, 980.0),
             count: 0,
             note: String::new(),
@@ -204,6 +207,7 @@ fn update(state: &mut Demo, message: Message) {
         Message::SliderChanged(progress) => state.progress = progress,
         Message::EnabledChanged(enabled) => state.enabled = enabled,
         Message::ChoiceSelected(choice) => state.radio_choice = Some(choice),
+        Message::ToggleDrawer => state.rail_expansion.toggle(Instant::now()),
         Message::WindowResized(size) => state.window_size = size,
         Message::DarkModeChanged(dark_mode) => {
             state.dark_mode = dark_mode;
@@ -242,6 +246,7 @@ fn update(state: &mut Demo, message: Message) {
             }
 
             let _ = state.navigation.advance(now);
+            let _ = state.rail_expansion.advance(now);
         }
     }
 }
@@ -254,7 +259,10 @@ fn subscription(state: &Demo) -> Subscription<Message> {
     let mut subscriptions =
         vec![iced::window::resize_events().map(|(_id, size)| Message::WindowResized(size))];
 
-    if state.animation.is_some() || state.navigation.is_animating() {
+    if state.animation.is_some()
+        || state.navigation.is_animating()
+        || state.rail_expansion.is_animating()
+    {
         subscriptions.push(iced::window::frames().map(Message::Frame));
     }
 
@@ -262,14 +270,62 @@ fn subscription(state: &Demo) -> Subscription<Message> {
 }
 
 fn view(state: &Demo) -> Element<'_, Message, Theme> {
-    material::widget::navigation::navigation_suite(
-        state.window_size.width,
-        state.window_size.height,
-        &NAV_DESTINATIONS,
-        state.navigation_selection(),
-        Message::Navigate,
-        page_content(state),
-    )
+    let selection = state.navigation_selection();
+
+    match state.adaptive_navigation_layout() {
+        material::widget::navigation::AdaptiveLayout::NavigationBar => column![
+            page_content(state),
+            material::widget::navigation::navigation_bar(
+                &NAV_DESTINATIONS,
+                selection,
+                Message::Navigate,
+            )
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into(),
+        material::widget::navigation::AdaptiveLayout::NavigationRail => {
+            let navigation: Element<'_, Message, Theme> = if state.rail_expansion.is_visible() {
+                let drawer_width =
+                    material::widget::navigation::navigation_rail_expanded_width_for_progress(
+                        state.rail_expansion.progress(),
+                    );
+
+                if drawer_width > 0.0 {
+                    material::widget::navigation::navigation_rail_expanded_with_menu_at_width(
+                        "Example",
+                        &NAV_DESTINATIONS,
+                        selection,
+                        Message::Navigate,
+                        Message::ToggleDrawer,
+                        drawer_width,
+                    )
+                    .into()
+                } else {
+                    material::widget::navigation::navigation_rail_with_menu(
+                        &NAV_DESTINATIONS,
+                        selection,
+                        Message::Navigate,
+                        Message::ToggleDrawer,
+                    )
+                    .into()
+                }
+            } else {
+                material::widget::navigation::navigation_rail_with_menu(
+                    &NAV_DESTINATIONS,
+                    selection,
+                    Message::Navigate,
+                    Message::ToggleDrawer,
+                )
+                .into()
+            };
+
+            row![navigation, page_content(state)]
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        }
+    }
 }
 
 fn page_content(state: &Demo) -> Element<'_, Message, Theme> {
@@ -420,26 +476,28 @@ fn navigation_page(state: &Demo) -> Element<'_, Message, Theme> {
         selection,
         Message::Navigate,
     );
-    let rail = material::widget::navigation::navigation_rail(
+    let rail = material::widget::navigation::navigation_rail_with_menu(
         &NAV_DESTINATIONS,
         selection,
         Message::Navigate,
+        Message::ToggleDrawer,
     )
     .height(Length::Fixed(360.0));
-    let drawer = material::widget::navigation::navigation_drawer(
+    let expanded_rail = material::widget::navigation::navigation_rail_expanded_with_menu(
         "Example",
         &NAV_DESTINATIONS,
         selection,
         Message::Navigate,
+        Message::ToggleDrawer,
     )
     .height(Length::Fixed(360.0));
 
     column![
         section("Navigation bar", bar.into()),
         material::widget::rule::horizontal_inset(),
-        section("Navigation rail", rail.into()),
+        section("Navigation rail with menu", rail.into()),
         material::widget::rule::horizontal_inset(),
-        section("Navigation drawer", drawer.into()),
+        section("Expanded navigation rail", expanded_rail.into()),
     ]
     .spacing(24)
     .width(Length::Fill)
@@ -873,6 +931,27 @@ mod tests {
             0.0
         );
         assert_eq!(demo.navigation.selection().progress(DemoPage::Inputs), 1.0);
+    }
+
+    #[test]
+    fn menu_toggles_expanded_navigation_rail() {
+        let mut demo = Demo::default();
+
+        update(&mut demo, Message::ToggleDrawer);
+
+        assert!(demo.rail_expansion.is_open());
+        assert!(demo.rail_expansion.is_animating());
+
+        update(
+            &mut demo,
+            Message::Frame(Instant::now() + Duration::from_millis(500)),
+        );
+
+        assert!(demo.rail_expansion.is_visible());
+
+        update(&mut demo, Message::ToggleDrawer);
+
+        assert!(!demo.rail_expansion.is_open());
     }
 
     #[test]

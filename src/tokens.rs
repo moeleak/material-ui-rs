@@ -480,20 +480,28 @@ pub mod component {
     }
 
     pub mod navigation_rail {
-        pub const CONTAINER_WIDTH: f32 = 80.0;
-        pub const CONTAINER_ELEVATION_LEVEL: u8 = 0;
+        pub const CONTAINER_WIDTH: f32 = 96.0;
+        pub const EXPANDED_CONTAINER_WIDTH: f32 = 220.0;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
         pub const ACTIVE_INDICATOR_WIDTH: f32 = 56.0;
         pub const ACTIVE_INDICATOR_HEIGHT: f32 = 32.0;
+        pub const EXPANDED_ACTIVE_INDICATOR_HEIGHT: f32 = 56.0;
+        pub const EXPANDED_ACTIVE_INDICATOR_MARGIN_HORIZONTAL: f32 = 20.0;
+        pub const EXPANDED_ACTIVE_INDICATOR_PADDING_START: f32 = 16.0;
+        pub const EXPANDED_ACTIVE_INDICATOR_PADDING_END: f32 = 16.0;
         pub const ACTIVE_INDICATOR_SHAPE: f32 = super::super::shape::CORNER_FULL;
         pub const ICON_SIZE: f32 = 24.0;
+        pub const ICON_LABEL_HORIZONTAL_SPACE: f32 = 8.0;
         pub const LABEL_TEXT: super::super::typography::TypeScale =
             super::super::typography::LABEL_MEDIUM;
         pub const NO_LABEL_ACTIVE_INDICATOR_HEIGHT: f32 = 56.0;
         pub const ITEM_WIDTH: f32 = CONTAINER_WIDTH;
-        pub const ITEM_HEIGHT: f32 = NO_LABEL_ACTIVE_INDICATOR_HEIGHT;
+        pub const ITEM_HEIGHT: f32 = 64.0;
         pub const VERTICAL_PADDING: f32 = 4.0;
+        pub const CONTENT_TOP_MARGIN: f32 = 44.0;
+        pub const ITEM_TOP_PADDING: f32 = 6.0;
         pub const ITEM_VERTICAL_PADDING: f32 = 4.0;
-        pub const HEADER_PADDING: f32 = 8.0;
+        pub const HEADER_PADDING: f32 = 40.0;
         pub const ITEM_ANIMATION_DURATION_MS: u16 = super::super::motion::DURATION_SHORT3_MS;
     }
 
@@ -883,18 +891,39 @@ mod tests {
         assert_eq!(component::navigation_bar::ITEM_HORIZONTAL_PADDING, 8.0);
         assert_eq!(component::navigation_bar::INDICATOR_TO_LABEL_PADDING, 4.0);
         assert_eq!(component::navigation_bar::ITEM_ANIMATION_DURATION_MS, 100);
-        assert_eq!(component::navigation_rail::CONTAINER_WIDTH, 80.0);
-        assert_eq!(component::navigation_rail::CONTAINER_ELEVATION_LEVEL, 0);
+        assert_eq!(component::navigation_rail::CONTAINER_WIDTH, 96.0);
+        assert_eq!(component::navigation_rail::EXPANDED_CONTAINER_WIDTH, 220.0);
+        assert_eq!(component::navigation_rail::CONTAINER_ELEVATION_LEVEL, 3);
         assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_WIDTH, 56.0);
         assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_HEIGHT, 32.0);
+        assert_eq!(
+            component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_HEIGHT,
+            56.0
+        );
+        assert_eq!(
+            component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_MARGIN_HORIZONTAL,
+            20.0
+        );
+        assert_eq!(
+            component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_PADDING_START,
+            16.0
+        );
+        assert_eq!(
+            component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_PADDING_END,
+            16.0
+        );
         assert_eq!(component::navigation_rail::ICON_SIZE, 24.0);
+        assert_eq!(component::navigation_rail::ICON_LABEL_HORIZONTAL_SPACE, 8.0);
         assert_eq!(
             component::navigation_rail::LABEL_TEXT,
             typography::LABEL_MEDIUM
         );
-        assert_eq!(component::navigation_rail::ITEM_WIDTH, 80.0);
-        assert_eq!(component::navigation_rail::ITEM_HEIGHT, 56.0);
+        assert_eq!(component::navigation_rail::ITEM_WIDTH, 96.0);
+        assert_eq!(component::navigation_rail::ITEM_HEIGHT, 64.0);
         assert_eq!(component::navigation_rail::VERTICAL_PADDING, 4.0);
+        assert_eq!(component::navigation_rail::CONTENT_TOP_MARGIN, 44.0);
+        assert_eq!(component::navigation_rail::ITEM_TOP_PADDING, 6.0);
+        assert_eq!(component::navigation_rail::HEADER_PADDING, 40.0);
         assert_eq!(component::navigation_rail::ITEM_ANIMATION_DURATION_MS, 150);
         assert_eq!(component::navigation_drawer::CONTAINER_WIDTH, 360.0);
         assert_eq!(component::navigation_drawer::MINIMUM_CONTAINER_WIDTH, 240.0);

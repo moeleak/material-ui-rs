@@ -3174,11 +3174,67 @@ mod tests {
             navigation::navigation_bar(&destinations, selection, |_| Message::Pressed).into();
         let _: TestElement<'_> =
             navigation::navigation_rail(&destinations, selection, |_| Message::Pressed).into();
+        let _: TestElement<'_> = navigation::navigation_rail_with_header(
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Text::new("Header"),
+        )
+        .into();
+        let _: TestElement<'_> = navigation::navigation_rail_with_menu(
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Message::Pressed,
+        )
+        .into();
+        let _: TestElement<'_> = navigation::navigation_rail_expanded_with_menu(
+            "Navigation",
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Message::Pressed,
+        )
+        .into();
+        let _: TestElement<'_> = navigation::navigation_rail_expanded_with_menu_at_width(
+            "Navigation",
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Message::Pressed,
+            220.0,
+        )
+        .into();
         let _: TestElement<'_> =
             navigation::navigation_drawer("Navigation", &destinations, selection, |_| {
                 Message::Pressed
             })
             .into();
+        let _: TestElement<'_> = navigation::navigation_drawer_at_width(
+            "Navigation",
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            240.0,
+        )
+        .into();
+        let _: TestElement<'_> = navigation::navigation_drawer_with_menu(
+            "Navigation",
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Message::Pressed,
+        )
+        .into();
+        let _: TestElement<'_> = navigation::navigation_drawer_with_menu_at_width(
+            "Navigation",
+            &destinations,
+            selection,
+            |_| Message::Pressed,
+            Message::Pressed,
+            240.0,
+        )
+        .into();
         let content = Text::new("Navigation suite content");
         let _: TestElement<'_> = navigation::navigation_suite(
             1080.0,
