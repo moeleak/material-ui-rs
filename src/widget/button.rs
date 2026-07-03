@@ -196,12 +196,19 @@ impl ButtonState {
     }
 
     fn has_visible_ripples(&self, now: Instant) -> bool {
+        self.visible_ripple_opacity(now) > 0.0
+    }
+
+    fn visible_ripple_opacity(&self, now: Instant) -> f32 {
         self.active_ripple
-            .is_some_and(|ripple| ripple.opacity(now) > 0.0)
-            || self
-                .exiting_ripples
-                .iter()
-                .any(|ripple| ripple.opacity(now) > 0.0)
+            .map(|ripple| ripple.opacity(now))
+            .into_iter()
+            .chain(
+                self.exiting_ripples
+                    .iter()
+                    .map(|ripple| ripple.opacity(now)),
+            )
+            .fold(0.0, f32::max)
     }
 }
 
@@ -470,7 +477,12 @@ where
             button_status(self.on_press.is_some(), state.is_pressed, bounds, cursor)
         });
         let now = state.now.unwrap_or_else(Instant::now);
-        let style = button_draw_style(theme, &self.class, status, state.has_visible_ripples(now));
+        let style = button_draw_style(
+            theme,
+            &self.class,
+            status,
+            state.visible_ripple_opacity(now),
+        );
         let content_layout = layout.children().next().unwrap();
 
         if style.background.is_some() || style.border.width > 0.0 || style.shadow.color.a > 0.0 {
@@ -581,18 +593,50 @@ fn button_draw_style(
     theme: &Theme,
     class: &<Theme as Catalog>::Class<'_>,
     status: Status,
-    has_visible_ripple: bool,
+    visible_ripple_opacity: f32,
 ) -> Style {
     let mut style = theme.style(class, status);
+    let active = theme.style(class, Status::Active);
 
-    if matches!(status, Status::Pressed)
-        || (has_visible_ripple && matches!(status, Status::Hovered))
-    {
-        let active = theme.style(class, Status::Active);
-        style.background = active.background;
+    match status {
+        Status::Pressed => {
+            style.background = active.background;
+        }
+        Status::Hovered if visible_ripple_opacity > 0.0 => {
+            style.background = blend_background(
+                active.background,
+                style.background,
+                1.0 - visible_ripple_opacity.clamp(0.0, 1.0),
+            );
+        }
+        Status::Active | Status::Hovered | Status::Disabled => {}
     }
 
     style
+}
+
+fn blend_background(
+    from: Option<Background>,
+    to: Option<Background>,
+    progress: f32,
+) -> Option<Background> {
+    let progress = progress.clamp(0.0, 1.0);
+
+    if progress <= 0.0 {
+        return from;
+    } else if progress >= 1.0 {
+        return to;
+    }
+
+    match (from, to) {
+        (Some(Background::Color(from)), Some(Background::Color(to))) => {
+            Some(Background::Color(mix(from, to, progress)))
+        }
+        (None, Some(to)) => Some(to.scale_alpha(progress)),
+        (Some(from), None) => Some(from.scale_alpha(1.0 - progress)),
+        (None, None) => None,
+        (_, to) => to,
+    }
 }
 
 fn press_origin(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> Option<Point> {
@@ -1017,15 +1061,46 @@ mod tests {
     }
 
     #[test]
-    fn visible_ripple_suppresses_hover_state_layer_background() {
+    fn visible_ripple_opacity_tracks_max_ripple_alpha() {
+        let start = Instant::now();
+        let release = start + duration_ms(50);
+        let mut state = ButtonState::default();
+
+        state.press(Point::new(10.0, 10.0), start);
+        state.release(release);
+
+        assert_close(state.visible_ripple_opacity(release + duration_ms(25)), 1.0);
+        assert_close(
+            state.visible_ripple_opacity(release + duration_ms(250)),
+            0.5,
+        );
+        assert_close(
+            state.visible_ripple_opacity(release + duration_ms(325)),
+            0.0,
+        );
+    }
+
+    #[test]
+    fn visible_ripple_fades_hover_state_layer_background() {
         let theme = Theme::Light;
         let class: StyleFn<'_, Theme> = Box::new(crate::button::text);
-        let hovered = button_draw_style(&theme, &class, Status::Hovered, false);
-        let ripple_hovered = button_draw_style(&theme, &class, Status::Hovered, true);
-        let active = button_draw_style(&theme, &class, Status::Active, false);
+        let active = button_draw_style(&theme, &class, Status::Active, 0.0);
+        let hovered = button_draw_style(&theme, &class, Status::Hovered, 0.0);
+        let covered = button_draw_style(&theme, &class, Status::Hovered, 1.0);
+        let fading = button_draw_style(&theme, &class, Status::Hovered, 0.5);
 
         assert!(hovered.background.is_some());
-        assert_eq!(ripple_hovered.background, active.background);
+        assert_eq!(covered.background, active.background);
+
+        let Some(Background::Color(hovered_color)) = hovered.background else {
+            panic!("expected hovered color background");
+        };
+        let Some(Background::Color(fading_color)) = fading.background else {
+            panic!("expected fading color background");
+        };
+
+        assert!(fading_color.a > 0.0);
+        assert!(fading_color.a < hovered_color.a);
     }
 
     #[test]
