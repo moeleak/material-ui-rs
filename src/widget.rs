@@ -149,6 +149,51 @@ where
         .center()
 }
 
+fn touch_cursor(event: &Event, cursor: mouse::Cursor) -> mouse::Cursor {
+    if cursor.position().is_some() {
+        return cursor;
+    }
+
+    match event {
+        Event::Touch(
+            touch::Event::FingerPressed { position, .. }
+            | touch::Event::FingerMoved { position, .. }
+            | touch::Event::FingerLifted { position, .. }
+            | touch::Event::FingerLost { position, .. },
+        ) => mouse::Cursor::Available(*position),
+        _ => cursor,
+    }
+}
+
+fn touch_as_mouse_event(event: &Event) -> Option<Event> {
+    match event {
+        Event::Touch(touch::Event::FingerPressed { .. }) => Some(Event::Mouse(
+            mouse::Event::ButtonPressed(mouse::Button::Left),
+        )),
+        Event::Touch(touch::Event::FingerMoved { position, .. }) => {
+            Some(Event::Mouse(mouse::Event::CursorMoved {
+                position: *position,
+            }))
+        }
+        Event::Touch(touch::Event::FingerLifted { .. } | touch::Event::FingerLost { .. }) => Some(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+        ),
+        _ => None,
+    }
+}
+
+fn press_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> bool {
+    match event {
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => cursor.is_over(bounds),
+        Event::Touch(touch::Event::FingerPressed { position, .. }) => bounds.contains(*position),
+        _ => false,
+    }
+}
+
+fn should_suppress_ime_caret() -> bool {
+    !cfg!(any(target_os = "android", target_os = "windows"))
+}
+
 fn checkbox_checkmark_svg(mark_progress: f32) -> Vec<u8> {
     let progress = mark_progress.clamp(0.0, 1.0);
     let short_height = lerp(
@@ -1442,6 +1487,7 @@ pub mod text_input {
             viewport: &Rectangle,
         ) {
             let bounds = layout.bounds();
+            let inner_cursor = touch_cursor(event, cursor);
             let state = tree
                 .state
                 .downcast_mut::<TextFieldState<Renderer::Paragraph>>();
@@ -1495,6 +1541,8 @@ pub mod text_input {
                 } else {
                     web_input::hide_mobile_keyboard();
                 }
+
+                shell.request_redraw();
             }
 
             let target = if self.label_mode == LabelMode::Floating {
@@ -1517,7 +1565,7 @@ pub mod text_input {
                 &mut tree.children[0],
                 event,
                 layout.children().next().unwrap(),
-                cursor,
+                inner_cursor,
                 renderer,
                 clipboard,
                 shell,
@@ -1582,7 +1630,7 @@ pub mod text_input {
             let input_layout = layout.children().next().unwrap();
             let caretless_input;
             let input =
-                if state.ime_preedit_active && self.is_enabled && !cfg!(target_os = "windows") {
+                if state.ime_preedit_active && self.is_enabled && should_suppress_ime_caret() {
                     // Keep iced_winit's IME preedit overlay, but suppress iced's own
                     // blinking caret so composition does not show two insertion marks.
                     let mut input = IcedTextInput::new("", self.value.as_str())
@@ -1715,6 +1763,7 @@ pub mod text_editor {
     where
         Renderer: core_text::Renderer,
     {
+        is_enabled: bool,
         inner: IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>,
     }
 
@@ -1723,7 +1772,9 @@ pub mod text_editor {
         Renderer: core_text::Renderer,
     {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.debug_struct("TextEditor").finish_non_exhaustive()
+            f.debug_struct("TextEditor")
+                .field("is_enabled", &self.is_enabled)
+                .finish_non_exhaustive()
         }
     }
 
@@ -1747,7 +1798,10 @@ pub mod text_editor {
                 .min_height(tokens::component::text_field::CONTAINER_HEIGHT)
                 .style(text_editor_style::default);
 
-            Self { inner }
+            Self {
+                is_enabled: false,
+                inner,
+            }
         }
 
         pub fn id(mut self, id: impl Into<core_widget::Id>) -> Self {
@@ -1781,6 +1835,7 @@ pub mod text_editor {
         }
 
         pub fn on_action(mut self, on_edit: impl Fn(Action) -> Message + 'a) -> Self {
+            self.is_enabled = true;
             self.inner = self.inner.on_action(on_edit);
             self
         }
@@ -1889,11 +1944,28 @@ pub mod text_editor {
             shell: &mut Shell<'_, Message>,
             viewport: &Rectangle,
         ) {
+            let bounds = layout.bounds();
+            let inner_cursor = touch_cursor(event, cursor);
+            let translated_event = touch_as_mouse_event(event);
+            let inner_event = translated_event.as_ref().unwrap_or(event);
+            let request_focus_redraw = self.is_enabled && press_is_over(event, bounds, cursor);
+
             self.inner.update(
-                tree, event, layout, cursor, renderer, clipboard, shell, viewport,
+                tree,
+                inner_event,
+                layout,
+                inner_cursor,
+                renderer,
+                clipboard,
+                shell,
+                viewport,
             );
 
-            normalize_windows_ime_request(shell.input_method_mut(), layout.bounds());
+            if request_focus_redraw {
+                shell.request_redraw();
+            }
+
+            normalize_windows_ime_request(shell.input_method_mut(), bounds);
         }
 
         fn mouse_interaction(

@@ -33,6 +33,99 @@ fn centered_icon_text_uses_square_icon_bounds() {
 }
 
 #[test]
+fn touch_cursor_uses_finger_position_when_cursor_is_unavailable() {
+    let position = Point::new(24.0, 48.0);
+    let event = Event::Touch(touch::Event::FingerPressed {
+        id: touch::Finger(1),
+        position,
+    });
+
+    assert_eq!(
+        touch_cursor(&event, mouse::Cursor::Unavailable),
+        mouse::Cursor::Available(position)
+    );
+}
+
+#[test]
+fn touch_cursor_keeps_existing_pointer_position() {
+    let pointer = Point::new(8.0, 16.0);
+    let event = Event::Touch(touch::Event::FingerPressed {
+        id: touch::Finger(1),
+        position: Point::new(24.0, 48.0),
+    });
+
+    assert_eq!(
+        touch_cursor(&event, mouse::Cursor::Available(pointer)),
+        mouse::Cursor::Available(pointer)
+    );
+}
+
+#[test]
+fn touch_events_convert_to_mouse_events_for_text_editor() {
+    let position = Point::new(24.0, 48.0);
+
+    assert_eq!(
+        touch_as_mouse_event(&Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position,
+        })),
+        Some(Event::Mouse(mouse::Event::ButtonPressed(
+            mouse::Button::Left
+        )))
+    );
+    assert_eq!(
+        touch_as_mouse_event(&Event::Touch(touch::Event::FingerMoved {
+            id: touch::Finger(1),
+            position,
+        })),
+        Some(Event::Mouse(mouse::Event::CursorMoved { position }))
+    );
+    assert_eq!(
+        touch_as_mouse_event(&Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position,
+        })),
+        Some(Event::Mouse(mouse::Event::ButtonReleased(
+            mouse::Button::Left
+        )))
+    );
+}
+
+#[test]
+fn press_is_over_accepts_touch_positions_without_cursor() {
+    let bounds = Rectangle::new(Point::new(10.0, 20.0), Size::new(100.0, 48.0));
+
+    assert!(press_is_over(
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 30.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(!press_is_over(
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(200.0, 300.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+}
+
+#[cfg(not(any(target_os = "android", target_os = "windows")))]
+#[test]
+fn ime_caret_suppression_is_enabled_on_desktop_composition_platforms() {
+    assert!(should_suppress_ime_caret());
+}
+
+#[cfg(any(target_os = "android", target_os = "windows"))]
+#[test]
+fn ime_caret_suppression_is_disabled_on_platform_owned_ime_caret() {
+    assert!(!should_suppress_ime_caret());
+}
+
+#[test]
 fn material_button_constructors_compile_to_elements() {
     let _: TestElement<'_> = button::filled("Filled").on_press(Message::Pressed).into();
     let _: TestElement<'_> = button::filled_action("Filled", Message::Pressed);
