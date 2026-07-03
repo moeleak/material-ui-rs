@@ -21,6 +21,10 @@ use crate::tokens;
 const CLOSED_ALPHA_TARGET: f32 = 0.0;
 const EXPANDED_ALPHA_TARGET: f32 = 1.0;
 
+fn selected_option_border() -> iced_widget::core::Border {
+    border::rounded(0.0)
+}
+
 pub(super) struct Menu<'a, 'b, T, Message, Theme = crate::Theme, Renderer = iced_widget::Renderer>
 where
     Theme: iced_widget::overlay::menu::Catalog,
@@ -534,7 +538,7 @@ where
                             width: bounds.width - style.border.width * 2.0,
                             ..bounds
                         },
-                        border: border::rounded(style.border.radius),
+                        border: selected_option_border(),
                         ..renderer::Quad::default()
                     },
                     style.selected_background.scale_alpha(alpha),
@@ -714,6 +718,16 @@ mod tests {
 
         assert_eq!(animation.reveal.to, EXPANDED_ALPHA_TARGET);
         assert_eq!(animation.alpha.to, EXPANDED_ALPHA_TARGET);
+    }
+
+    #[test]
+    fn selected_option_background_uses_square_corners() {
+        let border = selected_option_border();
+
+        assert_eq!(border.radius.top_left, 0.0);
+        assert_eq!(border.radius.top_right, 0.0);
+        assert_eq!(border.radius.bottom_right, 0.0);
+        assert_eq!(border.radius.bottom_left, 0.0);
     }
 
     #[test]

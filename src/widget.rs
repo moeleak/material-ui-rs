@@ -12,8 +12,8 @@ use iced_widget::core::widget as core_widget;
 use iced_widget::core::widget::tree::{self, Tree};
 use iced_widget::core::{
     Background, Border, Clipboard, Color, Element, Event, Layout, Length, Padding, Pixels, Point,
-    Rectangle, Shell, Size, Widget, alignment, border, input_method, layout, mouse, renderer,
-    touch, window,
+    Rectangle, Shell, Size, Vector, Widget, alignment, border, input_method, layout, mouse,
+    overlay, renderer, touch, window,
 };
 use iced_widget::radio as iced_radio;
 use iced_widget::rule as iced_rule;
@@ -73,6 +73,50 @@ const SWITCH_OFF_ICON_SVG: &[u8] = br##"
 
 fn absolute_line_height(value: f32) -> LineHeight {
     LineHeight::Absolute(value.into())
+}
+
+#[cfg(target_os = "windows")]
+fn normalize_windows_ime_request(
+    input_method: &mut input_method::InputMethod,
+    avoid_bounds: Rectangle,
+) {
+    let input_method::InputMethod::Enabled {
+        cursor, preedit, ..
+    } = input_method
+    else {
+        return;
+    };
+
+    if !preedit
+        .as_ref()
+        .is_some_and(|preedit| !preedit.content.is_empty())
+    {
+        return;
+    }
+
+    *preedit = None;
+
+    let bounds_right = avoid_bounds.x + avoid_bounds.width;
+    let bounds_bottom = avoid_bounds.y + avoid_bounds.height;
+    let cursor_right = cursor.x + cursor.width;
+    let cursor_bottom = cursor.y + cursor.height;
+
+    if cursor.x < bounds_right
+        && cursor_right > avoid_bounds.x
+        && cursor.y < bounds_bottom
+        && cursor_bottom > avoid_bounds.y
+    {
+        cursor.x = avoid_bounds.x;
+        cursor.width = avoid_bounds.width;
+        cursor.height = (bounds_bottom - cursor.y).max(cursor.height);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn normalize_windows_ime_request(
+    _input_method: &mut input_method::InputMethod,
+    _avoid_bounds: Rectangle,
+) {
 }
 
 fn text_with_metrics<'a, Renderer>(
@@ -3591,6 +3635,8 @@ pub mod text_input {
                 shell,
                 viewport,
             );
+
+            normalize_windows_ime_request(shell.input_method_mut(), bounds);
         }
 
         fn mouse_interaction(
@@ -3647,36 +3693,37 @@ pub mod text_input {
 
             let input_layout = layout.children().next().unwrap();
             let caretless_input;
-            let input = if state.ime_preedit_active && self.is_enabled {
-                // Keep iced_winit's IME preedit overlay, but suppress iced's own
-                // blinking caret so composition does not show two insertion marks.
-                let mut input = IcedTextInput::new("", self.value.as_str())
-                    .width(Length::Fill)
-                    .padding(Padding {
-                        top: tokens::component::text_field::TOP_SPACE,
-                        right: tokens::component::text_field::TRAILING_SPACE,
-                        bottom: tokens::component::text_field::BOTTOM_SPACE,
-                        left: tokens::component::text_field::LEADING_SPACE,
-                    })
-                    .size(tokens::component::text_field::INPUT_TEXT_SIZE)
-                    .line_height(absolute_line_height(
-                        tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
-                    ))
-                    .style(caretless_input_layer_style);
+            let input =
+                if state.ime_preedit_active && self.is_enabled && !cfg!(target_os = "windows") {
+                    // Keep iced_winit's IME preedit overlay, but suppress iced's own
+                    // blinking caret so composition does not show two insertion marks.
+                    let mut input = IcedTextInput::new("", self.value.as_str())
+                        .width(Length::Fill)
+                        .padding(Padding {
+                            top: tokens::component::text_field::TOP_SPACE,
+                            right: tokens::component::text_field::TRAILING_SPACE,
+                            bottom: tokens::component::text_field::BOTTOM_SPACE,
+                            left: tokens::component::text_field::LEADING_SPACE,
+                        })
+                        .size(tokens::component::text_field::INPUT_TEXT_SIZE)
+                        .line_height(absolute_line_height(
+                            tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
+                        ))
+                        .style(caretless_input_layer_style);
 
-                if self.is_secure {
-                    input = input.secure(true);
-                }
+                    if self.is_secure {
+                        input = input.secure(true);
+                    }
 
-                if let Some(font) = self.font {
-                    input = input.font(font);
-                }
+                    if let Some(font) = self.font {
+                        input = input.font(font);
+                    }
 
-                caretless_input = input;
-                &caretless_input
-            } else {
-                &self.input
-            };
+                    caretless_input = input;
+                    &caretless_input
+                } else {
+                    &self.input
+                };
 
             <IcedTextInput<'_, Message, Theme, Renderer> as Widget<Message, Theme, Renderer>>::draw(
                 input,
@@ -3770,36 +3817,260 @@ pub mod text_editor {
 
     use super::*;
 
-    pub use iced_text_editor::{Action, Content};
+    pub use iced_text_editor::{Action, Binding, Content, KeyPress};
 
     /// Default height for a compact outlined text area preview.
     pub const OUTLINED_AREA_HEIGHT: f32 = tokens::component::text_field::CONTAINER_HEIGHT * 2.0;
 
+    /// A Material 3 outlined multi-line text field.
+    pub struct TextEditor<'a, Message, Renderer = iced_widget::Renderer>
+    where
+        Renderer: core_text::Renderer,
+    {
+        inner: IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>,
+    }
+
+    impl<Message, Renderer> std::fmt::Debug for TextEditor<'_, Message, Renderer>
+    where
+        Renderer: core_text::Renderer,
+    {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("TextEditor").finish_non_exhaustive()
+        }
+    }
+
+    impl<'a, Message, Renderer> TextEditor<'a, Message, Renderer>
+    where
+        Message: 'a,
+        Renderer: core_text::Renderer + 'a,
+    {
+        pub fn new(content: &'a Content<Renderer>) -> Self {
+            let inner = IcedTextEditor::new(content)
+                .padding(Padding {
+                    top: tokens::component::text_field::TOP_SPACE,
+                    right: tokens::component::text_field::TRAILING_SPACE,
+                    bottom: tokens::component::text_field::BOTTOM_SPACE,
+                    left: tokens::component::text_field::LEADING_SPACE,
+                })
+                .size(tokens::component::text_field::INPUT_TEXT_SIZE)
+                .line_height(absolute_line_height(
+                    tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
+                ))
+                .min_height(tokens::component::text_field::CONTAINER_HEIGHT)
+                .style(text_editor_style::default);
+
+            Self { inner }
+        }
+
+        pub fn id(mut self, id: impl Into<core_widget::Id>) -> Self {
+            self.inner = self.inner.id(id);
+            self
+        }
+
+        pub fn placeholder(mut self, placeholder: impl text::IntoFragment<'a>) -> Self {
+            self.inner = self.inner.placeholder(placeholder);
+            self
+        }
+
+        pub fn width(mut self, width: impl Into<Pixels>) -> Self {
+            self.inner = self.inner.width(width);
+            self
+        }
+
+        pub fn height(mut self, height: impl Into<Length>) -> Self {
+            self.inner = self.inner.height(height);
+            self
+        }
+
+        pub fn min_height(mut self, min_height: impl Into<Pixels>) -> Self {
+            self.inner = self.inner.min_height(min_height);
+            self
+        }
+
+        pub fn max_height(mut self, max_height: impl Into<Pixels>) -> Self {
+            self.inner = self.inner.max_height(max_height);
+            self
+        }
+
+        pub fn on_action(mut self, on_edit: impl Fn(Action) -> Message + 'a) -> Self {
+            self.inner = self.inner.on_action(on_edit);
+            self
+        }
+
+        pub fn font(mut self, font: impl Into<Renderer::Font>) -> Self {
+            self.inner = self.inner.font(font);
+            self
+        }
+
+        pub fn size(mut self, size: impl Into<Pixels>) -> Self {
+            self.inner = self.inner.size(size);
+            self
+        }
+
+        pub fn line_height(mut self, line_height: impl Into<core_text::LineHeight>) -> Self {
+            self.inner = self.inner.line_height(line_height);
+            self
+        }
+
+        pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
+            self.inner = self.inner.padding(padding);
+            self
+        }
+
+        pub fn wrapping(mut self, wrapping: core_text::Wrapping) -> Self {
+            self.inner = self.inner.wrapping(wrapping);
+            self
+        }
+
+        pub fn key_binding(
+            mut self,
+            key_binding: impl Fn(KeyPress) -> Option<Binding<Message>> + 'a,
+        ) -> Self {
+            self.inner = self.inner.key_binding(key_binding);
+            self
+        }
+
+        pub fn style(
+            mut self,
+            style: impl Fn(&Theme, iced_text_editor::Status) -> iced_text_editor::Style + 'a,
+        ) -> Self
+        where
+            <Theme as iced_text_editor::Catalog>::Class<'a>:
+                From<iced_text_editor::StyleFn<'a, Theme>>,
+        {
+            self.inner = self.inner.style(style);
+            self
+        }
+    }
+
+    impl<Message, Renderer> Widget<Message, Theme, Renderer> for TextEditor<'_, Message, Renderer>
+    where
+        Renderer: core_text::Renderer,
+    {
+        fn tag(&self) -> tree::Tag {
+            self.inner.tag()
+        }
+
+        fn state(&self) -> tree::State {
+            self.inner.state()
+        }
+
+        fn children(&self) -> Vec<Tree> {
+            self.inner.children()
+        }
+
+        fn diff(&self, tree: &mut Tree) {
+            self.inner.diff(tree);
+        }
+
+        fn size(&self) -> Size<Length> {
+            Widget::<Message, Theme, Renderer>::size(&self.inner)
+        }
+
+        fn size_hint(&self) -> Size<Length> {
+            Widget::<Message, Theme, Renderer>::size_hint(&self.inner)
+        }
+
+        fn layout(
+            &mut self,
+            tree: &mut Tree,
+            renderer: &Renderer,
+            limits: &layout::Limits,
+        ) -> layout::Node {
+            self.inner.layout(tree, renderer, limits)
+        }
+
+        fn operate(
+            &mut self,
+            tree: &mut Tree,
+            layout: Layout<'_>,
+            renderer: &Renderer,
+            operation: &mut dyn core_widget::Operation,
+        ) {
+            self.inner.operate(tree, layout, renderer, operation);
+        }
+
+        fn update(
+            &mut self,
+            tree: &mut Tree,
+            event: &Event,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            renderer: &Renderer,
+            clipboard: &mut dyn Clipboard,
+            shell: &mut Shell<'_, Message>,
+            viewport: &Rectangle,
+        ) {
+            self.inner.update(
+                tree, event, layout, cursor, renderer, clipboard, shell, viewport,
+            );
+
+            normalize_windows_ime_request(shell.input_method_mut(), layout.bounds());
+        }
+
+        fn mouse_interaction(
+            &self,
+            tree: &Tree,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            viewport: &Rectangle,
+            renderer: &Renderer,
+        ) -> mouse::Interaction {
+            self.inner
+                .mouse_interaction(tree, layout, cursor, viewport, renderer)
+        }
+
+        fn draw(
+            &self,
+            tree: &Tree,
+            renderer: &mut Renderer,
+            theme: &Theme,
+            defaults: &renderer::Style,
+            layout: Layout<'_>,
+            cursor: mouse::Cursor,
+            viewport: &Rectangle,
+        ) {
+            self.inner
+                .draw(tree, renderer, theme, defaults, layout, cursor, viewport);
+        }
+
+        fn overlay<'b>(
+            &'b mut self,
+            tree: &'b mut Tree,
+            layout: Layout<'b>,
+            renderer: &Renderer,
+            viewport: &Rectangle,
+            translation: Vector,
+        ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+            self.inner
+                .overlay(tree, layout, renderer, viewport, translation)
+        }
+    }
+
+    impl<'a, Message, Renderer> From<TextEditor<'a, Message, Renderer>>
+        for Element<'a, Message, Theme, Renderer>
+    where
+        Message: 'a,
+        Renderer: core_text::Renderer + 'a,
+    {
+        fn from(text_editor: TextEditor<'a, Message, Renderer>) -> Self {
+            Element::new(text_editor)
+        }
+    }
+
     pub fn outlined<'a, Message, Renderer>(
         content: &'a Content<Renderer>,
-    ) -> IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>
+    ) -> TextEditor<'a, Message, Renderer>
     where
         Renderer: core_text::Renderer + 'a,
         Message: 'a,
     {
-        IcedTextEditor::new(content)
-            .padding(Padding {
-                top: tokens::component::text_field::TOP_SPACE,
-                right: tokens::component::text_field::TRAILING_SPACE,
-                bottom: tokens::component::text_field::BOTTOM_SPACE,
-                left: tokens::component::text_field::LEADING_SPACE,
-            })
-            .size(tokens::component::text_field::INPUT_TEXT_SIZE)
-            .line_height(absolute_line_height(
-                tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
-            ))
-            .min_height(tokens::component::text_field::CONTAINER_HEIGHT)
-            .style(text_editor_style::default)
+        TextEditor::new(content)
     }
 
     pub fn outlined_area<'a, Message, Renderer>(
         content: &'a Content<Renderer>,
-    ) -> IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>
+    ) -> TextEditor<'a, Message, Renderer>
     where
         Renderer: core_text::Renderer + 'a,
         Message: 'a,
