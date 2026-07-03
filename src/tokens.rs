@@ -918,6 +918,29 @@ pub mod component {
         pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_NONE;
     }
 
+    pub mod toolbar {
+        pub const DOCKED_CONTAINER_HEIGHT: f32 = 64.0;
+        pub const DOCKED_LEADING_SPACE: f32 = 16.0;
+        pub const DOCKED_TRAILING_SPACE: f32 = 16.0;
+        pub const DOCKED_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_NONE;
+
+        pub const FLOATING_HORIZONTAL_CONTAINER_HEIGHT: f32 = 64.0;
+        pub const FLOATING_VERTICAL_CONTAINER_WIDTH: f32 = 64.0;
+        pub const FLOATING_CONTAINER_LEADING_SPACE: f32 = 8.0;
+        pub const FLOATING_CONTAINER_TRAILING_SPACE: f32 = 8.0;
+        pub const FLOATING_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const FLOATING_CONTAINER_ELEVATION_LEVEL: u8 = 3;
+
+        pub const ACTION_CONTAINER_WIDTH: f32 = 48.0;
+        pub const ACTION_CONTAINER_HEIGHT: f32 = 48.0;
+        pub const ACTION_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const ACTION_SELECTED_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_MEDIUM;
+        pub const ACTION_ICON_SIZE: f32 = 24.0;
+        pub const ACTION_SPACE: f32 = 0.0;
+        pub const FAB_SPACE: f32 = 8.0;
+        pub const DISABLED_ICON_OPACITY: f32 = 0.38;
+    }
+
     pub mod bottom_sheet {
         pub const CONTAINER_SHAPE_TOP: f32 = super::super::shape::CORNER_EXTRA_LARGE;
         pub const CONTAINER_SHAPE_BOTTOM: f32 = super::super::shape::CORNER_NONE;
@@ -1561,6 +1584,28 @@ mod tests {
             component::bottom_app_bar::CONTAINER_SHAPE,
             shape::CORNER_NONE
         );
+        assert_eq!(component::toolbar::DOCKED_CONTAINER_HEIGHT, 64.0);
+        assert_eq!(component::toolbar::DOCKED_LEADING_SPACE, 16.0);
+        assert_eq!(component::toolbar::DOCKED_TRAILING_SPACE, 16.0);
+        assert_eq!(
+            component::toolbar::DOCKED_CONTAINER_SHAPE,
+            shape::CORNER_NONE
+        );
+        assert_eq!(
+            component::toolbar::FLOATING_HORIZONTAL_CONTAINER_HEIGHT,
+            64.0
+        );
+        assert_eq!(component::toolbar::FLOATING_VERTICAL_CONTAINER_WIDTH, 64.0);
+        assert_eq!(component::toolbar::FLOATING_CONTAINER_LEADING_SPACE, 8.0);
+        assert_eq!(component::toolbar::FLOATING_CONTAINER_TRAILING_SPACE, 8.0);
+        assert_eq!(
+            component::toolbar::FLOATING_CONTAINER_SHAPE,
+            shape::CORNER_FULL
+        );
+        assert_eq!(component::toolbar::FLOATING_CONTAINER_ELEVATION_LEVEL, 3);
+        assert_eq!(component::toolbar::ACTION_CONTAINER_WIDTH, 48.0);
+        assert_eq!(component::toolbar::ACTION_CONTAINER_HEIGHT, 48.0);
+        assert_eq!(component::toolbar::ACTION_ICON_SIZE, 24.0);
         assert_eq!(
             component::bottom_sheet::CONTAINER_SHAPE_TOP,
             shape::CORNER_EXTRA_LARGE

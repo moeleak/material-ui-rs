@@ -17,7 +17,7 @@ fn toggled(_: bool) -> Message {
 #[test]
 fn centered_icon_text_uses_square_icon_bounds() {
     let icon: Text<'_, Theme, iced_widget::Renderer> =
-        centered_icon_text("+", tokens::component::fab::ICON_SIZE);
+        centered_icon_text("add", tokens::component::fab::ICON_SIZE);
 
     assert_eq!(
         Widget::<Message, Theme, iced_widget::Renderer>::size(&icon),
@@ -43,34 +43,40 @@ fn material_button_constructors_compile_to_elements() {
         .into();
     let _: TestElement<'_> = button::outlined_action("Outlined", Message::Pressed);
     let _: TestElement<'_> = button::text_action("Text", Message::Pressed);
-    let _: TestElement<'_> = button::outlined_icon("+").on_press(Message::Pressed).into();
-    let _: TestElement<'_> = button::primary_fab("+").on_press(Message::Pressed).into();
-    let _: TestElement<'_> = button::primary_fab_action("+", Message::Pressed);
-    let _: TestElement<'_> = button::primary_small_fab("+")
+    let _: TestElement<'_> = button::outlined_icon("add")
         .on_press(Message::Pressed)
         .into();
-    let _: TestElement<'_> = button::primary_large_fab("+")
+    let _: TestElement<'_> = button::primary_fab("add").on_press(Message::Pressed).into();
+    let _: TestElement<'_> = button::primary_fab_action("add", Message::Pressed);
+    let _: TestElement<'_> = button::primary_small_fab("add")
         .on_press(Message::Pressed)
         .into();
-    let _: TestElement<'_> = button::secondary_fab("+").on_press(Message::Pressed).into();
-    let _: TestElement<'_> = button::tertiary_fab("+").on_press(Message::Pressed).into();
-    let _: TestElement<'_> = button::surface_fab("+").on_press(Message::Pressed).into();
-    let _: TestElement<'_> = button::surface_small_fab("+")
+    let _: TestElement<'_> = button::primary_large_fab("add")
         .on_press(Message::Pressed)
         .into();
-    let _: TestElement<'_> = button::surface_large_fab("+")
+    let _: TestElement<'_> = button::secondary_fab("add")
+        .on_press(Message::Pressed)
+        .into();
+    let _: TestElement<'_> = button::tertiary_fab("add")
+        .on_press(Message::Pressed)
+        .into();
+    let _: TestElement<'_> = button::surface_fab("add").on_press(Message::Pressed).into();
+    let _: TestElement<'_> = button::surface_small_fab("add")
+        .on_press(Message::Pressed)
+        .into();
+    let _: TestElement<'_> = button::surface_large_fab("add")
         .on_press(Message::Pressed)
         .into();
     let _: TestElement<'_> = button::primary_extended_fab("Create")
         .on_press(Message::Pressed)
         .into();
-    let _: TestElement<'_> = button::primary_extended_fab_with_icon("+", "Create")
+    let _: TestElement<'_> = button::primary_extended_fab_with_icon("add", "Create")
         .on_press(Message::Pressed)
         .into();
     let _: TestElement<'_> = button::secondary_extended_fab("Share")
         .on_press(Message::Pressed)
         .into();
-    let _: TestElement<'_> = button::tertiary_extended_fab_with_icon("+", "Add")
+    let _: TestElement<'_> = button::tertiary_extended_fab_with_icon("add", "Add")
         .on_press(Message::Pressed)
         .into();
     let _: TestElement<'_> = button::surface_extended_fab("Reroute")
@@ -92,6 +98,51 @@ fn material_badge_constructors_compile_to_elements() {
 fn material_container_constructors_compile_to_elements() {
     let surface = Text::new("Surface");
     let _: TestElement<'_> = container::surface_container_high(surface).into();
+}
+
+#[test]
+fn material_toolbar_constructors_compile_to_elements() {
+    let _: TestElement<'_> = toolbar::docked(toolbar::icon_actions([
+        ("arrow_back", Message::Pressed),
+        ("add", Message::Pressed),
+    ]))
+    .into();
+    let _: TestElement<'_> = toolbar::docked_vibrant(toolbar::vibrant_icon_actions([
+        ("edit", Message::Pressed),
+        ("delete", Message::Pressed),
+    ]))
+    .into();
+    let _: TestElement<'_> = toolbar::floating(toolbar::icon_actions([
+        ("format_bold", Message::Pressed),
+        ("format_italic", Message::Pressed),
+    ]))
+    .into();
+    let _: TestElement<'_> = toolbar::floating_vibrant([
+        toolbar::selected_vibrant_icon_action("format_bold", Message::Pressed),
+        toolbar::vibrant_icon_action("format_italic", Message::Pressed),
+    ])
+    .into();
+    let _: TestElement<'_> =
+        toolbar::vertical_floating(toolbar::icon_actions([("undo", Message::Pressed)])).into();
+    let _: TestElement<'_> = toolbar::vertical_floating_vibrant(toolbar::vibrant_icon_actions([(
+        "redo",
+        Message::Pressed,
+    )]))
+    .into();
+    let floating = toolbar::floating(toolbar::icon_actions([("share", Message::Pressed)]));
+    let fab = button::primary_fab("add").on_press(Message::Pressed);
+    let _: TestElement<'_> = toolbar::floating_with_fab(floating, fab).into();
+
+    let picker_state = theme_picker::State::new();
+    let content: TestElement<'_> = Text::new("Theme picker content").into();
+    let _: TestElement<'_> = theme_picker::floating_over(
+        content,
+        &picker_state,
+        theme_picker::MaterialColor::Purple,
+        theme_picker::FLOATING_MARGIN,
+        Message::Pressed,
+        |_| Message::Pressed,
+    );
 }
 
 #[test]
@@ -199,7 +250,7 @@ fn material_app_bar_constructors_compile_to_elements() {
     let actions = [app_bar::icon_button("info")
         .on_press(Message::Pressed)
         .into()];
-    let fab = button::primary_fab("+").on_press(Message::Pressed).into();
+    let fab = button::primary_fab("add").on_press(Message::Pressed).into();
     let _: TestElement<'_> = app_bar::bottom(actions, Some(fab)).into();
 }
 

@@ -28,7 +28,7 @@ use iced_widget::{
 };
 
 use crate::utils::mix;
-use crate::{Theme, tokens, web_input};
+use crate::{Theme, fonts, tokens, web_input};
 use crate::{
     button as button_style, checkbox as checkbox_style, container as container_style,
     menu as menu_style, pick_list as pick_list_style, rule as rule_style, slider as slider_style,
@@ -54,6 +54,8 @@ pub mod sheet;
 pub mod snackbar;
 mod support;
 pub mod tabs;
+pub mod theme_picker;
+pub mod toolbar;
 
 use support::{
     AnimatedScalar, SelectionState, TextFieldState, alpha_border, alpha_color, bool_value,
@@ -139,10 +141,9 @@ fn centered_icon_text<'a, Renderer>(
 ) -> Text<'a, Theme, Renderer>
 where
     Renderer: core_text::Renderer,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
-    Text::new(icon)
-        .size(size)
-        .line_height(absolute_line_height(size))
+    fonts::icon(icon, size)
         .width(Length::Fixed(size))
         .height(Length::Fixed(size))
         .center()
@@ -190,6 +191,7 @@ fn icon_button_content<'a, Message, Renderer>(
 where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     let icon = centered_icon_text(icon, tokens::component::icon_button::ICON_SIZE);
 
@@ -208,6 +210,7 @@ fn fab_content<'a, Message, Renderer>(
 where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     sized_fab_content(
         icon,
@@ -226,6 +229,7 @@ fn sized_fab_content<'a, Message, Renderer>(
 where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     let icon = centered_icon_text(icon, icon_size);
 
@@ -267,6 +271,7 @@ fn extended_fab_icon_content<'a, Message, Renderer>(
 where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     let label_text = tokens::component::fab::EXTENDED_LABEL_TEXT;
     let content = Row::new()

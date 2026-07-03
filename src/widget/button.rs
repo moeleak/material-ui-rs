@@ -1335,6 +1335,7 @@ fn icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     Button::new(icon_button_content(icon))
         .width(Length::Fixed(
@@ -1357,6 +1358,7 @@ fn sized_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     Button::new(sized_fab_content(icon_content, width, height, icon_size))
         .width(Length::Fixed(width))
@@ -1372,6 +1374,7 @@ fn fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     Button::new(fab_content(icon_content))
         .width(Length::Fixed(tokens::component::fab::CONTAINER_WIDTH))
@@ -1387,6 +1390,7 @@ fn small_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     sized_fab(
         icon_content,
@@ -1404,6 +1408,7 @@ fn large_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     sized_fab(
         icon_content,
@@ -1438,6 +1443,7 @@ fn extended_fab_with_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     Button::new(extended_fab_icon_content(icon_content, label))
         .height(Length::Fixed(
@@ -1565,6 +1571,7 @@ pub fn icon_button<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     icon(icon_content, button_style::icon)
 }
@@ -1575,6 +1582,7 @@ pub fn filled_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     icon(icon_content, button_style::filled_icon)
 }
@@ -1585,6 +1593,7 @@ pub fn filled_tonal_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     icon(icon_content, button_style::filled_tonal_icon)
 }
@@ -1595,6 +1604,7 @@ pub fn outlined_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     icon(icon_content, button_style::outlined_icon)
 }
@@ -1605,6 +1615,7 @@ pub fn primary_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     fab(icon_content, button_style::fab_primary)
 }
@@ -1616,6 +1627,7 @@ pub fn primary_fab_action<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     primary_fab(icon_content).on_press(on_press).into()
 }
@@ -1626,6 +1638,7 @@ pub fn primary_small_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     small_fab(icon_content, button_style::fab_primary_small)
 }
@@ -1636,6 +1649,7 @@ pub fn primary_large_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     large_fab(icon_content, button_style::fab_primary_large)
 }
@@ -1646,6 +1660,7 @@ pub fn secondary_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     fab(icon_content, button_style::fab_secondary)
 }
@@ -1656,6 +1671,7 @@ pub fn secondary_small_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     small_fab(icon_content, button_style::fab_secondary_small)
 }
@@ -1666,6 +1682,7 @@ pub fn secondary_large_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     large_fab(icon_content, button_style::fab_secondary_large)
 }
@@ -1676,6 +1693,7 @@ pub fn tertiary_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     fab(icon_content, button_style::fab_tertiary)
 }
@@ -1686,6 +1704,7 @@ pub fn tertiary_small_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     small_fab(icon_content, button_style::fab_tertiary_small)
 }
@@ -1696,6 +1715,7 @@ pub fn tertiary_large_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     large_fab(icon_content, button_style::fab_tertiary_large)
 }
@@ -1706,6 +1726,7 @@ pub fn surface_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     fab(icon_content, button_style::fab_surface)
 }
@@ -1716,6 +1737,7 @@ pub fn surface_small_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     small_fab(icon_content, button_style::fab_surface_small)
 }
@@ -1726,6 +1748,7 @@ pub fn surface_large_fab<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     large_fab(icon_content, button_style::fab_surface_large)
 }
@@ -1747,6 +1770,7 @@ pub fn primary_extended_fab_with_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     extended_fab_with_icon(icon_content, label, button_style::extended_fab_primary)
 }
@@ -1768,6 +1792,7 @@ pub fn secondary_extended_fab_with_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     extended_fab_with_icon(icon_content, label, button_style::extended_fab_secondary)
 }
@@ -1789,6 +1814,7 @@ pub fn tertiary_extended_fab_with_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     extended_fab_with_icon(icon_content, label, button_style::extended_fab_tertiary)
 }
@@ -1810,6 +1836,7 @@ pub fn surface_extended_fab_with_icon<'a, Message, Renderer>(
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
 {
     extended_fab_with_icon(icon_content, label, button_style::extended_fab_surface)
 }

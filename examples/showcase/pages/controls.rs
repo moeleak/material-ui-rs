@@ -47,12 +47,12 @@ fn fabs(state: &Showcase) -> material::Element<'_, Message> {
             state.enabled,
             Message::Increment,
             [
-                button::surface_small_fab("+"),
-                button::surface_fab("+"),
-                button::surface_large_fab("+"),
-                button::primary_fab("+"),
-                button::secondary_fab("+"),
-                button::tertiary_fab("+"),
+                button::surface_small_fab("add"),
+                button::surface_fab("add"),
+                button::surface_large_fab("add"),
+                button::primary_fab("add"),
+                button::secondary_fab("add"),
+                button::tertiary_fab("add"),
             ],
         ))
         .into(),
@@ -60,9 +60,9 @@ fn fabs(state: &Showcase) -> material::Element<'_, Message> {
             state.enabled,
             Message::Increment,
             [
-                button::primary_extended_fab_with_icon("+", "Create"),
-                button::secondary_extended_fab_with_icon("+", "Share"),
-                button::tertiary_extended_fab_with_icon("+", "Add"),
+                button::primary_extended_fab_with_icon("add", "Create"),
+                button::secondary_extended_fab_with_icon("share", "Share"),
+                button::tertiary_extended_fab_with_icon("add", "Add"),
                 button::surface_extended_fab("Reroute"),
             ],
         ))
