@@ -181,6 +181,7 @@ where
     RichTooltip::new(content, tooltip, position)
         .gap(tokens::component::tooltip::SPACING_BETWEEN_TOOLTIP_AND_ANCHOR)
         .padding(0.0)
+        .clip_padding(rich_tooltip_shadow_padding())
         .style(tooltip_style::rich)
 }
 
@@ -199,6 +200,7 @@ where
     position: Position,
     gap: f32,
     padding: f32,
+    clip_padding: f32,
     snap_within_viewport: bool,
     interactive_surface: bool,
     class: <Theme as iced_container::Catalog>::Class<'a>,
@@ -213,6 +215,7 @@ where
             .field("position", &self.position)
             .field("gap", &self.gap)
             .field("padding", &self.padding)
+            .field("clip_padding", &self.clip_padding)
             .field("snap_within_viewport", &self.snap_within_viewport)
             .field("interactive_surface", &self.interactive_surface)
             .finish_non_exhaustive()
@@ -235,6 +238,7 @@ where
             position,
             gap: 0.0,
             padding: 0.0,
+            clip_padding: 0.0,
             snap_within_viewport: true,
             interactive_surface: true,
             class: <Theme as iced_container::Catalog>::default(),
@@ -248,6 +252,11 @@ where
 
     pub fn padding(mut self, padding: impl Into<Pixels>) -> Self {
         self.padding = padding.into().0;
+        self
+    }
+
+    fn clip_padding(mut self, padding: impl Into<Pixels>) -> Self {
+        self.clip_padding = padding.into().0;
         self
     }
 
@@ -423,6 +432,7 @@ where
                 position: self.position,
                 gap: self.gap,
                 padding: self.padding,
+                clip_padding: self.clip_padding,
                 interactive_surface: self.interactive_surface,
                 class: &self.class,
             })))
@@ -593,6 +603,7 @@ where
     position: Position,
     gap: f32,
     padding: f32,
+    clip_padding: f32,
     interactive_surface: bool,
     class: &'b <Theme as iced_container::Catalog>::Class<'a>,
 }
@@ -604,6 +615,7 @@ where
 {
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let viewport = Rectangle::with_size(bounds);
+        let total_padding = self.padding + self.clip_padding;
         let tooltip_layout = self.tooltip.as_widget_mut().layout(
             self.tree,
             renderer,
@@ -615,7 +627,7 @@ where
                     Size::INFINITE
                 },
             )
-            .shrink(Padding::new(self.padding)),
+            .shrink(Padding::new(total_padding)),
         );
 
         let tooltip_bounds = rich_tooltip_surface_bounds(
@@ -626,12 +638,13 @@ where
             self.position,
             self.gap,
             self.padding,
+            self.clip_padding,
             self.snap_within_viewport,
         );
 
         layout::Node::with_children(
             tooltip_bounds.size(),
-            vec![tooltip_layout.translate(Vector::new(self.padding, self.padding))],
+            vec![tooltip_layout.translate(Vector::new(total_padding, total_padding))],
         )
         .translate(Vector::new(tooltip_bounds.x, tooltip_bounds.y))
     }
@@ -737,11 +750,12 @@ where
             iced_container::Catalog::style(theme, self.class),
             reveal,
         );
-        let transformation = tooltip_reveal_transformation(layout.bounds(), reveal);
+        let surface_bounds = rich_tooltip_visual_bounds(layout.bounds(), self.clip_padding);
+        let transformation = tooltip_reveal_transformation(surface_bounds, reveal);
 
         renderer.with_layer(layout.bounds(), |renderer| {
             renderer.with_transformation(transformation, |renderer| {
-                iced_container::draw_background(renderer, &style, layout.bounds());
+                iced_container::draw_background(renderer, &style, surface_bounds);
 
                 let defaults = renderer::Style {
                     text_color: style.text_color.unwrap_or(inherited_style.text_color),
@@ -791,38 +805,31 @@ fn rich_tooltip_surface_bounds(
     position: Position,
     gap: f32,
     padding: f32,
+    clip_padding: f32,
     snap_within_viewport: bool,
 ) -> Rectangle {
-    let x_center = content_bounds.x + (content_bounds.width - tooltip_size.width) / 2.0;
-    let y_center = content_bounds.y + (content_bounds.height - tooltip_size.height) / 2.0;
+    let surface_size = Size::new(
+        tooltip_size.width + padding * 2.0,
+        tooltip_size.height + padding * 2.0,
+    );
+    let x_center = content_bounds.x + (content_bounds.width - surface_size.width) / 2.0;
+    let y_center = content_bounds.y + (content_bounds.height - surface_size.height) / 2.0;
 
     let offset = match position {
-        Position::Top => Vector::new(
-            x_center,
-            content_bounds.y - tooltip_size.height - gap - padding,
-        ),
-        Position::Bottom => Vector::new(
-            x_center,
-            content_bounds.y + content_bounds.height + gap + padding,
-        ),
-        Position::Left => Vector::new(
-            content_bounds.x - tooltip_size.width - gap - padding,
-            y_center,
-        ),
-        Position::Right => Vector::new(
-            content_bounds.x + content_bounds.width + gap + padding,
-            y_center,
-        ),
+        Position::Top => Vector::new(x_center, content_bounds.y - surface_size.height - gap),
+        Position::Bottom => Vector::new(x_center, content_bounds.y + content_bounds.height + gap),
+        Position::Left => Vector::new(content_bounds.x - surface_size.width - gap, y_center),
+        Position::Right => Vector::new(content_bounds.x + content_bounds.width + gap, y_center),
         Position::FollowCursor => {
-            Vector::new(cursor_position.x, cursor_position.y - tooltip_size.height)
+            Vector::new(cursor_position.x, cursor_position.y - surface_size.height)
         }
     };
 
     let mut tooltip_bounds = Rectangle {
-        x: offset.x - padding,
-        y: offset.y - padding,
-        width: tooltip_size.width + padding * 2.0,
-        height: tooltip_size.height + padding * 2.0,
+        x: offset.x - clip_padding,
+        y: offset.y - clip_padding,
+        width: surface_size.width + clip_padding * 2.0,
+        height: surface_size.height + clip_padding * 2.0,
     };
 
     if snap_within_viewport {
@@ -840,6 +847,23 @@ fn rich_tooltip_surface_bounds(
     }
 
     tooltip_bounds
+}
+
+fn rich_tooltip_visual_bounds(tooltip_bounds: Rectangle, clip_padding: f32) -> Rectangle {
+    Rectangle {
+        x: tooltip_bounds.x + clip_padding,
+        y: tooltip_bounds.y + clip_padding,
+        width: (tooltip_bounds.width - clip_padding * 2.0).max(0.0),
+        height: (tooltip_bounds.height - clip_padding * 2.0).max(0.0),
+    }
+}
+
+fn rich_tooltip_shadow_padding() -> f32 {
+    let shadow =
+        tokens::elevation::shadow(tokens::component::tooltip::RICH_CONTAINER_ELEVATION_LEVEL)
+            .ambient;
+
+    (shadow.blur + shadow.y.abs()).ceil()
 }
 
 fn rich_tooltip_keep_alive_contains(
@@ -1047,6 +1071,7 @@ mod tests {
     #[test]
     fn rich_tooltip_padding_matches_androidx_material_layout_constants() {
         assert_eq!(rich_title_top_padding(), 8.0);
+        assert_eq!(rich_tooltip_shadow_padding(), 8.0);
         assert_eq!(
             rich_supporting_text_padding(false, false),
             Padding {
@@ -1075,6 +1100,7 @@ mod tests {
             width: 80.0,
             height: 32.0,
         };
+        let clip_padding = rich_tooltip_shadow_padding();
         let tooltip = rich_tooltip_surface_bounds(
             content,
             Size::new(180.0, 96.0),
@@ -1083,13 +1109,17 @@ mod tests {
             Position::Top,
             tokens::component::tooltip::SPACING_BETWEEN_TOOLTIP_AND_ANCHOR,
             0.0,
+            clip_padding,
             true,
         );
+        let surface = rich_tooltip_visual_bounds(tooltip, clip_padding);
 
         assert_eq!(
-            content.y - (tooltip.y + tooltip.height),
+            content.y - (surface.y + surface.height),
             tokens::component::tooltip::SPACING_BETWEEN_TOOLTIP_AND_ANCHOR
         );
+        assert_eq!(tooltip.width, 180.0 + clip_padding * 2.0);
+        assert_eq!(surface.width, 180.0);
     }
 
     #[test]

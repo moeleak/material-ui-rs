@@ -113,6 +113,53 @@ fn press_is_over_accepts_touch_positions_without_cursor() {
     ));
 }
 
+#[test]
+fn release_is_over_accepts_touch_lift_positions_without_cursor() {
+    let bounds = Rectangle::new(Point::new(10.0, 20.0), Size::new(100.0, 48.0));
+
+    assert!(release_is_over(
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 30.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(!release_is_over(
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(200.0, 300.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(!release_is_over(
+        &Event::Touch(touch::Event::FingerLost {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 30.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+}
+
+#[test]
+fn release_is_over_uses_mouse_cursor_for_mouse_release() {
+    let bounds = Rectangle::new(Point::new(10.0, 20.0), Size::new(100.0, 48.0));
+    let event = Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+
+    assert!(release_is_over(
+        &event,
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 30.0))
+    ));
+    assert!(!release_is_over(
+        &event,
+        bounds,
+        mouse::Cursor::Available(Point::new(200.0, 300.0))
+    ));
+}
+
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
 #[test]
 fn ime_caret_suppression_is_enabled_on_desktop_composition_platforms() {

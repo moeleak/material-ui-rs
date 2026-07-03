@@ -1,7 +1,7 @@
 use iced_widget::core::text as core_text;
 use iced_widget::core::time::{Duration, Instant};
 use iced_widget::core::widget as core_widget;
-use iced_widget::core::{Background, Border, Color, Rectangle};
+use iced_widget::core::{Background, Border, Color, Point, Rectangle};
 
 use crate::tokens;
 
@@ -505,6 +505,7 @@ pub(super) struct SelectionState<Paragraph: core_text::Paragraph, Status> {
     pub(super) icon: AnimatedScalar,
     pub(super) icon_opacity: AnimatedScalar,
     pub(super) is_pressed: bool,
+    pub(super) press_origin: Option<Point>,
     pub(super) last_status: Option<Status>,
 }
 
@@ -521,6 +522,7 @@ impl<Paragraph: core_text::Paragraph, Status> SelectionState<Paragraph, Status> 
             icon: AnimatedScalar::new(value),
             icon_opacity: AnimatedScalar::new(value),
             is_pressed: false,
+            press_origin: None,
             last_status: None,
         }
     }

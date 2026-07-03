@@ -190,6 +190,14 @@ fn press_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> boo
     }
 }
 
+fn release_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> bool {
+    match event {
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => cursor.is_over(bounds),
+        Event::Touch(touch::Event::FingerLifted { position, .. }) => bounds.contains(*position),
+        _ => false,
+    }
+}
+
 fn should_suppress_ime_caret() -> bool {
     !cfg!(any(target_os = "android", target_os = "windows"))
 }
@@ -2307,22 +2315,33 @@ pub mod radio {
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if cursor.is_over(layout.bounds()) {
+                    if self.on_click.is_some() && press_is_over(event, layout.bounds(), cursor) {
                         state.is_pressed = true;
-
-                        if let Some(on_click) = &self.on_click {
-                            shell.publish(on_click.clone());
-                            shell.capture_event();
-                        }
-
+                        state.press_origin = None;
+                        shell.capture_event();
                         shell.request_redraw();
                     }
                 }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-                | Event::Touch(touch::Event::FingerLifted { .. })
-                | Event::Touch(touch::Event::FingerLost { .. }) => {
+                | Event::Touch(touch::Event::FingerLifted { .. }) => {
+                    if state.is_pressed {
+                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+
+                        state.is_pressed = false;
+                        state.press_origin = None;
+
+                        if is_released_over && let Some(on_click) = &self.on_click {
+                            shell.publish(on_click.clone());
+                        }
+
+                        shell.capture_event();
+                        shell.request_redraw();
+                    }
+                }
+                Event::Touch(touch::Event::FingerLost { .. }) => {
                     if state.is_pressed {
                         state.is_pressed = false;
+                        state.press_origin = None;
                         shell.request_redraw();
                     }
                 }
@@ -2718,6 +2737,33 @@ pub mod checkbox {
                 }
             }
         }
+
+        fn state_layer_color(
+            &self,
+            state: &SelectionState<Renderer::Paragraph, iced_checkbox::Status>,
+            status: iced_checkbox::Status,
+            unchecked_style: &iced_checkbox::Style,
+            checked_style: &iced_checkbox::Style,
+        ) -> Option<Color> {
+            let is_hovered = matches!(status, iced_checkbox::Status::Hovered { .. });
+
+            if !state.is_pressed && !is_hovered {
+                return None;
+            }
+
+            let color = if self.is_checked {
+                solid_color(checked_style.background)
+            } else {
+                unchecked_style.border.color
+            };
+            let opacity = if state.is_pressed {
+                tokens::state::PRESSED_STATE_LAYER_OPACITY
+            } else {
+                tokens::state::HOVER_STATE_LAYER_OPACITY
+            };
+
+            Some(alpha_color(color, opacity))
+        }
     }
 
     impl<Message, Renderer> Widget<Message, Theme, Renderer> for Checkbox<'_, Message, Renderer>
@@ -2806,12 +2852,34 @@ pub mod checkbox {
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if cursor.is_over(layout.bounds()) {
-                        if let Some(on_toggle) = &self.on_toggle {
+                    if self.on_toggle.is_some() && press_is_over(event, layout.bounds(), cursor) {
+                        state.is_pressed = true;
+                        state.press_origin = None;
+                        shell.capture_event();
+                        shell.request_redraw();
+                    }
+                }
+                Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+                | Event::Touch(touch::Event::FingerLifted { .. }) => {
+                    if state.is_pressed {
+                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+
+                        state.is_pressed = false;
+                        state.press_origin = None;
+
+                        if is_released_over && let Some(on_toggle) = &self.on_toggle {
                             shell.publish((on_toggle)(!self.is_checked));
-                            shell.capture_event();
-                            shell.request_redraw();
                         }
+
+                        shell.capture_event();
+                        shell.request_redraw();
+                    }
+                }
+                Event::Touch(touch::Event::FingerLost { .. }) => {
+                    if state.is_pressed {
+                        state.is_pressed = false;
+                        state.press_origin = None;
+                        shell.request_redraw();
                     }
                 }
                 _ => {}
@@ -2936,6 +3004,25 @@ pub mod checkbox {
             let selection = state.position.value.clamp(0.0, 1.0);
             let opacity = state.color.value.clamp(0.0, 1.0);
             let scale = 0.74 + 0.26 * state.size.value.clamp(0.0, 1.0);
+
+            if let Some(layer_color) =
+                self.state_layer_color(state, status, &unchecked_style, &checked_style)
+            {
+                renderer.fill_quad(
+                    renderer::Quad {
+                        bounds: scaled_rect(
+                            bounds,
+                            tokens::component::checkbox::STATE_LAYER_SIZE,
+                            tokens::component::checkbox::STATE_LAYER_SIZE,
+                        ),
+                        border: border::rounded(
+                            tokens::component::checkbox::STATE_LAYER_SIZE / 2.0,
+                        ),
+                        ..renderer::Quad::default()
+                    },
+                    Background::Color(layer_color),
+                );
+            }
 
             renderer.fill_quad(
                 renderer::Quad {
@@ -3285,11 +3372,14 @@ pub mod toggler {
         }
     }
 
-    fn toggler_press_origin(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> Point {
+    fn toggler_event_origin(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> Point {
         cursor
             .position()
             .or_else(|| match event {
-                Event::Touch(touch::Event::FingerPressed { position, .. }) => Some(*position),
+                Event::Touch(
+                    touch::Event::FingerPressed { position, .. }
+                    | touch::Event::FingerLifted { position, .. },
+                ) => Some(*position),
                 _ => None,
             })
             .unwrap_or_else(|| bounds.center())
@@ -3386,23 +3476,39 @@ pub mod toggler {
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if cursor.is_over(layout.bounds()) {
-                        if let Some(message) = self.toggle_message(
-                            !self.is_toggled,
-                            toggler_press_origin(event, layout.bounds(), cursor),
-                        ) {
-                            state.is_pressed = true;
-                            shell.publish(message);
-                            shell.capture_event();
-                            shell.request_redraw();
-                        }
+                    if self.has_on_toggle() && press_is_over(event, layout.bounds(), cursor) {
+                        state.is_pressed = true;
+                        state.press_origin =
+                            Some(toggler_event_origin(event, layout.bounds(), cursor));
+                        shell.capture_event();
+                        shell.request_redraw();
                     }
                 }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-                | Event::Touch(touch::Event::FingerLifted { .. })
-                | Event::Touch(touch::Event::FingerLost { .. }) => {
+                | Event::Touch(touch::Event::FingerLifted { .. }) => {
+                    if state.is_pressed {
+                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+                        let origin = state.press_origin.unwrap_or_else(|| {
+                            toggler_event_origin(event, layout.bounds(), cursor)
+                        });
+
+                        state.is_pressed = false;
+                        state.press_origin = None;
+
+                        if is_released_over
+                            && let Some(message) = self.toggle_message(!self.is_toggled, origin)
+                        {
+                            shell.publish(message);
+                        }
+
+                        shell.capture_event();
+                        shell.request_redraw();
+                    }
+                }
+                Event::Touch(touch::Event::FingerLost { .. }) => {
                     if state.is_pressed {
                         state.is_pressed = false;
+                        state.press_origin = None;
                         shell.request_redraw();
                     }
                 }
