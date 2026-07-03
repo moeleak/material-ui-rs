@@ -1,18 +1,14 @@
-# iced_material
+# iced_material [Live Demo](https://material.leak/moe)
 
 Material 3 inspired widgets and theme defaults for
 [`iced`](https://iced.rs) 0.14.
+
+Showcase
 
 ![iced_material light showcase](assets/screenshots/light.png)
 ![iced_material dark showcase](assets/screenshots/dark.png)
 
 ## Quick Start
-
-```toml
-[dependencies]
-iced = "0.14"
-iced_material = "0.2.0"
-```
 
 Run the 91-line animated quick start app:
 
@@ -78,35 +74,6 @@ The crate provides Material-sized constructors and token-backed styles for:
 - `markdown`: Enables the markdown widget.
 - `svg`: Enables the SVG widget.
 - `qr_code`: Enables the QR code widget.
-
-## Development
-
-This repository includes a Nix flake for a reproducible local development
-environment.
-
-```sh
-nix develop
-cargo test --all-features
-cargo check --examples
-```
-
-The quick-start app lives in `examples/quickstart/app.rs`; the full widget
-showcase lives in `examples/showcase/app.rs`.
-
-Build or serve the WebAssembly showcase with Trunk:
-
-```sh
-nix develop -c trunk serve web/index.html
-nix develop -c trunk build web/index.html --release --dist dist --public-url /
-```
-
-The Nix shell provides Trunk, the WebAssembly linker, `wasm-opt`, and
-`wasm-bindgen`. The GitHub Actions workflow builds the Trunk `dist/` output in
-the same shell and deploys it to Cloudflare Workers Static Assets. Configure
-these repository secrets before deploying:
-
-- `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`
 
 ## License
 
