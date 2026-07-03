@@ -57,6 +57,22 @@ where
     icon_button(icon_name).on_press(on_press).into()
 }
 
+/// Creates Material icon actions suitable for app bars.
+pub fn icon_actions<'a, Message, Renderer, Icon>(
+    actions: impl IntoIterator<Item = (Icon, Message)>,
+) -> Vec<Element<'a, Message, Theme, Renderer>>
+where
+    Icon: text::IntoFragment<'a>,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    actions
+        .into_iter()
+        .map(|(icon_name, on_press)| icon_action(icon_name, on_press))
+        .collect()
+}
+
 /// Creates a small top app bar.
 pub fn small<'a, Message, Renderer>(
     title: impl text::IntoFragment<'a>,

@@ -1645,6 +1645,35 @@ pub mod button {
         filled(label).on_press(on_press).into()
     }
 
+    /// Converts a Material button into an element with an optional action.
+    pub fn maybe_action<'a, Message, Renderer>(
+        button: Button<'a, Message, Renderer>,
+        enabled: bool,
+        on_press: Message,
+    ) -> Element<'a, Message, Theme, Renderer>
+    where
+        Message: Clone + 'a,
+        Renderer: geometry::Renderer + 'a,
+    {
+        button.on_press_maybe(enabled.then_some(on_press)).into()
+    }
+
+    /// Converts a group of Material buttons into elements sharing an enabled action.
+    pub fn enabled_actions<'a, Message, Renderer>(
+        enabled: bool,
+        on_press: Message,
+        buttons: impl IntoIterator<Item = Button<'a, Message, Renderer>>,
+    ) -> Vec<Element<'a, Message, Theme, Renderer>>
+    where
+        Message: Clone + 'a,
+        Renderer: geometry::Renderer + 'a,
+    {
+        buttons
+            .into_iter()
+            .map(|button| maybe_action(button, enabled, on_press.clone()))
+            .collect()
+    }
+
     pub fn filled_tonal<'a, Message, Renderer>(
         label: impl text::IntoFragment<'a>,
     ) -> Button<'a, Message, Renderer>
@@ -2874,6 +2903,17 @@ pub mod tooltip {
         button::text(label)
     }
 
+    pub fn rich_action_button<'a, Message, Renderer>(
+        label: impl text::IntoFragment<'a>,
+        on_press: Message,
+    ) -> Element<'a, Message, Theme, Renderer>
+    where
+        Message: Clone + 'a,
+        Renderer: iced_widget::graphics::geometry::Renderer + core_text::Renderer + 'a,
+    {
+        rich_action(label).on_press(on_press).into()
+    }
+
     fn plain_supporting_text<'a, Renderer>(
         supporting_text: impl text::IntoFragment<'a>,
         type_scale: tokens::typography::TypeScale,
@@ -3732,6 +3772,9 @@ pub mod text_editor {
 
     pub use iced_text_editor::{Action, Content};
 
+    /// Default height for a compact outlined text area preview.
+    pub const OUTLINED_AREA_HEIGHT: f32 = tokens::component::text_field::CONTAINER_HEIGHT * 2.0;
+
     pub fn outlined<'a, Message, Renderer>(
         content: &'a Content<Renderer>,
     ) -> IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>
@@ -3752,6 +3795,16 @@ pub mod text_editor {
             ))
             .min_height(tokens::component::text_field::CONTAINER_HEIGHT)
             .style(text_editor_style::default)
+    }
+
+    pub fn outlined_area<'a, Message, Renderer>(
+        content: &'a Content<Renderer>,
+    ) -> IcedTextEditor<'a, core_text::highlighter::PlainText, Message, Theme, Renderer>
+    where
+        Renderer: core_text::Renderer + 'a,
+        Message: 'a,
+    {
+        outlined(content).height(Length::Fixed(OUTLINED_AREA_HEIGHT))
     }
 }
 
@@ -5518,6 +5571,13 @@ mod tests {
     fn material_button_constructors_compile_to_elements() {
         let _: TestElement<'_> = button::filled("Filled").on_press(Message::Pressed).into();
         let _: TestElement<'_> = button::filled_action("Filled", Message::Pressed);
+        let _: TestElement<'_> =
+            button::maybe_action(button::filled("Maybe"), true, Message::Pressed);
+        let _: Vec<TestElement<'_>> = button::enabled_actions(
+            true,
+            Message::Pressed,
+            [button::filled("One"), button::text("Two")],
+        );
         let _: TestElement<'_> = button::filled_tonal("Tonal")
             .on_press(Message::Pressed)
             .into();
@@ -5631,6 +5691,8 @@ mod tests {
     #[test]
     fn material_app_bar_constructors_compile_to_elements() {
         let _: TestElement<'_> = app_bar::icon_action("info", Message::Pressed);
+        let _: Vec<TestElement<'_>> =
+            app_bar::icon_actions([("search", Message::Pressed), ("info", Message::Pressed)]);
 
         let leading = app_bar::icon_button("menu")
             .on_press(Message::Pressed)
@@ -5818,7 +5880,7 @@ mod tests {
         let tab_state = tabs::State::new(0);
         let _: TestElement<'_> = tabs::animated_bar(
             tabs::Variant::Primary,
-            2,
+            3,
             &tab_state,
             [
                 tabs::primary_label_for_animated_bar("Inputs", true)
@@ -5827,9 +5889,74 @@ mod tests {
                 tabs::primary_inline_icon_label_for_animated_bar("tune", "Controls", false)
                     .on_press(Message::Pressed)
                     .into(),
+                tabs::primary_icon_label_action_for_animated_bar(
+                    "info",
+                    "Feedback",
+                    false,
+                    Message::Pressed,
+                ),
             ],
         )
         .into();
+
+        let _: TestElement<'_> = tabs::animated_primary_icon_label_bar(
+            &tab_state,
+            [
+                ("input", "Inputs", Message::Pressed),
+                ("tune", "Controls", Message::Pressed),
+            ],
+        )
+        .into();
+
+        let _: TestElement<'_> = tabs::animated_bar(
+            tabs::Variant::Secondary,
+            1,
+            &tab_state,
+            [tabs::secondary_label_action_for_animated_bar(
+                "Details",
+                true,
+                Message::Pressed,
+            )],
+        )
+        .into();
+
+        let _: TestElement<'_> = tabs::animated_secondary_label_bar(
+            &tab_state,
+            [("Details", Message::Pressed), ("History", Message::Pressed)],
+        )
+        .into();
+    }
+
+    #[test]
+    fn material_segmented_button_constructors_compile_to_elements() {
+        use segmented_button::SegmentPosition;
+
+        let segment_state = segmented_button::State::new(0);
+        let _: TestElement<'_> = segmented_button::group([
+            segmented_button::animated_selectable_label_action(
+                "List",
+                1.0,
+                SegmentPosition::First,
+                Message::Pressed,
+            ),
+            segmented_button::animated_selectable_label_action(
+                "Grid",
+                0.0,
+                SegmentPosition::Last,
+                Message::Pressed,
+            ),
+        ])
+        .into();
+        let _: TestElement<'_> =
+            segmented_button::group(segmented_button::animated_selectable_label_actions(
+                &segment_state,
+                [
+                    ("List", Message::Pressed),
+                    ("Grid", Message::Pressed),
+                    ("Map", Message::Pressed),
+                ],
+            ))
+            .into();
     }
 
     #[test]
@@ -5881,6 +6008,11 @@ mod tests {
         let _: TestElement<'_> = list::two_line_with_trailing("Inventory", "In stock", "42").into();
         let _: TestElement<'_> =
             list::three_line("Three line", "Supporting text", "Second supporting line").into();
+        let _: TestElement<'_> = list::group([
+            list::one_line("First").into(),
+            list::one_line("Second").into(),
+        ])
+        .into();
     }
 
     #[test]
@@ -6042,7 +6174,7 @@ mod tests {
         .into();
 
         let content = button::assist_chip("Rich action").on_press(Message::Pressed);
-        let action = tooltip::rich_action("Action").on_press(Message::Pressed);
+        let action = tooltip::rich_action_button("Action", Message::Pressed);
         let _: TestElement<'_> = tooltip::rich_with_title_action(
             content,
             "Rich tooltip",
@@ -6073,6 +6205,14 @@ mod tests {
             .placeholder("Write a note")
             .on_action(|_| Message::Pressed)
             .into();
+        let _: TestElement<'_> = text_editor::outlined_area(&content)
+            .placeholder("Write details")
+            .on_action(|_| Message::Pressed)
+            .into();
+        assert_eq!(
+            text_editor::OUTLINED_AREA_HEIGHT,
+            tokens::component::text_field::CONTAINER_HEIGHT * 2.0
+        );
     }
 
     #[test]

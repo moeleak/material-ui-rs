@@ -13,23 +13,21 @@ pub(super) fn view() -> material::Element<'static, Message> {
 }
 
 fn cards() -> material::Element<'static, Message> {
-    page::stack([
+    page::compact_stack([
         page::card(material::widget::card::elevated, "Elevated", "Level 1").into(),
         page::card(material::widget::card::filled, "Filled", "Container").into(),
         page::card(material::widget::card::outlined, "Outlined", "1px stroke").into(),
     ])
-    .spacing(8)
     .into()
 }
 
 fn lists() -> material::Element<'static, Message> {
-    page::stack([
+    material::widget::list::group([
         material::widget::list::one_line_with_leading_icon("info", "One-line list item").into(),
         material::widget::list::two_line_with_trailing("Messages", "Supporting text", "24").into(),
         material::widget::list::three_line("Three-line item", "Supporting text", "Second line")
             .into(),
     ])
-    .spacing(0)
     .into()
 }
 

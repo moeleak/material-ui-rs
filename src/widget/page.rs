@@ -22,11 +22,32 @@ pub const SECTION_SPACING: f32 = 24.0;
 /// Default spacing for grouped page content.
 pub const STACK_SPACING: f32 = 16.0;
 
+/// Compact spacing for dense vertical page content.
+pub const COMPACT_STACK_SPACING: f32 = 8.0;
+
+/// Spacing for repeated component previews.
+pub const COMPONENT_STACK_SPACING: f32 = 12.0;
+
+/// Dense spacing for related controls that need a little separation.
+pub const DENSE_STACK_SPACING: f32 = 10.0;
+
+/// Spacious spacing for separated control groups.
+pub const SPACIOUS_STACK_SPACING: f32 = 18.0;
+
 /// Default spacing for horizontal page actions.
 pub const ROW_SPACING: f32 = 12.0;
 
 /// Compact spacing for dense horizontal page actions.
 pub const COMPACT_ROW_SPACING: f32 = 8.0;
+
+/// Spacing for paired indicator previews.
+pub const INDICATOR_ROW_SPACING: f32 = 16.0;
+
+/// Height used by compact divider demonstration rows.
+pub const DIVIDER_ROW_HEIGHT: f32 = 32.0;
+
+/// Spacing used by compact divider demonstration rows.
+pub const DIVIDER_ROW_SPACING: f32 = 16.0;
 
 /// Padding used by compact showcase cards.
 pub const CARD_PADDING: f32 = 12.0;
@@ -183,6 +204,50 @@ where
         .width(Length::Fill)
 }
 
+/// Creates a compact full-width vertical stack.
+pub fn compact_stack<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    stack(children).spacing(COMPACT_STACK_SPACING)
+}
+
+/// Creates a full-width stack for repeated component previews.
+pub fn component_stack<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    stack(children).spacing(COMPONENT_STACK_SPACING)
+}
+
+/// Creates a dense full-width vertical stack.
+pub fn dense_stack<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    stack(children).spacing(DENSE_STACK_SPACING)
+}
+
+/// Creates a spacious full-width vertical stack.
+pub fn spacious_stack<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    stack(children).spacing(SPACIOUS_STACK_SPACING)
+}
+
 /// Creates a centered row for page controls.
 pub fn row<'a, Message, Renderer>(
     children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
@@ -196,6 +261,17 @@ where
         .align_y(alignment::Vertical::Center)
 }
 
+/// Creates a centered row for paired indicator previews.
+pub fn indicator_row<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Row<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    row(children).spacing(INDICATOR_ROW_SPACING)
+}
+
 /// Creates a compact centered row for dense controls like chips and badges.
 pub fn compact_row<'a, Message, Renderer>(
     children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
@@ -207,6 +283,36 @@ where
     Row::with_children(children.into_iter())
         .spacing(COMPACT_ROW_SPACING)
         .align_y(alignment::Vertical::Center)
+}
+
+/// Creates a full-width row with a leading label and trailing value.
+pub fn labeled_value_row<'a, Message, Renderer>(
+    label: impl text::IntoFragment<'a>,
+    value: impl text::IntoFragment<'a>,
+) -> Row<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+{
+    row([
+        type_scale_text(label, tokens::typography::BODY_LARGE)
+            .width(Length::Fill)
+            .into(),
+        type_scale_text(value, tokens::typography::BODY_LARGE).into(),
+    ])
+}
+
+/// Creates a compact row for showing vertical dividers.
+pub fn divider_row<'a, Message, Renderer>(
+    children: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Row<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    row(children)
+        .height(Length::Fixed(DIVIDER_ROW_HEIGHT))
+        .spacing(DIVIDER_ROW_SPACING)
 }
 
 /// Creates a compact titled card using one of the Material card constructors.
@@ -265,9 +371,22 @@ mod tests {
         ])
         .into();
         let _: TestElement<'_> = stack([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> =
+            compact_stack([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> =
+            component_stack([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> =
+            dense_stack([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> =
+            spacious_stack([Text::new("One").into(), Text::new("Two").into()]).into();
         let _: TestElement<'_> = row([Text::new("One").into(), Text::new("Two").into()]).into();
         let _: TestElement<'_> =
+            indicator_row([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> =
             compact_row([Text::new("One").into(), Text::new("Two").into()]).into();
+        let _: TestElement<'_> = labeled_value_row("Label", "Value").into();
+        let _: TestElement<'_> =
+            divider_row([Text::new("One").into(), Text::new("Two").into()]).into();
         let _: TestElement<'_> = card(super::super::card::elevated, "Card", "Subtitle").into();
         let _: TestElement<'_> = centered_preview(320.0, Text::new("Preview")).into();
         let _: TestElement<'_> = preview_pane(Text::new("Preview")).into();

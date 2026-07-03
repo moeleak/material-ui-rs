@@ -1,4 +1,3 @@
-use iced::Length;
 use iced_material as material;
 use material::widget::page;
 
@@ -8,10 +7,9 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     let input = material::widget::text_input::outlined("Write a note", &state.note)
         .on_input(Message::TextChanged);
 
-    let editor = material::widget::text_editor::outlined(&state.editor_content)
+    let editor = material::widget::text_editor::outlined_area(&state.editor_content)
         .placeholder("Write details")
-        .on_action(Message::EditorAction)
-        .height(Length::Fixed(112.0));
+        .on_action(Message::EditorAction);
 
     let select_options = ["Assist", "Suggestion", "Filter"];
     let select = material::widget::pick_list::outlined(
@@ -57,18 +55,15 @@ fn search_bar(state: &Showcase) -> material::Element<'_, Message> {
 }
 
 fn dividers() -> material::Element<'static, Message> {
-    page::stack([
+    page::compact_stack([
         material::widget::rule::horizontal_full_width().into(),
-        page::row([
+        page::divider_row([
             material::text::body_large("Full").into(),
             material::widget::rule::vertical_full_height().into(),
             material::text::body_large("Inset").into(),
         ])
-        .height(Length::Fixed(32.0))
-        .spacing(16)
         .into(),
         material::widget::rule::horizontal_inset().into(),
     ])
-    .spacing(8)
     .into()
 }

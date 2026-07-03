@@ -35,63 +35,43 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
 }
 
 fn tabs(state: &Showcase) -> material::Element<'_, Message> {
-    page::stack([
-        material::widget::tabs::animated_bar(
-            material::widget::tabs::Variant::Primary,
-            3,
+    page::component_stack([
+        material::widget::tabs::animated_primary_icon_label_bar(
             &state.primary_tab_state,
             [
-                material::widget::tabs::primary_icon_label_for_animated_bar(
+                (
                     "input",
                     "Inputs",
-                    state.primary_tab == TabChoice::Inputs,
-                )
-                .on_press(Message::PrimaryTabSelected(TabChoice::Inputs))
-                .into(),
-                material::widget::tabs::primary_icon_label_for_animated_bar(
+                    Message::PrimaryTabSelected(TabChoice::Inputs),
+                ),
+                (
                     "tune",
                     "Controls",
-                    state.primary_tab == TabChoice::Controls,
-                )
-                .on_press(Message::PrimaryTabSelected(TabChoice::Controls))
-                .into(),
-                material::widget::tabs::primary_icon_label_for_animated_bar(
+                    Message::PrimaryTabSelected(TabChoice::Controls),
+                ),
+                (
                     "info",
                     "Feedback",
-                    state.primary_tab == TabChoice::Feedback,
-                )
-                .on_press(Message::PrimaryTabSelected(TabChoice::Feedback))
-                .into(),
+                    Message::PrimaryTabSelected(TabChoice::Feedback),
+                ),
             ],
         )
         .into(),
-        material::widget::tabs::animated_bar(
-            material::widget::tabs::Variant::Secondary,
-            3,
+        material::widget::tabs::animated_secondary_label_bar(
             &state.secondary_tab_state,
             [
-                material::widget::tabs::secondary_label_for_animated_bar(
-                    "Overview",
-                    state.secondary_tab == TabChoice::Inputs,
-                )
-                .on_press(Message::SecondaryTabSelected(TabChoice::Inputs))
-                .into(),
-                material::widget::tabs::secondary_label_for_animated_bar(
+                ("Overview", Message::SecondaryTabSelected(TabChoice::Inputs)),
+                (
                     "Details",
-                    state.secondary_tab == TabChoice::Controls,
-                )
-                .on_press(Message::SecondaryTabSelected(TabChoice::Controls))
-                .into(),
-                material::widget::tabs::secondary_label_for_animated_bar(
+                    Message::SecondaryTabSelected(TabChoice::Controls),
+                ),
+                (
                     "History",
-                    state.secondary_tab == TabChoice::Feedback,
-                )
-                .on_press(Message::SecondaryTabSelected(TabChoice::Feedback))
-                .into(),
+                    Message::SecondaryTabSelected(TabChoice::Feedback),
+                ),
             ],
         )
         .into(),
     ])
-    .spacing(12)
     .into()
 }

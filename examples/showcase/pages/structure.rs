@@ -16,46 +16,37 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
 }
 
 fn top_app_bars() -> material::Element<'static, Message> {
-    page::stack([
-        material::widget::app_bar::with_status_bar(material::widget::app_bar::small(
+    use material::widget::app_bar;
+
+    page::component_stack([
+        app_bar::with_status_bar(app_bar::small(
             "Small",
-            Some(app_bar_action("menu", Message::MenuPressed)),
-            [
-                app_bar_action("search", Message::Increment),
-                app_bar_action("info", Message::Increment),
-            ],
+            Some(app_bar::icon_action("menu", Message::MenuPressed)),
+            app_bar::icon_actions([("search", Message::Increment), ("info", Message::Increment)]),
         ))
         .into(),
-        material::widget::app_bar::with_status_bar(material::widget::app_bar::medium(
+        app_bar::with_status_bar(app_bar::medium(
             "Medium",
-            Some(app_bar_action("menu", Message::MenuPressed)),
-            [
-                app_bar_action("search", Message::Increment),
-                app_bar_action("info", Message::Increment),
-            ],
+            Some(app_bar::icon_action("menu", Message::MenuPressed)),
+            app_bar::icon_actions([("search", Message::Increment), ("info", Message::Increment)]),
         ))
         .into(),
-        material::widget::app_bar::with_status_bar(material::widget::app_bar::large(
+        app_bar::with_status_bar(app_bar::large(
             "Large",
-            Some(app_bar_action("menu", Message::MenuPressed)),
-            [
-                app_bar_action("search", Message::Increment),
-                app_bar_action("info", Message::Increment),
-            ],
+            Some(app_bar::icon_action("menu", Message::MenuPressed)),
+            app_bar::icon_actions([("search", Message::Increment), ("info", Message::Increment)]),
         ))
         .into(),
     ])
-    .spacing(12)
     .into()
 }
 
 fn search_view(state: &Showcase) -> material::Element<'_, Message> {
-    let results = page::stack([
+    let results = material::widget::list::group([
         material::widget::list::one_line_with_leading_icon("input", "Inputs").into(),
         material::widget::list::one_line_with_leading_icon("tune", "Controls").into(),
         material::widget::list::one_line_with_leading_icon("info", "Feedback").into(),
-    ])
-    .spacing(0);
+    ]);
 
     material::widget::search::docked_view(
         "Search components",
@@ -67,22 +58,20 @@ fn search_view(state: &Showcase) -> material::Element<'_, Message> {
 }
 
 fn bottom_app_bar() -> material::Element<'static, Message> {
-    material::widget::app_bar::bottom(
-        [
-            app_bar_action("menu", Message::MenuPressed),
-            app_bar_action("search", Message::Increment),
-            app_bar_action("info", Message::Increment),
-        ],
+    use material::widget::app_bar;
+
+    app_bar::bottom(
+        app_bar::icon_actions([
+            ("menu", Message::MenuPressed),
+            ("search", Message::Increment),
+            ("info", Message::Increment),
+        ]),
         Some(material::widget::button::primary_fab_action(
             "+",
             Message::Increment,
         )),
     )
     .into()
-}
-
-fn app_bar_action(icon: &'static str, on_press: Message) -> material::Element<'static, Message> {
-    material::widget::app_bar::icon_action(icon, on_press)
 }
 
 fn bottom_sheets(state: &Showcase) -> material::Element<'static, Message> {
@@ -97,11 +86,10 @@ fn bottom_sheets(state: &Showcase) -> material::Element<'static, Message> {
         "Uses a scrim and blocks interaction behind the sheet.",
     )));
 
-    page::stack([
+    page::component_stack([
         page::centered_preview(width, standard).into(),
         page::centered_preview(width, modal_preview).into(),
     ])
-    .spacing(12)
     .into()
 }
 
@@ -123,11 +111,10 @@ fn side_sheets(state: &Showcase) -> material::Element<'static, Message> {
         ),
     ));
 
-    page::stack([
+    page::component_stack([
         page::centered_preview(width, standard).into(),
         page::centered_preview(width, modal).into(),
     ])
-    .spacing(12)
     .into()
 }
 
@@ -135,18 +122,15 @@ fn sheet_content(
     title: &'static str,
     supporting: &'static str,
 ) -> material::Element<'static, Message> {
-    material::widget::sheet::bottom_content(
-        page::stack([
-            material::text::title_medium(title).into(),
-            material::text::body_medium(supporting).into(),
-            page::row([
-                material::widget::button::text_action("Dismiss", Message::Decrement),
-                material::widget::button::filled_action("Apply", Message::Increment),
-            ])
-            .into(),
+    material::widget::sheet::bottom_content(page::compact_stack([
+        material::text::title_medium(title).into(),
+        material::text::body_medium(supporting).into(),
+        page::row([
+            material::widget::button::text_action("Dismiss", Message::Decrement),
+            material::widget::button::filled_action("Apply", Message::Increment),
         ])
-        .spacing(8),
-    )
+        .into(),
+    ]))
     .into()
 }
 
@@ -154,17 +138,14 @@ fn side_sheet_content(
     title: &'static str,
     supporting: &'static str,
 ) -> material::Element<'static, Message> {
-    material::widget::sheet::side_content(
-        page::stack([
-            material::text::title_medium(title).into(),
-            material::text::body_medium(supporting).into(),
-            page::row([
-                material::widget::button::text_action("Dismiss", Message::Decrement),
-                material::widget::button::filled_action("Apply", Message::Increment),
-            ])
-            .into(),
+    material::widget::sheet::side_content(page::compact_stack([
+        material::text::title_medium(title).into(),
+        material::text::body_medium(supporting).into(),
+        page::row([
+            material::widget::button::text_action("Dismiss", Message::Decrement),
+            material::widget::button::filled_action("Apply", Message::Increment),
         ])
-        .spacing(8),
-    )
+        .into(),
+    ]))
     .into()
 }

@@ -112,6 +112,19 @@ where
     )
 }
 
+/// Creates a joined list group without gaps between list items.
+pub fn group<'a, Message, Renderer>(
+    items: impl IntoIterator<Item = iced_widget::core::Element<'a, Message, Theme, Renderer>>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    Column::with_children(items.into_iter())
+        .spacing(0)
+        .width(Length::Fill)
+}
+
 fn item<'a, Message, Renderer>(
     content: Row<'a, Message, Theme, Renderer>,
     height: f32,

@@ -19,27 +19,19 @@ fn progress_indicators(state: &Showcase) -> material::Element<'_, Message> {
     let linear_phase = state.progress_animation.linear_phase();
     let loading_phase = state.progress_animation.loading_phase();
 
-    page::stack([
-        page::row([
-            material::text::body_large("Determinate")
-                .width(iced::Length::Fill)
-                .into(),
-            material::text::body_large(format!("{:.0}%", state.progress)).into(),
-        ])
-        .into(),
+    page::dense_stack([
+        page::labeled_value_row("Determinate", format!("{:.0}%", state.progress)).into(),
         material::widget::slider::continuous(0.0..=100.0, state.progress, Message::SliderChanged)
             .step(1.0)
             .into(),
         material::widget::progress_bar::linear(progress, linear_phase).into(),
         material::widget::progress_bar::linear_indeterminate(linear_phase, false).into(),
-        page::row([
+        page::indicator_row([
             material::widget::progress_bar::loading_indicator(loading_phase).into(),
             material::widget::progress_bar::contained_loading_indicator(loading_phase).into(),
         ])
-        .spacing(16)
         .into(),
     ])
-    .spacing(10)
     .into()
 }
 
@@ -54,7 +46,7 @@ fn badges() -> material::Element<'static, Message> {
 }
 
 fn snackbars() -> material::Element<'static, Message> {
-    page::stack([
+    page::compact_stack([
         material::widget::snackbar::single_line_with_action(
             "Photo archived",
             material::widget::snackbar::action_button("Undo", Message::Decrement),
@@ -66,7 +58,6 @@ fn snackbars() -> material::Element<'static, Message> {
         )
         .into(),
     ])
-    .spacing(8)
     .into()
 }
 
@@ -79,20 +70,28 @@ fn dialogs() -> material::Element<'static, Message> {
 }
 
 fn tooltips(state: &Showcase) -> material::Element<'_, Message> {
+    use material::widget::button;
+
     page::row([
         material::widget::tooltip::plain(
-            material::widget::button::assist_chip("Plain")
-                .on_press_maybe(state.enabled.then_some(Message::Increment)),
+            button::maybe_action(
+                button::assist_chip("Plain"),
+                state.enabled,
+                Message::Increment,
+            ),
             "Material 3 plain tooltip",
             material::widget::tooltip::Position::Top,
         )
         .into(),
         material::widget::tooltip::rich_with_title_action(
-            material::widget::button::assist_chip("Rich")
-                .on_press_maybe(state.enabled.then_some(Message::Increment)),
+            button::maybe_action(
+                button::assist_chip("Rich"),
+                state.enabled,
+                Message::Increment,
+            ),
             "Rich tooltip",
             "Additional context and a related action can be shown together.",
-            material::widget::tooltip::rich_action("Action").on_press(Message::Increment),
+            material::widget::tooltip::rich_action_button("Action", Message::Increment),
             material::widget::tooltip::Position::Top,
         )
         .into(),

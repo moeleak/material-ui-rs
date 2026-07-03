@@ -156,6 +156,59 @@ where
         .width(Length::Fill)
 }
 
+/// Creates a primary animated tab bar from icon-label action items.
+pub fn animated_primary_icon_label_bar<'a, Message, Renderer, Icon, Label>(
+    state: &State,
+    tabs: impl IntoIterator<Item = (Icon, Label, Message)>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Icon: text::IntoFragment<'a>,
+    Label: text::IntoFragment<'a>,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    let tabs: Vec<_> = tabs
+        .into_iter()
+        .enumerate()
+        .map(|(index, (icon, label, on_press))| {
+            primary_icon_label_action_for_animated_bar(
+                icon,
+                label,
+                state.selected_index() == index,
+                on_press,
+            )
+        })
+        .collect();
+
+    animated_bar(Variant::Primary, tabs.len(), state, tabs)
+}
+
+/// Creates a secondary animated tab bar from label action items.
+pub fn animated_secondary_label_bar<'a, Message, Renderer, Label>(
+    state: &State,
+    tabs: impl IntoIterator<Item = (Label, Message)>,
+) -> Column<'a, Message, Theme, Renderer>
+where
+    Label: text::IntoFragment<'a>,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+{
+    let tabs: Vec<_> = tabs
+        .into_iter()
+        .enumerate()
+        .map(|(index, (label, on_press))| {
+            secondary_label_action_for_animated_bar(
+                label,
+                state.selected_index() == index,
+                on_press,
+            )
+        })
+        .collect();
+
+    animated_bar(Variant::Secondary, tabs.len(), state, tabs)
+}
+
 /// Creates a primary label tab.
 pub fn primary_label<'a, Message, Renderer>(
     label: impl text::IntoFragment<'a>,
@@ -230,6 +283,23 @@ where
     )
 }
 
+/// Creates a stacked primary tab with an action message for an [`animated_bar`].
+pub fn primary_icon_label_action_for_animated_bar<'a, Message, Renderer>(
+    icon_name: impl text::IntoFragment<'a>,
+    label: impl text::IntoFragment<'a>,
+    active: bool,
+    on_press: Message,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    primary_icon_label_for_animated_bar(icon_name, label, active)
+        .on_press(on_press)
+        .into()
+}
+
 /// Creates an inline primary tab with icon and label.
 pub fn primary_inline_icon_label<'a, Message, Renderer>(
     icon_name: impl text::IntoFragment<'a>,
@@ -292,6 +362,21 @@ where
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
 {
     animated_label_tab(Variant::Secondary, label, active)
+}
+
+/// Creates a secondary label tab with an action message for an [`animated_bar`].
+pub fn secondary_label_action_for_animated_bar<'a, Message, Renderer>(
+    label: impl text::IntoFragment<'a>,
+    active: bool,
+    on_press: Message,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+{
+    secondary_label_for_animated_bar(label, active)
+        .on_press(on_press)
+        .into()
 }
 
 /// Creates an inline secondary tab with icon and label.

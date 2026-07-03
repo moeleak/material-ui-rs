@@ -89,6 +89,19 @@ pub enum SegmentPosition {
 }
 
 impl SegmentPosition {
+    /// Returns the segment position for an item in a segmented button set.
+    pub fn for_index(index: usize, len: usize) -> Self {
+        if len <= 1 {
+            Self::Only
+        } else if index == 0 {
+            Self::First
+        } else if index + 1 == len {
+            Self::Last
+        } else {
+            Self::Middle
+        }
+    }
+
     fn radius(self) -> Radius {
         let full = tokens::component::segmented_button::CONTAINER_SHAPE;
 
@@ -176,6 +189,51 @@ where
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     leading_icon_progress("check", label, selected_progress, position)
+}
+
+/// Creates an animated label segment with an action message.
+pub fn animated_selectable_label_action<'a, Message, Renderer>(
+    label: impl text::IntoFragment<'a>,
+    selected_progress: f32,
+    position: SegmentPosition,
+    on_press: Message,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    animated_selectable_label(label, selected_progress, position)
+        .on_press(on_press)
+        .into()
+}
+
+/// Creates animated label segments from the given selection state and actions.
+pub fn animated_selectable_label_actions<'a, Message, Renderer, Label>(
+    state: &State,
+    segments: impl IntoIterator<Item = (Label, Message)>,
+) -> Vec<Element<'a, Message, Theme, Renderer>>
+where
+    Label: text::IntoFragment<'a>,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    let segments: Vec<_> = segments.into_iter().collect();
+    let len = segments.len();
+
+    segments
+        .into_iter()
+        .enumerate()
+        .map(|(index, (label, on_press))| {
+            animated_selectable_label_action(
+                label,
+                state.progress_for(index),
+                SegmentPosition::for_index(index, len),
+                on_press,
+            )
+        })
+        .collect()
 }
 
 /// Creates an outlined segment with a Material Symbols leading icon.
@@ -391,6 +449,10 @@ mod tests {
     fn segment_position_sets_outer_radii_only() {
         let full = tokens::component::segmented_button::CONTAINER_SHAPE;
 
+        assert_eq!(SegmentPosition::for_index(0, 1), SegmentPosition::Only);
+        assert_eq!(SegmentPosition::for_index(0, 3), SegmentPosition::First);
+        assert_eq!(SegmentPosition::for_index(1, 3), SegmentPosition::Middle);
+        assert_eq!(SegmentPosition::for_index(2, 3), SegmentPosition::Last);
         assert_eq!(SegmentPosition::Only.radius(), Radius::new(full));
         assert_eq!(SegmentPosition::First.radius().top_left, full);
         assert_eq!(SegmentPosition::First.radius().top_right, 0.0);

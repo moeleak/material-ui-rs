@@ -173,6 +173,7 @@ where
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
+    let title_alignment = title_alignment(icon.is_some());
     let mut content = Column::new().width(Length::Fill);
 
     if let Some(icon) = icon {
@@ -190,7 +191,7 @@ where
     }
 
     content = content.push(
-        Container::new(title_text(title))
+        Container::new(title_text(title, title_alignment))
             .width(Length::Fill)
             .padding(Padding {
                 top: 0.0,
@@ -228,7 +229,10 @@ where
         .style(icon_style)
 }
 
-fn title_text<'a, Renderer>(title: impl text::IntoFragment<'a>) -> Text<'a, Theme, Renderer>
+fn title_text<'a, Renderer>(
+    title: impl text::IntoFragment<'a>,
+    alignment: alignment::Horizontal,
+) -> Text<'a, Theme, Renderer>
 where
     Renderer: core_text::Renderer + 'a,
 {
@@ -237,8 +241,18 @@ where
     Text::new(title)
         .size(scale.size)
         .line_height(absolute_line_height(scale.line_height))
+        .width(Length::Fill)
+        .align_x(alignment)
         .color_maybe(None::<iced_widget::core::Color>)
         .style(title_style)
+}
+
+fn title_alignment(has_icon: bool) -> alignment::Horizontal {
+    if has_icon {
+        alignment::Horizontal::Center
+    } else {
+        alignment::Horizontal::Left
+    }
 }
 
 fn supporting_text_view<'a, Renderer>(
@@ -306,7 +320,12 @@ fn scrim_style(theme: &Theme) -> iced_widget::container::Style {
 
 #[cfg(test)]
 mod tests {
+    use iced_widget::core::Widget;
+
     use super::*;
+
+    #[derive(Debug, Clone)]
+    enum Message {}
 
     #[test]
     fn dialog_container_style_uses_material_tokens() {
@@ -336,6 +355,23 @@ mod tests {
         assert_eq!(
             supporting_text_style(&theme).color,
             Some(colors.surface.text_variant)
+        );
+    }
+
+    #[test]
+    fn dialog_title_alignment_follows_icon_presence() {
+        assert_eq!(title_alignment(true), alignment::Horizontal::Center);
+        assert_eq!(title_alignment(false), alignment::Horizontal::Left);
+    }
+
+    #[test]
+    fn dialog_title_text_fills_width_for_alignment() {
+        let title: Text<'_, Theme, iced_widget::Renderer> =
+            title_text("Discard draft?", alignment::Horizontal::Center);
+
+        assert_eq!(
+            Widget::<Message, Theme, iced_widget::Renderer>::size(&title).width,
+            Length::Fill
         );
     }
 
