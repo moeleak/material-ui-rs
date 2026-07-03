@@ -13,9 +13,9 @@ enum LinearMode {
     Indeterminate,
 }
 
-// Compose's default linear wavy container is 240dp. Keep indeterminate
-// chunks near that visual length when callers stretch the track wider.
-const MAX_INDETERMINATE_ACTIVE_SEGMENT_WIDTH: f32 = 240.0;
+// Compose's default linear wavy container is 240dp. Keep the indeterminate
+// active wave at that visual length even when callers stretch the track wider.
+const INDETERMINATE_ACTIVE_SEGMENT_WIDTH: f32 = 240.0;
 
 /// A clock-backed state for indeterminate canvas indicators.
 #[derive(Debug, Clone)]
@@ -194,17 +194,15 @@ where
                 draw_linear_determinate(&mut frame, active, self.progress, self.phase);
             }
             LinearMode::Indeterminate => {
-                let bars = indeterminate_bars(self.phase);
+                let stroke_width = tokens::component::linear_progress::ACTIVE_INDICATOR_HEIGHT;
+                let left = stroke_width / 2.0;
+                let right = frame.width() - stroke_width / 2.0;
+                let segments = indeterminate_active_segments(self.phase, left, right);
 
-                draw_linear_indeterminate_track(&mut frame, track, &bars);
+                draw_linear_indeterminate_track(&mut frame, track, segments);
 
-                for (index, bar) in bars.into_iter().enumerate() {
-                    draw_indeterminate_bar(
-                        &mut frame,
-                        active,
-                        bar,
-                        self.phase + index as f32 * 0.25,
-                    );
+                for segment in segments.into_iter().flatten() {
+                    draw_indeterminate_bar(&mut frame, active, segment, left, self.phase);
                 }
             }
         }
@@ -399,7 +397,7 @@ fn draw_linear_determinate_track<Renderer>(
 fn draw_linear_indeterminate_track<Renderer>(
     frame: &mut canvas::Frame<Renderer>,
     track: Color,
-    bars: &[IndeterminateBar; 2],
+    segments: [Option<LinearSegment>; 2],
 ) where
     Renderer: iced_widget::graphics::geometry::Renderer,
 {
@@ -410,18 +408,19 @@ fn draw_linear_indeterminate_track<Renderer>(
     let gap = tokens::component::linear_progress::TRACK_ACTIVE_SPACE + stroke_width;
     let mut cursor = left;
 
-    let mut ranges = [
-        indeterminate_bar_visual_range(bars[0], left, right),
-        indeterminate_bar_visual_range(bars[1], left, right),
-    ];
-    ranges.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut ranges = segments;
+    if let [Some(first), Some(second)] = &mut ranges
+        && second.start < first.start
+    {
+        core::mem::swap(first, second);
+    }
 
-    for (start, end) in ranges {
-        if end <= start {
+    for segment in ranges.into_iter().flatten() {
+        if segment.end <= segment.start {
             continue;
         }
 
-        let track_end = (start - gap).clamp(left, right);
+        let track_end = (segment.start - gap).clamp(left, right);
         if track_end > cursor {
             frame.stroke(
                 &Path::line(Point::new(cursor, y), Point::new(track_end, y)),
@@ -429,7 +428,7 @@ fn draw_linear_indeterminate_track<Renderer>(
             );
         }
 
-        cursor = cursor.max((end + gap).clamp(left, right));
+        cursor = cursor.max((segment.end + gap).clamp(left, right));
     }
 
     if cursor < right {
@@ -489,27 +488,26 @@ fn draw_linear_determinate<Renderer>(
 fn draw_indeterminate_bar<Renderer>(
     frame: &mut canvas::Frame<Renderer>,
     active: Color,
-    bar: IndeterminateBar,
+    segment: LinearSegment,
+    wave_origin: f32,
     wave_phase: f32,
 ) where
     Renderer: iced_widget::graphics::geometry::Renderer,
 {
     let stroke_width = tokens::component::linear_progress::ACTIVE_INDICATOR_HEIGHT;
-    let left = stroke_width / 2.0;
-    let right = frame.width() - stroke_width / 2.0;
-    let (start, end) = indeterminate_bar_visual_range(bar, left, right);
 
-    if end <= start {
+    if segment.end <= segment.start {
         return;
     }
 
-    let path = wave_path(
-        start,
-        end,
+    let path = wave_path_with_origin(
+        segment.start,
+        segment.end,
         frame.height() / 2.0,
         tokens::component::linear_progress::ACTIVE_WAVE_AMPLITUDE,
         tokens::component::linear_progress::INDETERMINATE_ACTIVE_WAVE_WAVELENGTH,
         wave_phase,
+        wave_origin,
     );
 
     frame.stroke(&path, round_stroke(active, stroke_width));
@@ -525,26 +523,27 @@ fn determinate_wave_amplitude(progress: f32) -> f32 {
     }
 }
 
-fn linear_bar_range(bar: IndeterminateBar, left: f32, right: f32) -> (f32, f32) {
+fn indeterminate_active_segments(phase: f32, left: f32, right: f32) -> [Option<LinearSegment>; 2] {
     let width = (right - left).max(0.0);
-    let start = left + width * bar.tail.clamp(0.0, 1.0);
-    let end = left + width * bar.head.clamp(0.0, 1.0);
+    let segment_width = INDETERMINATE_ACTIVE_SEGMENT_WIDTH.min(width);
 
-    if end >= start {
-        (start, end)
-    } else {
-        (end, start)
+    if segment_width <= 0.0 {
+        return [None, None];
     }
-}
 
-fn indeterminate_bar_visual_range(bar: IndeterminateBar, left: f32, right: f32) -> (f32, f32) {
-    let (start, end) = linear_bar_range(bar, left, right);
-    let max_width = MAX_INDETERMINATE_ACTIVE_SEGMENT_WIDTH.min((right - left).max(0.0));
+    let start = left + width * phase.rem_euclid(1.0);
+    let end = start + segment_width;
 
-    if end - start <= max_width {
-        (start, end)
+    if end <= right {
+        [Some(LinearSegment { start, end }), None]
     } else {
-        ((end - max_width).max(left), end)
+        [
+            Some(LinearSegment { start, end: right }),
+            Some(LinearSegment {
+                start: left,
+                end: left + (end - right),
+            }),
+        ]
     }
 }
 
@@ -557,6 +556,18 @@ fn round_stroke(color: Color, width: f32) -> Stroke<'static> {
 }
 
 fn wave_path(start: f32, end: f32, y: f32, amplitude: f32, wavelength: f32, phase: f32) -> Path {
+    wave_path_with_origin(start, end, y, amplitude, wavelength, phase, start)
+}
+
+fn wave_path_with_origin(
+    start: f32,
+    end: f32,
+    y: f32,
+    amplitude: f32,
+    wavelength: f32,
+    phase: f32,
+    origin: f32,
+) -> Path {
     let length = (end - start).max(0.0);
 
     if length <= 0.0 || amplitude <= 0.0 || wavelength <= 0.0 {
@@ -567,14 +578,14 @@ fn wave_path(start: f32, end: f32, y: f32, amplitude: f32, wavelength: f32, phas
 
     Path::new(|path| {
         let mut x0 = start;
-        let mut distance0 = 0.0;
+        let mut distance0 = x0 - origin;
         let mut y0 = y + wave_offset(distance0, amplitude, wavelength, phase);
 
         path.move_to(Point::new(x0, y0));
 
         while x0 < end {
             let x1 = (x0 + step).min(end);
-            let distance1 = x1 - start;
+            let distance1 = x1 - origin;
             let y1 = y + wave_offset(distance1, amplitude, wavelength, phase);
             let dx = x1 - x0;
             let slope0 = wave_slope(distance0, amplitude, wavelength, phase);
@@ -611,55 +622,9 @@ fn wave_slope(distance: f32, amplitude: f32, wavelength: f32, phase: f32) -> f32
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct IndeterminateBar {
-    tail: f32,
-    head: f32,
-}
-
-fn indeterminate_bars(phase: f32) -> [IndeterminateBar; 2] {
-    [
-        IndeterminateBar {
-            tail: indeterminate_keyframe_progress(
-                phase,
-                tokens::component::linear_progress::FIRST_LINE_TAIL_DELAY_MS,
-                tokens::component::linear_progress::FIRST_LINE_TAIL_DURATION_MS,
-            ),
-            head: indeterminate_keyframe_progress(
-                phase,
-                tokens::component::linear_progress::FIRST_LINE_HEAD_DELAY_MS,
-                tokens::component::linear_progress::FIRST_LINE_HEAD_DURATION_MS,
-            ),
-        },
-        IndeterminateBar {
-            tail: indeterminate_keyframe_progress(
-                phase,
-                tokens::component::linear_progress::SECOND_LINE_TAIL_DELAY_MS,
-                tokens::component::linear_progress::SECOND_LINE_TAIL_DURATION_MS,
-            ),
-            head: indeterminate_keyframe_progress(
-                phase,
-                tokens::component::linear_progress::SECOND_LINE_HEAD_DELAY_MS,
-                tokens::component::linear_progress::SECOND_LINE_HEAD_DURATION_MS,
-            ),
-        },
-    ]
-}
-
-fn indeterminate_keyframe_progress(phase: f32, delay_ms: u16, duration_ms: u16) -> f32 {
-    let elapsed_ms = phase.rem_euclid(1.0)
-        * f32::from(tokens::component::linear_progress::INDETERMINATE_DURATION_MS);
-    let delay_ms = f32::from(delay_ms);
-    let duration_ms = f32::from(duration_ms);
-
-    if elapsed_ms <= delay_ms {
-        return 0.0;
-    }
-
-    if elapsed_ms >= delay_ms + duration_ms {
-        return 1.0;
-    }
-
-    tokens::motion::EASING_EMPHASIZED_ACCELERATE.transform((elapsed_ms - delay_ms) / duration_ms)
+struct LinearSegment {
+    start: f32,
+    end: f32,
 }
 
 fn four_color_indicator(
@@ -2555,49 +2520,55 @@ mod tests {
         );
     }
 
-    #[test]
-    fn indeterminate_keyframes_match_material3_head_tail_timing() {
-        let start = indeterminate_bars(0.0);
-        assert_close(start[0].head, 0.0);
-        assert_close(start[0].tail, 0.0);
-        assert_close(start[1].head, 0.0);
-        assert_close(start[1].tail, 0.0);
-
-        let first_head_done = indeterminate_bars(1000.0 / 1750.0);
-        assert_close(first_head_done[0].head, 1.0);
-        assert!(first_head_done[0].tail > 0.0);
-
-        let second_head_started = indeterminate_bars(700.0 / 1750.0);
-        assert!(second_head_started[1].head > 0.0);
-        assert_close(second_head_started[1].tail, 0.0);
+    fn segment_width(segments: [Option<LinearSegment>; 2]) -> f32 {
+        segments
+            .into_iter()
+            .flatten()
+            .map(|segment| segment.end - segment.start)
+            .sum()
     }
 
     #[test]
-    fn indeterminate_visual_bar_range_caps_long_wave_chunks() {
-        let left = 2.0;
-        let right = 1002.0;
-        let bar = IndeterminateBar {
-            tail: 0.1,
-            head: 0.9,
-        };
-        let (start, end) = indeterminate_bar_visual_range(bar, left, right);
+    fn indeterminate_active_segments_keep_fixed_visual_length() {
+        let segments = indeterminate_active_segments(0.1, 2.0, 1002.0);
 
-        assert_close(end, 902.0);
-        assert_close(end - start, MAX_INDETERMINATE_ACTIVE_SEGMENT_WIDTH);
+        assert_eq!(
+            segments[0],
+            Some(LinearSegment {
+                start: 102.0,
+                end: 342.0,
+            })
+        );
+        assert_eq!(segments[1], None);
+        assert_close(segment_width(segments), INDETERMINATE_ACTIVE_SEGMENT_WIDTH);
     }
 
     #[test]
-    fn indeterminate_visual_bar_range_keeps_short_wave_chunks() {
-        let left = 2.0;
-        let right = 1002.0;
-        let bar = IndeterminateBar {
-            tail: 0.1,
-            head: 0.2,
-        };
-        let (start, end) = indeterminate_bar_visual_range(bar, left, right);
+    fn indeterminate_active_segments_wrap_without_length_spike() {
+        let segments = indeterminate_active_segments(0.9, 2.0, 1002.0);
 
-        assert_close(start, 102.0);
-        assert_close(end, 202.0);
+        assert_eq!(
+            segments[0],
+            Some(LinearSegment {
+                start: 902.0,
+                end: 1002.0,
+            })
+        );
+        assert_eq!(
+            segments[1],
+            Some(LinearSegment {
+                start: 2.0,
+                end: 142.0,
+            })
+        );
+        assert_close(segment_width(segments), INDETERMINATE_ACTIVE_SEGMENT_WIDTH);
+    }
+
+    #[test]
+    fn indeterminate_active_segments_fit_short_tracks() {
+        let segments = indeterminate_active_segments(0.5, 2.0, 122.0);
+
+        assert_close(segment_width(segments), 120.0);
     }
 
     #[test]
