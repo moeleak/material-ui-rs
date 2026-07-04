@@ -1,7 +1,7 @@
 use iced_widget::core::text as core_text;
 use iced_widget::core::time::{Duration, Instant};
 use iced_widget::core::widget as core_widget;
-use iced_widget::core::{Background, Border, Color, Point, Rectangle};
+use iced_widget::core::{Background, Border, Color, Point, Rectangle, touch};
 
 use crate::tokens;
 
@@ -550,6 +550,7 @@ pub(super) struct TextFieldState<Paragraph: core_text::Paragraph> {
     pub(super) label_float: AnimatedScalar,
     pub(super) is_focused: bool,
     pub(super) ime_preedit_active: bool,
+    pub(super) touch_activation: Option<TextFieldTouchActivation>,
 }
 
 impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
@@ -560,6 +561,7 @@ impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
             label_float: AnimatedScalar::new(bool_value(is_populated)),
             is_focused: false,
             ime_preedit_active: false,
+            touch_activation: None,
         }
     }
 
@@ -582,6 +584,29 @@ impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
         self.ime_preedit_active = false;
 
         changed
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct TextFieldTouchActivation {
+    finger: touch::Finger,
+    start: Point,
+}
+
+impl TextFieldTouchActivation {
+    pub(super) fn new(finger: touch::Finger, start: Point) -> Self {
+        Self { finger, start }
+    }
+
+    pub(super) fn matches(self, finger: touch::Finger) -> bool {
+        self.finger == finger
+    }
+
+    pub(super) fn moved_beyond_slop(self, position: Point, slop: f32) -> bool {
+        let dx = position.x - self.start.x;
+        let dy = position.y - self.start.y;
+
+        dx * dx + dy * dy > slop * slop
     }
 }
 

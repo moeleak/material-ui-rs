@@ -60,10 +60,11 @@ pub mod toolbar;
 pub mod viewport;
 
 use support::{
-    AnimatedScalar, SelectionState, TextFieldState, alpha_border, alpha_color, bool_value,
-    duration_ms, lerp, scaled_rect, solid_color,
+    AnimatedScalar, SelectionState, TextFieldState, TextFieldTouchActivation, alpha_border,
+    alpha_color, bool_value, duration_ms, lerp, scaled_rect, solid_color,
 };
 
+const TEXT_FIELD_TOUCH_SLOP: f32 = 8.0;
 const SWITCH_ON_ICON_SVG: &[u8] = br##"
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <path d="M9.55 18.2 3.65 12.3 5.275 10.675 9.55 14.95 18.725 5.775 20.35 7.4Z"/>
@@ -151,18 +152,16 @@ where
         .center()
 }
 
-fn touch_cursor(event: &Event, cursor: mouse::Cursor) -> mouse::Cursor {
-    if cursor.position().is_some() {
-        return cursor;
-    }
-
+fn text_field_touch_cursor(event: &Event, cursor: mouse::Cursor) -> mouse::Cursor {
     match event {
         Event::Touch(
             touch::Event::FingerPressed { position, .. }
             | touch::Event::FingerMoved { position, .. }
             | touch::Event::FingerLifted { position, .. }
             | touch::Event::FingerLost { position, .. },
-        ) => mouse::Cursor::Available(*position),
+        ) if cursor.position().is_none() && !cursor.is_levitating() => {
+            mouse::Cursor::Available(*position)
+        }
         _ => cursor,
     }
 }
@@ -182,6 +181,169 @@ fn touch_as_mouse_event(event: &Event) -> Option<Event> {
         ),
         _ => None,
     }
+}
+
+fn text_field_touch_position(position: Point, cursor: mouse::Cursor) -> Option<Point> {
+    if let Some(cursor_position) = cursor.position() {
+        return Some(cursor_position);
+    }
+
+    if cursor.is_levitating() {
+        return None;
+    }
+
+    Some(position)
+}
+
+fn text_field_touch_press_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> bool {
+    matches!(
+        event,
+        Event::Touch(touch::Event::FingerPressed { position, .. })
+            if text_field_touch_position(*position, cursor).is_some_and(|position| bounds.contains(position))
+    )
+}
+
+fn text_field_keyboard_activation(
+    touch_activation: &mut Option<TextFieldTouchActivation>,
+    event: &Event,
+    bounds: Rectangle,
+    cursor: mouse::Cursor,
+) -> bool {
+    match event {
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => cursor.is_over(bounds),
+        Event::Touch(touch::Event::FingerPressed { id, position }) => {
+            if let Some(position) = text_field_touch_position(*position, cursor)
+                && bounds.contains(position)
+            {
+                *touch_activation = Some(TextFieldTouchActivation::new(*id, position));
+            } else {
+                *touch_activation = None;
+            }
+
+            false
+        }
+        Event::Touch(touch::Event::FingerMoved { id, position }) => {
+            if let Some(position) = text_field_touch_position(*position, cursor) {
+                if touch_activation.is_some_and(|activation| {
+                    activation.matches(*id)
+                        && activation.moved_beyond_slop(position, TEXT_FIELD_TOUCH_SLOP)
+                }) {
+                    *touch_activation = None;
+                }
+            }
+
+            false
+        }
+        Event::Touch(touch::Event::FingerLifted { id, position }) => {
+            let position = text_field_touch_position(*position, cursor);
+
+            touch_activation.take().is_some_and(|activation| {
+                position
+                    .is_some_and(|position| activation.matches(*id) && bounds.contains(position))
+            })
+        }
+        Event::Touch(touch::Event::FingerLost { id, .. }) => {
+            if touch_activation.is_some_and(|activation| activation.matches(*id)) {
+                *touch_activation = None;
+            }
+
+            false
+        }
+        _ => false,
+    }
+}
+
+fn text_field_visible_keyboard_activation(
+    touch_activation: &mut Option<TextFieldTouchActivation>,
+    event: &Event,
+    visible_bounds: Option<Rectangle>,
+    cursor: mouse::Cursor,
+) -> bool {
+    let Some(bounds) = visible_bounds else {
+        if matches!(event, Event::Touch(_)) {
+            *touch_activation = None;
+        }
+
+        return false;
+    };
+
+    text_field_keyboard_activation(touch_activation, event, bounds, cursor)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextFieldInnerTouchHandling {
+    Forward,
+    Suppress,
+    ConfirmedTap,
+}
+
+fn text_field_touch_matches_activation(
+    touch_activation: Option<TextFieldTouchActivation>,
+    event: &Event,
+) -> bool {
+    let Some(activation) = touch_activation else {
+        return false;
+    };
+
+    match event {
+        Event::Touch(
+            touch::Event::FingerMoved { id, .. }
+            | touch::Event::FingerLifted { id, .. }
+            | touch::Event::FingerLost { id, .. },
+        ) => activation.matches(*id),
+        _ => false,
+    }
+}
+
+fn text_field_inner_touch_handling(
+    is_enabled: bool,
+    event: &Event,
+    bounds: Rectangle,
+    cursor: mouse::Cursor,
+    touch_activation_before: Option<TextFieldTouchActivation>,
+    confirmed_tap: bool,
+) -> TextFieldInnerTouchHandling {
+    if !is_enabled {
+        return TextFieldInnerTouchHandling::Forward;
+    }
+
+    if confirmed_tap {
+        return TextFieldInnerTouchHandling::ConfirmedTap;
+    }
+
+    if text_field_touch_press_is_over(event, bounds, cursor)
+        || text_field_touch_matches_activation(touch_activation_before, event)
+    {
+        return TextFieldInnerTouchHandling::Suppress;
+    }
+
+    TextFieldInnerTouchHandling::Forward
+}
+
+fn text_field_inner_touch_handling_for_visible_bounds(
+    is_enabled: bool,
+    event: &Event,
+    visible_bounds: Option<Rectangle>,
+    cursor: mouse::Cursor,
+    touch_activation_before: Option<TextFieldTouchActivation>,
+    confirmed_tap: bool,
+) -> TextFieldInnerTouchHandling {
+    let Some(bounds) = visible_bounds else {
+        return if matches!(event, Event::Touch(_)) {
+            TextFieldInnerTouchHandling::Suppress
+        } else {
+            TextFieldInnerTouchHandling::Forward
+        };
+    };
+
+    text_field_inner_touch_handling(
+        is_enabled,
+        event,
+        bounds,
+        cursor,
+        touch_activation_before,
+        confirmed_tap,
+    )
 }
 
 fn press_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> bool {
@@ -1614,92 +1776,167 @@ pub mod text_input {
             viewport: &Rectangle,
         ) {
             let bounds = layout.bounds();
-            let inner_cursor = touch_cursor(event, cursor);
-            let state = tree
-                .state
-                .downcast_mut::<TextFieldState<Renderer::Paragraph>>();
-            let was_focused = state.is_focused;
+            let visible_bounds = bounds.intersection(viewport);
+            let inner_cursor = text_field_touch_cursor(event, cursor);
 
-            match event {
-                Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                    state.is_focused = self.is_enabled && cursor.is_over(bounds);
-                }
-                Event::Touch(touch::Event::FingerPressed { position, .. }) => {
-                    state.is_focused = self.is_enabled && bounds.contains(*position);
-                }
-                Event::Keyboard(iced_widget::core::keyboard::Event::KeyPressed { key, .. })
-                    if matches!(
+            let was_focused = {
+                let state = tree
+                    .state
+                    .downcast_ref::<TextFieldState<Renderer::Paragraph>>();
+
+                state.is_focused
+            };
+
+            let (request_mobile_keyboard, inner_touch_handling) = {
+                let state = tree
+                    .state
+                    .downcast_mut::<TextFieldState<Renderer::Paragraph>>();
+                let touch_activation_before = state.touch_activation;
+                let request = self.is_enabled
+                    && text_field_visible_keyboard_activation(
+                        &mut state.touch_activation,
+                        event,
+                        visible_bounds,
+                        inner_cursor,
+                    );
+                let inner_touch_handling = text_field_inner_touch_handling_for_visible_bounds(
+                    self.is_enabled,
+                    event,
+                    visible_bounds,
+                    inner_cursor,
+                    touch_activation_before,
+                    request,
+                );
+
+                match event {
+                    Event::Keyboard(iced_widget::core::keyboard::Event::KeyPressed {
+                        key, ..
+                    }) if matches!(
                         key.as_ref(),
                         iced_widget::core::keyboard::Key::Named(
                             iced_widget::core::keyboard::key::Named::Escape
                         )
                     ) =>
-                {
-                    state.is_focused = false;
-                    if state.clear_ime_preedit() {
-                        shell.request_redraw();
+                    {
+                        state.is_focused = false;
+                        if state.clear_ime_preedit() {
+                            shell.request_redraw();
+                        }
                     }
-                }
-                Event::InputMethod(input_method::Event::Preedit(content, _)) => {
-                    if state.set_ime_preedit(content) {
-                        shell.request_redraw();
+                    Event::InputMethod(input_method::Event::Preedit(content, _)) => {
+                        if state.set_ime_preedit(content) {
+                            shell.request_redraw();
+                        }
                     }
-                }
-                Event::InputMethod(
-                    input_method::Event::Opened
-                    | input_method::Event::Closed
-                    | input_method::Event::Commit(_),
-                ) => {
-                    if state.clear_ime_preedit() {
-                        shell.request_redraw();
+                    Event::InputMethod(
+                        input_method::Event::Opened
+                        | input_method::Event::Closed
+                        | input_method::Event::Commit(_),
+                    ) => {
+                        if state.clear_ime_preedit() {
+                            shell.request_redraw();
+                        }
                     }
-                }
-                Event::Window(window::Event::RedrawRequested(now)) => {
-                    if state.label_float.advance(*now) {
-                        shell.request_redraw();
+                    Event::Window(window::Event::RedrawRequested(now)) => {
+                        if state.label_float.advance(*now) {
+                            shell.request_redraw();
+                        }
                     }
-                }
-                _ => {}
-            }
-
-            if was_focused != state.is_focused {
-                if state.is_focused {
-                    web_input::show_mobile_keyboard();
-                } else {
-                    web_input::hide_mobile_keyboard();
+                    _ => {}
                 }
 
-                shell.request_redraw();
-            }
-
-            let target = if self.label_mode == LabelMode::Floating {
-                bool_value(self.is_populated || state.is_focused)
-            } else {
-                0.0
+                (request, inner_touch_handling)
             };
-            state.label_float.set_target(
-                target,
-                Instant::now(),
-                duration_ms(tokens::component::text_field::LABEL_TRANSITION_DURATION_MS),
-                tokens::component::text_field::LABEL_TRANSITION_EASING,
-            );
 
-            if state.is_animating() {
-                shell.request_redraw();
+            match inner_touch_handling {
+                TextFieldInnerTouchHandling::Forward => {
+                    self.input.update(
+                        &mut tree.children[0],
+                        event,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+                }
+                TextFieldInnerTouchHandling::Suppress => {}
+                TextFieldInnerTouchHandling::ConfirmedTap => {
+                    let press = Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
+                    self.input.update(
+                        &mut tree.children[0],
+                        &press,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+
+                    let release = Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+                    self.input.update(
+                        &mut tree.children[0],
+                        &release,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+                }
             }
-
-            self.input.update(
-                &mut tree.children[0],
-                event,
-                layout.children().next().unwrap(),
-                inner_cursor,
-                renderer,
-                clipboard,
-                shell,
-                viewport,
-            );
 
             normalize_windows_ime_request(shell.input_method_mut(), bounds);
+
+            let is_focused = {
+                let input_state = tree.children[0]
+                    .state
+                    .downcast_ref::<iced_text_input::State<Renderer::Paragraph>>();
+
+                input_state.is_focused()
+            };
+
+            {
+                let state = tree
+                    .state
+                    .downcast_mut::<TextFieldState<Renderer::Paragraph>>();
+                state.is_focused = is_focused;
+
+                if was_focused != is_focused {
+                    if is_focused {
+                        if !request_mobile_keyboard {
+                            web_input::show_mobile_keyboard();
+                        }
+                    } else {
+                        web_input::hide_mobile_keyboard();
+                    }
+
+                    shell.request_redraw();
+                }
+
+                let target = if self.label_mode == LabelMode::Floating {
+                    bool_value(self.is_populated || state.is_focused)
+                } else {
+                    0.0
+                };
+                state.label_float.set_target(
+                    target,
+                    Instant::now(),
+                    duration_ms(tokens::component::text_field::LABEL_TRANSITION_DURATION_MS),
+                    tokens::component::text_field::LABEL_TRANSITION_EASING,
+                );
+
+                if state.is_animating() {
+                    shell.request_redraw();
+                }
+            }
+
+            if request_mobile_keyboard {
+                web_input::show_mobile_keyboard();
+            }
         }
 
         fn mouse_interaction(
@@ -1733,6 +1970,12 @@ pub mod text_input {
                 .state
                 .downcast_ref::<TextFieldState<Renderer::Paragraph>>();
             let bounds = layout.bounds();
+            if self.is_enabled {
+                if let Some(visible_bounds) = bounds.intersection(viewport) {
+                    web_input::register_text_region(visible_bounds);
+                }
+            }
+
             let progress = if self.label_mode == LabelMode::Floating {
                 state.label_float.value.clamp(0.0, 1.0)
             } else {
@@ -2067,24 +2310,36 @@ pub mod text_editor {
         }
     }
 
+    #[derive(Debug, Default)]
+    struct TextEditorState {
+        touch_activation: Option<TextFieldTouchActivation>,
+    }
+
     impl<Message, Renderer> Widget<Message, Theme, Renderer> for TextEditor<'_, Message, Renderer>
     where
         Renderer: core_text::Renderer,
     {
         fn tag(&self) -> tree::Tag {
-            self.inner.tag()
+            tree::Tag::of::<TextEditorState>()
         }
 
         fn state(&self) -> tree::State {
-            self.inner.state()
+            tree::State::new(TextEditorState::default())
         }
 
         fn children(&self) -> Vec<Tree> {
-            self.inner.children()
+            let inner: &dyn Widget<Message, Theme, Renderer> = &self.inner;
+
+            vec![Tree::new(inner)]
         }
 
         fn diff(&self, tree: &mut Tree) {
-            self.inner.diff(tree);
+            if tree.children.is_empty() {
+                tree.children = self.children();
+            } else {
+                self.inner.diff(&mut tree.children[0]);
+                tree.children.truncate(1);
+            }
         }
 
         fn size(&self) -> Size<Length> {
@@ -2101,7 +2356,9 @@ pub mod text_editor {
             renderer: &Renderer,
             limits: &layout::Limits,
         ) -> layout::Node {
-            self.inner.layout(tree, renderer, limits)
+            let inner = self.inner.layout(&mut tree.children[0], renderer, limits);
+
+            layout::Node::with_children(inner.size(), vec![inner])
         }
 
         fn operate(
@@ -2111,7 +2368,12 @@ pub mod text_editor {
             renderer: &Renderer,
             operation: &mut dyn core_widget::Operation,
         ) {
-            self.inner.operate(tree, layout, renderer, operation);
+            self.inner.operate(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                operation,
+            );
         }
 
         fn update(
@@ -2126,27 +2388,110 @@ pub mod text_editor {
             viewport: &Rectangle,
         ) {
             let bounds = layout.bounds();
-            let inner_cursor = touch_cursor(event, cursor);
+            let visible_bounds = bounds.intersection(viewport);
+            let inner_cursor = text_field_touch_cursor(event, cursor);
             let translated_event = touch_as_mouse_event(event);
             let inner_event = translated_event.as_ref().unwrap_or(event);
-            let request_focus_redraw = self.is_enabled && press_is_over(event, bounds, cursor);
+            let (request_mobile_keyboard, inner_touch_handling) = {
+                let state = tree.state.downcast_mut::<TextEditorState>();
+                let touch_activation_before = state.touch_activation;
+                let request = self.is_enabled
+                    && text_field_visible_keyboard_activation(
+                        &mut state.touch_activation,
+                        event,
+                        visible_bounds,
+                        inner_cursor,
+                    );
 
-            self.inner.update(
-                tree,
-                inner_event,
-                layout,
-                inner_cursor,
-                renderer,
-                clipboard,
-                shell,
-                viewport,
-            );
+                (
+                    request,
+                    text_field_inner_touch_handling_for_visible_bounds(
+                        self.is_enabled,
+                        event,
+                        visible_bounds,
+                        inner_cursor,
+                        touch_activation_before,
+                        request,
+                    ),
+                )
+            };
 
-            if request_focus_redraw {
+            let started_focused = {
+                let state = tree.children[0]
+                    .state
+                    .downcast_ref::<iced_text_editor::State<core_text::highlighter::PlainText>>();
+
+                state.is_focused()
+            };
+
+            match inner_touch_handling {
+                TextFieldInnerTouchHandling::Forward => {
+                    self.inner.update(
+                        &mut tree.children[0],
+                        inner_event,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+                }
+                TextFieldInnerTouchHandling::Suppress => {}
+                TextFieldInnerTouchHandling::ConfirmedTap => {
+                    let press = Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
+                    self.inner.update(
+                        &mut tree.children[0],
+                        &press,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+
+                    let release = Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left));
+                    self.inner.update(
+                        &mut tree.children[0],
+                        &release,
+                        layout.children().next().unwrap(),
+                        inner_cursor,
+                        renderer,
+                        clipboard,
+                        shell,
+                        viewport,
+                    );
+                }
+            }
+
+            if request_mobile_keyboard {
                 shell.request_redraw();
             }
 
             normalize_windows_ime_request(shell.input_method_mut(), bounds);
+
+            let is_focused = {
+                let state = tree.children[0]
+                    .state
+                    .downcast_ref::<iced_text_editor::State<core_text::highlighter::PlainText>>();
+
+                state.is_focused()
+            };
+
+            if started_focused != is_focused {
+                if is_focused {
+                    if !request_mobile_keyboard {
+                        web_input::show_mobile_keyboard();
+                    }
+                } else {
+                    web_input::hide_mobile_keyboard();
+                }
+            }
+
+            if request_mobile_keyboard {
+                web_input::show_mobile_keyboard();
+            }
         }
 
         fn mouse_interaction(
@@ -2157,8 +2502,13 @@ pub mod text_editor {
             viewport: &Rectangle,
             renderer: &Renderer,
         ) -> mouse::Interaction {
-            self.inner
-                .mouse_interaction(tree, layout, cursor, viewport, renderer)
+            self.inner.mouse_interaction(
+                &tree.children[0],
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+                renderer,
+            )
         }
 
         fn draw(
@@ -2171,8 +2521,21 @@ pub mod text_editor {
             cursor: mouse::Cursor,
             viewport: &Rectangle,
         ) {
-            self.inner
-                .draw(tree, renderer, theme, defaults, layout, cursor, viewport);
+            if self.is_enabled {
+                if let Some(visible_bounds) = layout.bounds().intersection(viewport) {
+                    web_input::register_text_region(visible_bounds);
+                }
+            }
+
+            self.inner.draw(
+                &tree.children[0],
+                renderer,
+                theme,
+                defaults,
+                layout.children().next().unwrap(),
+                cursor,
+                viewport,
+            );
         }
 
         fn overlay<'b>(
@@ -2183,8 +2546,13 @@ pub mod text_editor {
             viewport: &Rectangle,
             translation: Vector,
         ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
-            self.inner
-                .overlay(tree, layout, renderer, viewport, translation)
+            self.inner.overlay(
+                &mut tree.children[0],
+                layout.children().next().unwrap(),
+                renderer,
+                viewport,
+                translation,
+            )
         }
     }
 

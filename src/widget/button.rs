@@ -17,6 +17,7 @@ const RIPPLE_START_RADIUS_FACTOR: f32 = 0.3;
 const RIPPLE_CLIP_MIN_SAMPLES: usize = 24;
 const RIPPLE_CLIP_MAX_SAMPLES: usize = 96;
 const MAX_RIPPLES: usize = 10;
+const TOUCH_CLICK_SLOP: f32 = 8.0;
 
 /// A Material 3 button with Android-style bounded press ripples.
 pub struct Button<'a, Message, Renderer = iced_widget::Renderer>
@@ -137,6 +138,7 @@ where
 #[derive(Debug, Clone)]
 struct ButtonState {
     is_pressed: bool,
+    touch_press_position: Option<Point>,
     active_ripple: Option<Ripple>,
     exiting_ripples: Vec<Ripple>,
     last_status: Option<Status>,
@@ -147,6 +149,7 @@ impl Default for ButtonState {
     fn default() -> Self {
         Self {
             is_pressed: false,
+            touch_press_position: None,
             active_ripple: None,
             exiting_ripples: Vec::new(),
             last_status: None,
@@ -169,6 +172,7 @@ impl ButtonState {
 
     fn release(&mut self, now: Instant) {
         self.is_pressed = false;
+        self.touch_press_position = None;
 
         if let Some(mut ripple) = self.active_ripple.take() {
             ripple.exit(now);
@@ -406,9 +410,18 @@ where
                 if self.on_press.is_some() {
                     if let Some(origin) = press_origin(event, bounds, cursor) {
                         state.press(origin, now_or_current());
+                        state.touch_press_position = touch_position(event, cursor);
                         shell.capture_event();
                         shell.request_redraw();
                     }
+                }
+            }
+            Event::Touch(touch::Event::FingerMoved { .. }) => {
+                if state.is_pressed
+                    && touch_moved_beyond_click_slop(state.touch_press_position, event, cursor)
+                {
+                    state.cancel(now_or_current());
+                    shell.request_redraw();
                 }
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
@@ -667,6 +680,43 @@ fn release_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> b
         Event::Touch(touch::Event::FingerLifted { position, .. }) => bounds.contains(*position),
         _ => cursor.is_over(bounds),
     }
+}
+
+fn touch_position(event: &Event, cursor: mouse::Cursor) -> Option<Point> {
+    if cursor.position().is_some() {
+        return cursor.position();
+    }
+
+    if cursor.is_levitating() {
+        return None;
+    }
+
+    match event {
+        Event::Touch(
+            touch::Event::FingerPressed { position, .. }
+            | touch::Event::FingerMoved { position, .. }
+            | touch::Event::FingerLifted { position, .. }
+            | touch::Event::FingerLost { position, .. },
+        ) => Some(*position),
+        _ => None,
+    }
+}
+
+fn touch_moved_beyond_click_slop(
+    press_position: Option<Point>,
+    event: &Event,
+    cursor: mouse::Cursor,
+) -> bool {
+    let Some(press_position) = press_position else {
+        return false;
+    };
+    let Some(position) = touch_position(event, cursor) else {
+        return false;
+    };
+    let dx = position.x - press_position.x;
+    let dy = position.y - press_position.y;
+
+    dx * dx + dy * dy > TOUCH_CLICK_SLOP * TOUCH_CLICK_SLOP
 }
 
 fn relative_position(position: Point, bounds: Rectangle) -> Option<Point> {
@@ -1285,6 +1335,30 @@ mod tests {
             press_origin(&event, bounds, mouse::Cursor::Unavailable),
             Some(Point::new(15.0, 15.0))
         );
+    }
+
+    #[test]
+    fn touch_move_beyond_click_slop_cancels_click_candidate() {
+        let press_position = Some(Point::new(25.0, 35.0));
+        let small_move = Event::Touch(touch::Event::FingerMoved {
+            id: touch::Finger(0),
+            position: Point::new(25.0 + TOUCH_CLICK_SLOP / 2.0, 35.0),
+        });
+        let scroll_move = Event::Touch(touch::Event::FingerMoved {
+            id: touch::Finger(0),
+            position: Point::new(25.0 + TOUCH_CLICK_SLOP + 1.0, 35.0),
+        });
+
+        assert!(!touch_moved_beyond_click_slop(
+            press_position,
+            &small_move,
+            mouse::Cursor::Unavailable
+        ));
+        assert!(touch_moved_beyond_click_slop(
+            press_position,
+            &scroll_move,
+            mouse::Cursor::Unavailable
+        ));
     }
 }
 

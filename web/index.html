@@ -26,17 +26,45 @@
     <script>
       (() => {
         const SENTINEL = "\u200b";
+        const REFOCUS_AFTER_SHOW_MS = 250;
+        const TEXT_REGION_TOUCH_SLOP = 8;
         let input = null;
         let active = false;
         let composing = false;
         let pendingDelete = null;
         let pendingDeleteHandle = 0;
+        let refocusFrame = 0;
+        let lastShowAt = 0;
+        let textRegions = [];
+        let textRegionBatchOpen = false;
+        let touchGesture = null;
+        let textActivation = null;
+        let bridgedCanvas = null;
+        let bridgeAbort = null;
 
         const touchKeyboard = () =>
           navigator.maxTouchPoints > 0 ||
           window.matchMedia("(pointer: coarse)").matches;
 
         const canvas = () => document.querySelector("canvas");
+
+        const hideInputFromAssistiveTechnology = () => {
+          if (!input) {
+            return;
+          }
+
+          input.setAttribute("aria-hidden", "true");
+          input.setAttribute("inert", "");
+        };
+
+        const showInputToAssistiveTechnology = () => {
+          if (!input) {
+            return;
+          }
+
+          input.removeAttribute("aria-hidden");
+          input.removeAttribute("inert");
+        };
 
         const codeFor = (key) => {
           if (key.length === 1) {
@@ -94,6 +122,13 @@
           pendingDelete = null;
         };
 
+        const clearRefocus = () => {
+          if (refocusFrame) {
+            window.cancelAnimationFrame(refocusFrame);
+            refocusFrame = 0;
+          }
+        };
+
         const resetInput = () => {
           if (!input) {
             return;
@@ -104,6 +139,66 @@
           try {
             input.setSelectionRange(SENTINEL.length, SENTINEL.length);
           } catch (_) {}
+        };
+
+        const focusInput = () => {
+          if (!input) {
+            return;
+          }
+
+          showInputToAssistiveTechnology();
+          input.focus({ preventScroll: true });
+          resetInput();
+        };
+
+        const activateInput = () => {
+          if (!ensureInput()) {
+            return;
+          }
+
+          active = true;
+          lastShowAt = Date.now();
+          clearRefocus();
+          focusInput();
+        };
+
+        const deactivateInput = () => {
+          active = false;
+          lastShowAt = 0;
+          clearRefocus();
+          clearPendingDelete();
+
+          if (!input) {
+            return;
+          }
+
+          input.blur();
+          resetInput();
+          hideInputFromAssistiveTechnology();
+        };
+
+        const scheduleRefocus = () => {
+          clearRefocus();
+
+          refocusFrame = window.requestAnimationFrame(() => {
+            refocusFrame = 0;
+
+            const target = canvas();
+            const focused = document.activeElement;
+            if (
+              !active ||
+              !input ||
+              focused === input ||
+              (focused &&
+                focused !== target &&
+                focused !== document.body &&
+                focused !== document.documentElement)
+            ) {
+              return;
+            }
+
+            focusInput();
+          });
         };
 
         const sendText = (text) => {
@@ -143,19 +238,201 @@
           resetInput();
         };
 
+        const canvasPoint = (event) => {
+          const target = canvas();
+
+          if (!target) {
+            return null;
+          }
+
+          const rect = target.getBoundingClientRect();
+          return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+          };
+        };
+
+        const pointInTextRegion = (point) =>
+          textRegions.some(
+            (region) =>
+              point.x >= region.x &&
+              point.x <= region.x + region.width &&
+              point.y >= region.y &&
+              point.y <= region.y + region.height,
+          );
+
+        const isTouchPointer = (event) =>
+          event.pointerType === "touch" ||
+          event.pointerType === "pen" ||
+          (event.pointerType === "" && touchKeyboard());
+
+        const textActivationMatches = (event) =>
+          textActivation && textActivation.pointerId === event.pointerId;
+
+        const touchGestureMatches = (event) =>
+          touchGesture && touchGesture.pointerId === event.pointerId;
+
+        const invalidateTextRegions = () => {
+          textRegions = [];
+          textRegionBatchOpen = false;
+          textActivation = null;
+        };
+
+        const beginTextActivation = (event) => {
+          if (!touchKeyboard() || !isTouchPointer(event)) {
+            textActivation = null;
+            touchGesture = null;
+            return;
+          }
+
+          const point = canvasPoint(event);
+          touchGesture = point
+            ? {
+                pointerId: event.pointerId,
+                x: point.x,
+                y: point.y,
+              }
+            : null;
+
+          if (!point || !pointInTextRegion(point)) {
+            textActivation = null;
+            deactivateInput();
+            return;
+          }
+
+          if (!ensureInput()) {
+            textActivation = null;
+            return;
+          }
+
+          textActivation = {
+            pointerId: event.pointerId,
+            x: point.x,
+            y: point.y,
+          };
+        };
+
+        const moveTextActivation = (event) => {
+          const point = canvasPoint(event);
+
+          if (touchGestureMatches(event)) {
+            if (!point) {
+              touchGesture = null;
+              invalidateTextRegions();
+              deactivateInput();
+              return;
+            }
+
+            const dx = point.x - touchGesture.x;
+            const dy = point.y - touchGesture.y;
+
+            if (
+              dx * dx + dy * dy >
+              TEXT_REGION_TOUCH_SLOP * TEXT_REGION_TOUCH_SLOP
+            ) {
+              touchGesture = null;
+              invalidateTextRegions();
+              deactivateInput();
+              return;
+            }
+          }
+
+          if (!textActivationMatches(event)) {
+            return;
+          }
+
+          if (!point) {
+            textActivation = null;
+            return;
+          }
+
+          const dx = point.x - textActivation.x;
+          const dy = point.y - textActivation.y;
+
+          if (dx * dx + dy * dy > TEXT_REGION_TOUCH_SLOP * TEXT_REGION_TOUCH_SLOP) {
+            textActivation = null;
+          }
+        };
+
+        const finishTextActivation = (event) => {
+          if (!textActivationMatches(event)) {
+            return;
+          }
+
+          const point = canvasPoint(event);
+          textActivation = null;
+          if (touchGestureMatches(event)) {
+            touchGesture = null;
+          }
+
+          if (!point || !pointInTextRegion(point)) {
+            return;
+          }
+
+          activateInput();
+        };
+
+        const installCanvasActivationBridge = () => {
+          const target = canvas();
+
+          if (!target || target === bridgedCanvas) {
+            return;
+          }
+
+          if (bridgeAbort) {
+            bridgeAbort.abort();
+          }
+
+          const controller = new AbortController();
+          const options = {
+            capture: true,
+            passive: true,
+            signal: controller.signal,
+          };
+
+          target.addEventListener("pointerdown", beginTextActivation, options);
+          target.addEventListener("pointermove", moveTextActivation, options);
+          target.addEventListener("pointerup", finishTextActivation, options);
+          target.addEventListener(
+            "wheel",
+            () => {
+              invalidateTextRegions();
+              deactivateInput();
+            },
+            options,
+          );
+          target.addEventListener(
+            "pointercancel",
+            () => {
+              textActivation = null;
+              touchGesture = null;
+            },
+            options,
+          );
+
+          bridgedCanvas = target;
+          bridgeAbort = controller;
+        };
+
         const ensureInput = () => {
           if (input) {
             return input;
           }
 
+          if (!document.body) {
+            return null;
+          }
+
           input = document.createElement("input");
+          input.id = "iced-material-mobile-keyboard";
           input.autocapitalize = "off";
           input.autocomplete = "off";
           input.autocorrect = "off";
           input.inputMode = "text";
           input.spellcheck = false;
           input.enterKeyHint = "done";
-          input.setAttribute("aria-hidden", "true");
+          input.tabIndex = -1;
+          input.setAttribute("aria-label", "Text input");
           input.style.cssText = [
             "position:fixed",
             "left:0",
@@ -163,7 +440,7 @@
             "width:1px",
             "height:1px",
             "font-size:16px",
-            "opacity:0",
+            "opacity:0.01",
             "color:transparent",
             "background:transparent",
             "border:0",
@@ -222,37 +499,87 @@
             window.setTimeout(handleInput, 0);
           });
           input.addEventListener("blur", () => {
-            active = false;
             clearPendingDelete();
+
+            const recentlyShown =
+              Date.now() - lastShowAt <= REFOCUS_AFTER_SHOW_MS;
+
+            if (active && recentlyShown) {
+              scheduleRefocus();
+              return;
+            }
+
+            active = false;
+            clearRefocus();
             resetInput();
+            hideInputFromAssistiveTechnology();
           });
 
           document.body.appendChild(input);
           resetInput();
+          hideInputFromAssistiveTechnology();
 
           return input;
         };
+
+        const mountInput = () => {
+          if (touchKeyboard()) {
+            ensureInput();
+            installCanvasActivationBridge();
+          }
+        };
+
+        window.addEventListener("resize", invalidateTextRegions, {
+          passive: true,
+        });
+        window.visualViewport?.addEventListener("resize", invalidateTextRegions, {
+          passive: true,
+        });
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", mountInput, {
+            once: true,
+          });
+        } else {
+          mountInput();
+        }
 
         window.__icedMaterialShowMobileKeyboard = () => {
           if (!touchKeyboard()) {
             return;
           }
 
-          const target = ensureInput();
-          active = true;
-          resetInput();
-          target.focus({ preventScroll: true });
+          activateInput();
+
+          window.requestAnimationFrame(() => {
+            if (!active || !input) {
+              return;
+            }
+
+            focusInput();
+          });
         };
 
-        window.__icedMaterialHideMobileKeyboard = () => {
-          if (!input) {
+        window.__icedMaterialRegisterTextRegion = (x, y, width, height) => {
+          if (!touchKeyboard() || width <= 0 || height <= 0) {
             return;
           }
 
-          active = false;
-          clearPendingDelete();
-          input.blur();
-          resetInput();
+          if (!textRegionBatchOpen) {
+            textRegionBatchOpen = true;
+            textRegions = [];
+
+            window.queueMicrotask(() => {
+              textRegionBatchOpen = false;
+            });
+          }
+
+          textRegions.push({ x, y, width, height });
+          installCanvasActivationBridge();
+        };
+
+        window.__icedMaterialHideMobileKeyboard = () => {
+          deactivateInput();
         };
       })();
     </script>

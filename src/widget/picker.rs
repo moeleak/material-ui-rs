@@ -1,5 +1,6 @@
 //! Material 3 date and time picker constructors.
 
+use std::cell::Cell;
 use std::f32::consts::{FRAC_PI_2, TAU};
 use std::fmt;
 use std::ops::{Range, RangeInclusive};
@@ -13,10 +14,9 @@ use iced_widget::core::widget::{self, Tree, tree};
 use iced_widget::core::{
     Background, Border, Clipboard, Color, Element, Event, Layout, Length, Padding, Point,
     Rectangle, Shell, Size, Vector, Widget, alignment, border, event, layout, mouse, overlay,
-    renderer,
+    renderer, touch, window,
 };
 use iced_widget::graphics::geometry;
-use iced_widget::scrollable::{Direction, Scrollbar};
 use iced_widget::text::{self, LineHeight};
 use iced_widget::{Column, Container, Row, Scrollable, Space, Stack, Text};
 
@@ -58,6 +58,10 @@ const CLOCK_LABEL_CLIP_STRIPS: usize = 40;
 const DATE_DISPLAY_PARALLAX_OFFSET: f32 = -48.0;
 const RANGE_PICKER_RENDER_MONTHS_BEFORE: i32 = 2;
 const RANGE_PICKER_RENDER_MONTHS_AFTER: i32 = 24;
+const TIME_SCROLL_TOUCH_SLOP: f32 = 8.0;
+const TIME_SCROLL_FLING_MIN_VELOCITY: f32 = 120.0;
+const TIME_SCROLL_FLING_MAX_VELOCITY: f32 = 2800.0;
+const TIME_SCROLL_FLING_DECELERATION: f32 = 3200.0;
 
 /// A day of week used for date picker layout and formatting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -2147,7 +2151,7 @@ pub fn time_picker<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     time_picker_with_layout(state, on_action, TimePickerLayout::Vertical)
@@ -2161,7 +2165,7 @@ pub fn time_picker_with_layout<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     Container::new(time_picker_body(state, on_action, layout))
@@ -2180,7 +2184,7 @@ pub fn time_picker_dialog<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     let content = match display_mode {
@@ -2248,7 +2252,7 @@ pub fn rich_time_picker_dialog<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     let content = match display_mode {
@@ -2483,7 +2487,7 @@ fn time_picker_body<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     let clock = clock_face(state, on_action.clone());
@@ -2595,58 +2599,23 @@ where
     Renderer: geometry::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    let mut column = Column::new();
-    let selected_value = time_scroll_selected_value(state, selection);
-
-    for value in time_scroll_values(state, selection) {
-        let label = time_scroll_label(value, selection);
-        let selected = value == selected_value;
-        let action = match selection {
-            TimePickerSelectionMode::Hour => TimePickerAction::SelectHour(value),
-            TimePickerSelectionMode::Minute => TimePickerAction::SelectMinute(value),
-        };
-
-        column = column.push(time_scroll_item(label, selected).on_press(on_action.clone()(action)));
-    }
-
-    let on_scroll_action = on_action.clone();
-    let selection_layer = Container::new(
-        Container::new(Space::new())
-            .width(Length::Fixed(
-                tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
-            ))
-            .height(Length::Fixed(
-                tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT,
-            ))
-            .style(time_scroll_selection_layer_style),
-    )
+    let scroll_field = Canvas::new(TimeScrollField {
+        selection,
+        is_24_hour: state.is_24_hour,
+        selected_value: time_scroll_selected_value(state, selection),
+        anchor_value: time_scroll_anchor_value(state, selection),
+        option_count: time_scroll_option_count(state, selection),
+        on_action: Arc::new(on_action),
+    })
     .width(Length::Fixed(
         tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
     ))
     .height(Length::Fixed(
         tokens::component::time_picker::TIME_SCROLL_FIELD_HEIGHT,
-    ))
-    .align_y(alignment::Vertical::Center);
-
-    let scrollable = Scrollable::with_direction(column, Direction::Vertical(Scrollbar::hidden()))
-        .height(Length::Fixed(
-            tokens::component::time_picker::TIME_SCROLL_FIELD_HEIGHT,
-        ))
-        .width(Length::Fixed(
-            tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
-        ))
-        .on_scroll(move |viewport| {
-            on_scroll_action(time_scroll_action_for_offset(
-                state,
-                selection,
-                viewport.absolute_offset().y,
-            ))
-        });
+    ));
 
     Container::new(
-        Stack::new()
-            .push(selection_layer)
-            .push(scrollable)
+        scroll_field
             .width(Length::Fixed(
                 tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
             ))
@@ -2665,42 +2634,471 @@ where
     .into()
 }
 
-fn time_scroll_item<'a, Message, Renderer>(
-    label: String,
-    selected: bool,
-) -> Button<'a, Message, Renderer>
-where
-    Message: Clone + 'a,
-    Renderer: geometry::Renderer + core_text::Renderer + 'a,
-    iced_widget::core::Font: Into<Renderer::Font>,
-{
-    let scale = if selected {
-        tokens::component::time_picker::TIME_SELECTOR_LABEL_TEXT
-    } else {
-        tokens::component::time_picker::CLOCK_DIAL_LABEL_TEXT
-    };
-    let label = Container::new(
-        Text::new(label)
-            .size(scale.size)
-            .line_height(LineHeight::Absolute(scale.size.into()))
-            .font(fonts::roboto_for_type_scale(scale)),
-    )
-    .center_x(Length::Fixed(
-        tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
-    ))
-    .center_y(Length::Fixed(
-        tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT,
-    ));
+struct TimeScrollField<F> {
+    selection: TimePickerSelectionMode,
+    is_24_hour: bool,
+    selected_value: u8,
+    anchor_value: u8,
+    option_count: u8,
+    on_action: Arc<F>,
+}
 
-    Button::new(label)
-        .width(Length::Fixed(
-            tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
-        ))
-        .height(Length::Fixed(
-            tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT,
-        ))
-        .padding(Padding::ZERO)
-        .style(move |theme, status| time_scroll_item_style(theme, status, selected))
+#[derive(Debug, Clone, Default)]
+struct TimeScrollFieldState {
+    offset_y: f32,
+    velocity_y: f32,
+    last_frame: Option<Instant>,
+    last_reported_value: Option<u8>,
+    drag: Option<TimeScrollDrag>,
+    selection: Option<TimePickerSelectionMode>,
+    anchor_value: Option<u8>,
+    option_count: u8,
+    is_24_hour: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TimeScrollPointer {
+    Mouse,
+    Touch(touch::Finger),
+}
+
+impl TimeScrollPointer {
+    fn is_touch(self) -> bool {
+        matches!(self, Self::Touch(_))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TimeScrollDrag {
+    pointer: TimeScrollPointer,
+    start: Point,
+    last: Point,
+    last_at: Instant,
+    has_scrolled: bool,
+}
+
+impl TimeScrollDrag {
+    fn new(pointer: TimeScrollPointer, position: Point, now: Instant) -> Self {
+        Self {
+            pointer,
+            start: position,
+            last: position,
+            last_at: now,
+            has_scrolled: false,
+        }
+    }
+
+    fn moved_beyond_slop(self, position: Point) -> bool {
+        let dx = position.x - self.start.x;
+        let dy = position.y - self.start.y;
+
+        dx * dx + dy * dy > TIME_SCROLL_TOUCH_SLOP * TIME_SCROLL_TOUCH_SLOP
+    }
+}
+
+impl<Message, F, Renderer> canvas::Program<Message, Theme, Renderer> for TimeScrollField<F>
+where
+    Message: Clone,
+    F: Fn(TimePickerAction) -> Message,
+    Renderer: geometry::Renderer,
+{
+    type State = TimeScrollFieldState;
+
+    fn update(
+        &self,
+        state: &mut Self::State,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> Option<canvas::Action<Message>> {
+        self.sync_state(state);
+
+        match event {
+            event::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
+                self.press(state, event, bounds, cursor, TimeScrollPointer::Mouse)
+            }
+            event::Event::Touch(touch::Event::FingerPressed { id, .. }) => {
+                self.press(state, event, bounds, cursor, TimeScrollPointer::Touch(*id))
+            }
+            event::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                self.drag(state, event, bounds, cursor, TimeScrollPointer::Mouse)
+            }
+            event::Event::Touch(touch::Event::FingerMoved { id, .. }) => {
+                self.drag(state, event, bounds, cursor, TimeScrollPointer::Touch(*id))
+            }
+            event::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                self.release(state, event, bounds, cursor, TimeScrollPointer::Mouse)
+            }
+            event::Event::Touch(
+                touch::Event::FingerLifted { id, .. } | touch::Event::FingerLost { id, .. },
+            ) => self.release(state, event, bounds, cursor, TimeScrollPointer::Touch(*id)),
+            event::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+                if cursor.position_over(bounds).is_none() {
+                    return None;
+                }
+
+                state.velocity_y = 0.0;
+                state.last_frame = None;
+                let delta_y = match *delta {
+                    mouse::ScrollDelta::Lines { y, .. } => -y * 60.0,
+                    mouse::ScrollDelta::Pixels { y, .. } => -y,
+                };
+
+                if self.scroll_by(state, delta_y) {
+                    Some(self.scroll_or_redraw(state))
+                } else {
+                    Some(canvas::Action::capture())
+                }
+            }
+            event::Event::Window(window::Event::RedrawRequested(now)) => {
+                self.advance_inertia(state, *now)
+            }
+            _ => None,
+        }
+    }
+
+    fn draw(
+        &self,
+        state: &Self::State,
+        renderer: &Renderer,
+        theme: &Theme,
+        bounds: Rectangle,
+        _cursor: mouse::Cursor,
+    ) -> Vec<Geometry<Renderer>> {
+        let mut frame = Frame::new(renderer, bounds.size());
+        let width = tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH;
+        let height = tokens::component::time_picker::TIME_SCROLL_FIELD_HEIGHT;
+        let item_height = tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT;
+        let offset_y = self.effective_offset(state);
+        let selected_row = time_scroll_row_offset_for_offset(self.option_count, offset_y);
+
+        let layer_style = time_scroll_selection_layer_style(theme);
+        if let Some(Background::Color(color)) = layer_style.background {
+            let layer_top = (height - item_height) / 2.0;
+            let layer = Path::rounded_rectangle(
+                Point::new(0.0, layer_top),
+                Size::new(width, item_height),
+                layer_style.border.radius,
+            );
+            frame.fill(&layer, color);
+        }
+
+        for row_offset in -1..=i16::from(self.option_count) {
+            let row_index = row_offset + 1;
+            let top = f32::from(row_index) * item_height - offset_y;
+
+            if top + item_height < 0.0 || top > height {
+                continue;
+            }
+
+            let value = self.value_for_row_offset(row_offset);
+            let selected = row_offset == selected_row;
+            let scale = if selected {
+                tokens::component::time_picker::TIME_SELECTOR_LABEL_TEXT
+            } else {
+                tokens::component::time_picker::CLOCK_DIAL_LABEL_TEXT
+            };
+            let style = time_scroll_item_style(theme, Status::Active, selected);
+            let text = CanvasText {
+                content: time_scroll_label(value, self.selection),
+                position: Point::new(width / 2.0, top + item_height / 2.0),
+                max_width: width,
+                color: style.text_color,
+                size: scale.size.into(),
+                line_height: LineHeight::Absolute(scale.size.into()),
+                font: fonts::roboto_for_type_scale(scale),
+                align_x: core_text::Alignment::Center,
+                align_y: alignment::Vertical::Center,
+                shaping: text::Shaping::Advanced,
+            };
+
+            frame.fill_text(text);
+        }
+
+        vec![frame.into_geometry()]
+    }
+
+    fn mouse_interaction(
+        &self,
+        _state: &Self::State,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+    ) -> mouse::Interaction {
+        if cursor.is_over(bounds) {
+            mouse::Interaction::Pointer
+        } else {
+            mouse::Interaction::default()
+        }
+    }
+}
+
+impl<F> TimeScrollField<F> {
+    fn sync_state(&self, state: &mut TimeScrollFieldState) {
+        if state.selection != Some(self.selection)
+            || state.anchor_value != Some(self.anchor_value)
+            || state.option_count != self.option_count
+            || state.is_24_hour != self.is_24_hour
+        {
+            state.offset_y = 0.0;
+            state.velocity_y = 0.0;
+            state.last_frame = None;
+            state.last_reported_value = Some(self.selected_value);
+            state.drag = None;
+            state.selection = Some(self.selection);
+            state.anchor_value = Some(self.anchor_value);
+            state.option_count = self.option_count;
+            state.is_24_hour = self.is_24_hour;
+        } else {
+            state.offset_y = state.offset_y.clamp(0.0, self.max_offset());
+        }
+    }
+
+    fn effective_offset(&self, state: &TimeScrollFieldState) -> f32 {
+        if state.selection == Some(self.selection)
+            && state.anchor_value == Some(self.anchor_value)
+            && state.option_count == self.option_count
+            && state.is_24_hour == self.is_24_hour
+        {
+            state.offset_y.clamp(0.0, self.max_offset())
+        } else {
+            0.0
+        }
+    }
+
+    fn press<Message>(
+        &self,
+        state: &mut TimeScrollFieldState,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        pointer: TimeScrollPointer,
+    ) -> Option<canvas::Action<Message>> {
+        let position = event_position(event, bounds, cursor)?;
+        if !local_point_is_in_bounds(position, bounds.size()) {
+            return None;
+        }
+
+        state.velocity_y = 0.0;
+        state.last_frame = None;
+        state.drag = Some(TimeScrollDrag::new(pointer, position, Instant::now()));
+
+        Some(canvas::Action::capture())
+    }
+
+    fn drag<Message>(
+        &self,
+        state: &mut TimeScrollFieldState,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        pointer: TimeScrollPointer,
+    ) -> Option<canvas::Action<Message>>
+    where
+        F: Fn(TimePickerAction) -> Message,
+    {
+        let position = event_position(event, bounds, cursor)?;
+        let now = Instant::now();
+        let Some(drag) = state.drag.as_mut() else {
+            return None;
+        };
+
+        if drag.pointer != pointer {
+            return None;
+        }
+
+        let delta_y = if drag.has_scrolled {
+            drag.last.y - position.y
+        } else if drag.moved_beyond_slop(position) {
+            drag.has_scrolled = true;
+            drag.start.y - position.y
+        } else {
+            drag.last = position;
+            drag.last_at = now;
+            return Some(canvas::Action::capture());
+        };
+        let elapsed = now.duration_since(drag.last_at).as_secs_f32();
+
+        drag.last = position;
+        drag.last_at = now;
+
+        if elapsed > 0.0 {
+            state.velocity_y = (delta_y / elapsed).clamp(
+                -TIME_SCROLL_FLING_MAX_VELOCITY,
+                TIME_SCROLL_FLING_MAX_VELOCITY,
+            );
+        }
+
+        if self.scroll_by(state, delta_y) {
+            Some(self.scroll_or_redraw(state))
+        } else {
+            Some(canvas::Action::capture())
+        }
+    }
+
+    fn release<Message>(
+        &self,
+        state: &mut TimeScrollFieldState,
+        event: &canvas::Event,
+        bounds: Rectangle,
+        cursor: mouse::Cursor,
+        pointer: TimeScrollPointer,
+    ) -> Option<canvas::Action<Message>>
+    where
+        F: Fn(TimePickerAction) -> Message,
+    {
+        let position = event_position(event, bounds, cursor);
+        let drag = state.drag?;
+
+        if drag.pointer != pointer {
+            return None;
+        }
+
+        state.drag = None;
+
+        if !drag.has_scrolled {
+            let position = position.unwrap_or(drag.last);
+            let tap_offset = self.effective_offset(state);
+            state.offset_y = 0.0;
+            state.velocity_y = 0.0;
+            state.last_frame = None;
+            state.last_reported_value = Some(self.selected_value);
+            let action = self.select_action_for_position(position.y, tap_offset);
+
+            return Some(canvas::Action::publish((self.on_action)(action)).and_capture());
+        }
+
+        if pointer.is_touch() && state.velocity_y.abs() >= TIME_SCROLL_FLING_MIN_VELOCITY {
+            state.velocity_y = state.velocity_y.clamp(
+                -TIME_SCROLL_FLING_MAX_VELOCITY,
+                TIME_SCROLL_FLING_MAX_VELOCITY,
+            );
+            state.last_frame = None;
+
+            Some(canvas::Action::request_redraw().and_capture())
+        } else {
+            state.velocity_y = 0.0;
+            state.last_frame = None;
+            self.settle(state);
+            Some(self.force_scroll_action(state))
+        }
+    }
+
+    fn advance_inertia<Message>(
+        &self,
+        state: &mut TimeScrollFieldState,
+        now: Instant,
+    ) -> Option<canvas::Action<Message>>
+    where
+        F: Fn(TimePickerAction) -> Message,
+    {
+        if state.velocity_y.abs() < f32::EPSILON {
+            return None;
+        }
+
+        let elapsed = state
+            .last_frame
+            .map(|last_frame| now.duration_since(last_frame).as_secs_f32())
+            .unwrap_or(1.0 / 60.0)
+            .clamp(0.0, 1.0 / 15.0);
+
+        if elapsed <= 0.0 {
+            return Some(canvas::Action::request_redraw().and_capture());
+        }
+
+        state.last_frame = Some(now);
+        let velocity = state.velocity_y;
+        let moved = self.scroll_by(state, velocity * elapsed);
+        let speed = (velocity.abs() - TIME_SCROLL_FLING_DECELERATION * elapsed).max(0.0);
+
+        state.velocity_y = velocity.signum() * speed;
+
+        if !moved || speed < TIME_SCROLL_FLING_MIN_VELOCITY {
+            state.velocity_y = 0.0;
+            state.last_frame = None;
+            self.settle(state);
+
+            return Some(self.force_scroll_action(state));
+        }
+
+        Some(self.scroll_or_redraw(state))
+    }
+
+    fn scroll_or_redraw<Message>(&self, state: &mut TimeScrollFieldState) -> canvas::Action<Message>
+    where
+        F: Fn(TimePickerAction) -> Message,
+    {
+        let value = self.value_for_offset(state.offset_y);
+
+        if state.last_reported_value != Some(value) {
+            state.last_reported_value = Some(value);
+            canvas::Action::publish((self.on_action)(self.scroll_action(value))).and_capture()
+        } else {
+            canvas::Action::request_redraw().and_capture()
+        }
+    }
+
+    fn force_scroll_action<Message>(
+        &self,
+        state: &mut TimeScrollFieldState,
+    ) -> canvas::Action<Message>
+    where
+        F: Fn(TimePickerAction) -> Message,
+    {
+        let value = self.value_for_offset(state.offset_y);
+        state.last_reported_value = Some(value);
+
+        canvas::Action::publish((self.on_action)(self.scroll_action(value))).and_capture()
+    }
+
+    fn scroll_by(&self, state: &mut TimeScrollFieldState, delta_y: f32) -> bool {
+        let previous = state.offset_y;
+        state.offset_y = (state.offset_y + delta_y).clamp(0.0, self.max_offset());
+
+        (state.offset_y - previous).abs() > f32::EPSILON
+    }
+
+    fn settle(&self, state: &mut TimeScrollFieldState) {
+        let row_offset = time_scroll_row_offset_for_offset(self.option_count, state.offset_y);
+        state.offset_y =
+            f32::from(row_offset) * tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT;
+    }
+
+    fn max_offset(&self) -> f32 {
+        time_scroll_max_offset(self.option_count)
+    }
+
+    fn value_for_offset(&self, offset_y: f32) -> u8 {
+        let row_offset = time_scroll_row_offset_for_offset(self.option_count, offset_y);
+
+        self.value_for_row_offset(row_offset)
+    }
+
+    fn value_for_row_offset(&self, row_offset: i16) -> u8 {
+        time_scroll_value_for_anchor(
+            self.anchor_value,
+            self.selection,
+            self.is_24_hour,
+            row_offset,
+        )
+    }
+
+    fn scroll_action(&self, value: u8) -> TimePickerAction {
+        match self.selection {
+            TimePickerSelectionMode::Hour => TimePickerAction::ScrollHour(value),
+            TimePickerSelectionMode::Minute => TimePickerAction::ScrollMinute(value),
+        }
+    }
+
+    fn select_action_for_position(&self, y: f32, offset_y: f32) -> TimePickerAction {
+        let item_height = tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT;
+        let row_offset = ((y + offset_y) / item_height).floor() as i16 - 1;
+        let value = self.value_for_row_offset(row_offset.clamp(-1, i16::from(self.option_count)));
+
+        match self.selection {
+            TimePickerSelectionMode::Hour => TimePickerAction::SelectHour(value),
+            TimePickerSelectionMode::Minute => TimePickerAction::SelectMinute(value),
+        }
+    }
 }
 
 fn time_picker_dialog_title<'a, Message, Renderer>(
@@ -4608,7 +5006,7 @@ fn clock_face<'a, Message, Renderer>(
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + 'a,
+    Renderer: geometry::Renderer + 'static + 'a,
 {
     Canvas::new(ClockFace {
         hour: state.hour,
@@ -4649,9 +5047,9 @@ impl<Message, F, Renderer> canvas::Program<Message, Theme, Renderer> for ClockFa
 where
     Message: Clone,
     F: Fn(TimePickerAction) -> Message,
-    Renderer: geometry::Renderer,
+    Renderer: geometry::Renderer + 'static,
 {
-    type State = ClockFaceState;
+    type State = ClockFaceState<Renderer>;
 
     fn update(
         &self,
@@ -4661,82 +5059,102 @@ where
         cursor: mouse::Cursor,
     ) -> Option<canvas::Action<Message>> {
         match event {
-            event::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | event::Event::Touch(iced_widget::core::touch::Event::FingerPressed { .. }) => {
+            event::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
                 let position = event_position(event, bounds, cursor)?;
-                if !bounds.contains(Point::new(position.x + bounds.x, position.y + bounds.y)) {
+                if !local_point_is_in_bounds(position, bounds.size()) {
                     return None;
                 }
-                state.is_dragging = true;
+                state.drag = Some(ClockFaceDrag::new(ClockFacePointer::Mouse, position));
                 let action = self.action_at(position, bounds.size());
                 Some(canvas::Action::publish((self.on_action)(action)).and_capture())
             }
-            event::Event::Mouse(mouse::Event::CursorMoved { .. })
-            | event::Event::Touch(iced_widget::core::touch::Event::FingerMoved { .. }) => {
-                if !state.is_dragging {
+            event::Event::Touch(touch::Event::FingerPressed { id, .. }) => {
+                if state.drag.is_some() {
                     return None;
                 }
 
                 let position = event_position(event, bounds, cursor)?;
+                if !local_point_is_in_bounds(position, bounds.size()) {
+                    return None;
+                }
+                state.drag = Some(ClockFaceDrag::new(ClockFacePointer::Touch(*id), position));
+                let action = self.action_at(position, bounds.size());
+                Some(canvas::Action::publish((self.on_action)(action)).and_capture())
+            }
+            event::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
+                if !state
+                    .drag
+                    .is_some_and(|drag| drag.pointer == ClockFacePointer::Mouse)
+                {
+                    return None;
+                }
+
+                let position = event_position(event, bounds, cursor)?;
+                if let Some(drag) = &mut state.drag {
+                    drag.update(position);
+                }
                 let action = self.drag_action_at(position, bounds.size());
                 Some(canvas::Action::publish((self.on_action)(action)).and_capture())
             }
-            event::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | event::Event::Touch(
-                iced_widget::core::touch::Event::FingerLifted { .. }
-                | iced_widget::core::touch::Event::FingerLost { .. },
-            ) => {
-                if state.is_dragging {
-                    state.is_dragging = false;
-                    let action = if self.auto_switch_to_minute
-                        && self.selection == TimePickerSelectionMode::Hour
-                    {
-                        TimePickerAction::SetSelection(TimePickerSelectionMode::Minute)
-                    } else {
-                        TimePickerAction::FinishDrag
-                    };
-
-                    Some(canvas::Action::publish((self.on_action)(action)).and_capture())
-                } else {
-                    None
+            event::Event::Touch(touch::Event::FingerMoved { id, .. }) => {
+                if !state
+                    .drag
+                    .is_some_and(|drag| drag.pointer == ClockFacePointer::Touch(*id))
+                {
+                    return None;
                 }
+
+                let position = event_position(event, bounds, cursor)?;
+                if let Some(drag) = &mut state.drag {
+                    drag.update(position);
+                }
+                let action = self.drag_action_at(position, bounds.size());
+                Some(canvas::Action::publish((self.on_action)(action)).and_capture())
             }
+            event::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+                self.finish_drag(state, ClockFacePointer::Mouse)
+            }
+            event::Event::Touch(
+                touch::Event::FingerLifted { id, .. } | touch::Event::FingerLost { id, .. },
+            ) => self.finish_drag(state, ClockFacePointer::Touch(*id)),
             _ => None,
         }
     }
 
     fn draw(
         &self,
-        _state: &Self::State,
+        state: &Self::State,
         renderer: &Renderer,
         theme: &Theme,
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry<Renderer>> {
-        let colors = theme.colors();
-        let mut frame = Frame::new(renderer, bounds.size());
-        let center = frame.center();
-        let radius = frame.width().min(frame.height()) / 2.0;
-        let dial = Path::circle(center, radius);
+        let render_key = self.render_key(theme);
 
-        frame.fill(&dial, colors.surface.container.highest);
-        self.draw_labels(
-            &mut frame,
-            theme,
-            center,
-            radius,
-            ClockLabelPass::Background,
-        );
-        self.draw_selector(&mut frame, theme, center, radius);
-        self.draw_labels(
-            &mut frame,
-            theme,
-            center,
-            radius,
-            ClockLabelPass::SelectedForeground,
-        );
+        if state.render_key.get() != Some(render_key) {
+            state.cache.clear();
+            state.render_key.set(Some(render_key));
+        }
 
-        vec![frame.into_geometry()]
+        let geometry = state.cache.draw(renderer, bounds.size(), |frame| {
+            let colors = theme.colors();
+            let center = frame.center();
+            let radius = frame.width().min(frame.height()) / 2.0;
+            let dial = Path::circle(center, radius);
+
+            frame.fill(&dial, colors.surface.container.highest);
+            self.draw_labels(frame, theme, center, radius, ClockLabelPass::Background);
+            self.draw_selector(frame, theme, center, radius);
+            self.draw_labels(
+                frame,
+                theme,
+                center,
+                radius,
+                ClockLabelPass::SelectedForeground,
+            );
+        });
+
+        vec![geometry]
     }
 
     fn mouse_interaction(
@@ -4753,9 +5171,67 @@ where
     }
 }
 
-#[derive(Debug, Clone, Default)]
-struct ClockFaceState {
-    is_dragging: bool,
+struct ClockFaceState<Renderer = iced_widget::Renderer>
+where
+    Renderer: geometry::Renderer,
+{
+    drag: Option<ClockFaceDrag>,
+    cache: canvas::Cache<Renderer>,
+    render_key: Cell<Option<ClockFaceRenderKey>>,
+}
+
+impl<Renderer> Default for ClockFaceState<Renderer>
+where
+    Renderer: geometry::Renderer,
+{
+    fn default() -> Self {
+        Self {
+            drag: None,
+            cache: canvas::Cache::new(),
+            render_key: Cell::new(None),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ClockFaceRenderKey {
+    hour: u8,
+    minute: u8,
+    is_24_hour: bool,
+    selection: TimePickerSelectionMode,
+    previous_selection: TimePickerSelectionMode,
+    selected_selection: TimePickerSelectionMode,
+    selection_progress: f32,
+    selector_angle: f32,
+    dial_color: Color,
+    selector_color: Color,
+    label_text_color: Color,
+    selected_text_color: Color,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClockFacePointer {
+    Mouse,
+    Touch(touch::Finger),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ClockFaceDrag {
+    pointer: ClockFacePointer,
+    current: Point,
+}
+
+impl ClockFaceDrag {
+    fn new(pointer: ClockFacePointer, start: Point) -> Self {
+        Self {
+            pointer,
+            current: start,
+        }
+    }
+
+    fn update(&mut self, position: Point) {
+        self.current = position;
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4768,6 +5244,30 @@ impl<F> ClockFace<F>
 where
     F: Sized,
 {
+    fn finish_drag<Message, Renderer>(
+        &self,
+        state: &mut ClockFaceState<Renderer>,
+        pointer: ClockFacePointer,
+    ) -> Option<canvas::Action<Message>>
+    where
+        F: Fn(TimePickerAction) -> Message,
+        Renderer: geometry::Renderer,
+    {
+        if state.drag.is_some_and(|drag| drag.pointer == pointer) {
+            state.drag = None;
+            let action =
+                if self.auto_switch_to_minute && self.selection == TimePickerSelectionMode::Hour {
+                    TimePickerAction::SetSelection(TimePickerSelectionMode::Minute)
+                } else {
+                    TimePickerAction::FinishDrag
+                };
+
+            Some(canvas::Action::publish((self.on_action)(action)).and_capture())
+        } else {
+            None
+        }
+    }
+
     fn action_at(&self, position: Point, size: Size) -> TimePickerAction {
         self.action_at_with_mode(position, size, false)
     }
@@ -4815,6 +5315,25 @@ where
             } else {
                 TimePickerAction::SelectHour(hour)
             }
+        }
+    }
+
+    fn render_key(&self, theme: &Theme) -> ClockFaceRenderKey {
+        let colors = theme.colors();
+
+        ClockFaceRenderKey {
+            hour: self.hour,
+            minute: self.minute,
+            is_24_hour: self.is_24_hour,
+            selection: self.selection,
+            previous_selection: self.previous_selection,
+            selected_selection: self.selected_selection,
+            selection_progress: self.selection_progress,
+            selector_angle: self.selector_angle,
+            dial_color: colors.surface.container.highest,
+            selector_color: colors.primary.color,
+            label_text_color: colors.surface.text,
+            selected_text_color: colors.primary.text,
         }
     }
 
@@ -5096,17 +5615,32 @@ fn event_position(
     bounds: Rectangle,
     cursor: mouse::Cursor,
 ) -> Option<Point> {
-    match event {
-        event::Event::Touch(
-            iced_widget::core::touch::Event::FingerPressed { position, .. }
-            | iced_widget::core::touch::Event::FingerMoved { position, .. }
-            | iced_widget::core::touch::Event::FingerLifted { position, .. }
-            | iced_widget::core::touch::Event::FingerLost { position, .. },
-        ) => Some(Point::new(position.x - bounds.x, position.y - bounds.y)),
-        _ => cursor
+    if cursor.position().is_some() {
+        return cursor
             .position()
-            .map(|position| Point::new(position.x - bounds.x, position.y - bounds.y)),
+            .map(|position| Point::new(position.x - bounds.x, position.y - bounds.y));
     }
+
+    if cursor.is_levitating() {
+        return None;
+    }
+
+    match event {
+        event::Event::Mouse(mouse::Event::CursorMoved { position }) => {
+            Some(Point::new(position.x - bounds.x, position.y - bounds.y))
+        }
+        event::Event::Touch(
+            touch::Event::FingerPressed { position, .. }
+            | touch::Event::FingerMoved { position, .. }
+            | touch::Event::FingerLifted { position, .. }
+            | touch::Event::FingerLost { position, .. },
+        ) => Some(Point::new(position.x - bounds.x, position.y - bounds.y)),
+        _ => None,
+    }
+}
+
+fn local_point_is_in_bounds(position: Point, size: Size) -> bool {
+    position.x >= 0.0 && position.y >= 0.0 && position.x <= size.width && position.y <= size.height
 }
 
 fn draw_clock_label<Renderer>(
@@ -5123,12 +5657,7 @@ fn draw_clock_label<Renderer>(
     Renderer: geometry::Renderer,
 {
     let text = clock_label_text(theme, center, radius, angle, label, selected, scale, alpha);
-
-    if selected {
-        frame.fill_text(text);
-    } else {
-        draw_canvas_text(frame, &text);
-    }
+    frame.fill_text(text);
 }
 
 fn draw_clock_label_clipped_to_circle<Renderer>(
@@ -5201,15 +5730,6 @@ fn clock_label_text(
         align_y: alignment::Vertical::Center,
         shaping: text::Shaping::Advanced,
     }
-}
-
-fn draw_canvas_text<Renderer>(frame: &mut Frame<Renderer>, text: &CanvasText)
-where
-    Renderer: geometry::Renderer,
-{
-    text.draw_with(|path, color| {
-        frame.fill(&path, color);
-    });
 }
 
 fn clock_label_position(center: Point, radius: f32, angle: f32) -> Point {
@@ -5947,6 +6467,7 @@ fn time_input_value(state: &TimePickerState, selection: TimePickerSelectionMode)
     }
 }
 
+#[cfg(test)]
 fn time_scroll_value(
     state: &TimePickerState,
     selection: TimePickerSelectionMode,
@@ -5954,15 +6475,26 @@ fn time_scroll_value(
 ) -> u8 {
     let anchor = time_scroll_anchor_value(state, selection);
 
+    time_scroll_value_for_anchor(anchor, selection, state.is_24_hour, offset)
+}
+
+fn time_scroll_value_for_anchor(
+    anchor: u8,
+    selection: TimePickerSelectionMode,
+    is_24_hour: bool,
+    offset: i16,
+) -> u8 {
+    let anchor = i16::from(anchor);
+
     match selection {
         TimePickerSelectionMode::Hour => {
-            if state.is_24_hour {
-                wrap_u8(i16::from(anchor) + offset, 24)
+            if is_24_hour {
+                wrap_u8(anchor + offset, 24)
             } else {
-                wrap_u8(i16::from(anchor) - 1 + offset, 12) + 1
+                wrap_u8(anchor - 1 + offset, 12) + 1
             }
         }
-        TimePickerSelectionMode::Minute => wrap_u8(i16::from(anchor) + offset, 60),
+        TimePickerSelectionMode::Minute => wrap_u8(anchor + offset, 60),
     }
 }
 
@@ -5989,6 +6521,7 @@ fn time_scroll_anchor_value(state: &TimePickerState, selection: TimePickerSelect
     }
 }
 
+#[cfg(test)]
 fn time_scroll_values(state: &TimePickerState, selection: TimePickerSelectionMode) -> Vec<u8> {
     let count = time_scroll_option_count(state, selection);
 
@@ -5997,22 +6530,36 @@ fn time_scroll_values(state: &TimePickerState, selection: TimePickerSelectionMod
         .collect()
 }
 
+#[cfg(test)]
 fn time_scroll_action_for_offset(
     state: &TimePickerState,
     selection: TimePickerSelectionMode,
     absolute_offset_y: f32,
 ) -> TimePickerAction {
-    let item_height = tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT;
-    let count = time_scroll_option_count(state, selection);
-    let row_offset = (absolute_offset_y / item_height)
-        .round()
-        .clamp(0.0, f32::from(count - 1)) as i16;
+    let row_offset = time_scroll_row_offset_for_offset(
+        time_scroll_option_count(state, selection),
+        absolute_offset_y,
+    );
     let value = time_scroll_value(state, selection, row_offset);
 
     match selection {
         TimePickerSelectionMode::Hour => TimePickerAction::ScrollHour(value),
         TimePickerSelectionMode::Minute => TimePickerAction::ScrollMinute(value),
     }
+}
+
+fn time_scroll_row_offset_for_offset(option_count: u8, absolute_offset_y: f32) -> i16 {
+    let item_height = tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT;
+    let max_row_offset = option_count.saturating_sub(1);
+
+    (absolute_offset_y / item_height)
+        .round()
+        .clamp(0.0, f32::from(max_row_offset)) as i16
+}
+
+fn time_scroll_max_offset(option_count: u8) -> f32 {
+    f32::from(option_count.saturating_sub(1))
+        * tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT
 }
 
 fn time_scroll_label(value: u8, selection: TimePickerSelectionMode) -> String {
@@ -7345,6 +7892,116 @@ mod tests {
     }
 
     #[test]
+    fn time_scroll_touch_drag_publishes_center_row_without_cursor() {
+        let field = TimeScrollField {
+            selection: TimePickerSelectionMode::Minute,
+            is_24_hour: true,
+            selected_value: 58,
+            anchor_value: 58,
+            option_count: 60,
+            on_action: Arc::new(|action: TimePickerAction| action),
+        };
+        let mut state = TimeScrollFieldState::default();
+        let bounds = Rectangle::new(
+            Point::ORIGIN,
+            Size::new(
+                tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
+                tokens::component::time_picker::TIME_SCROLL_FIELD_HEIGHT,
+            ),
+        );
+        let center = Point::new(bounds.width / 2.0, bounds.height / 2.0);
+
+        let _ = <TimeScrollField<_> as canvas::Program<
+            TimePickerAction,
+            Theme,
+            iced_widget::Renderer,
+        >>::update(
+            &field,
+            &mut state,
+            &event::Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(1),
+                position: center,
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+        )
+        .expect("touch press should be captured");
+
+        let drag = <TimeScrollField<_> as canvas::Program<
+            TimePickerAction,
+            Theme,
+            iced_widget::Renderer,
+        >>::update(
+            &field,
+            &mut state,
+            &event::Event::Touch(touch::Event::FingerMoved {
+                id: touch::Finger(1),
+                position: Point::new(
+                    center.x,
+                    center.y - tokens::component::time_picker::TIME_SCROLL_ITEM_HEIGHT * 2.0,
+                ),
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+        )
+        .expect("touch drag should publish when the centered row changes");
+        let (message, _, _) = drag.into_inner();
+
+        assert_eq!(message, Some(TimePickerAction::ScrollMinute(0)));
+        assert!(state.drag.is_some_and(|drag| drag.has_scrolled));
+    }
+
+    #[test]
+    fn time_scroll_inertia_is_touch_only() {
+        let field = TimeScrollField {
+            selection: TimePickerSelectionMode::Minute,
+            is_24_hour: true,
+            selected_value: 10,
+            anchor_value: 10,
+            option_count: 60,
+            on_action: Arc::new(|action: TimePickerAction| action),
+        };
+        let mut state = TimeScrollFieldState::default();
+        field.sync_state(&mut state);
+        state.velocity_y = TIME_SCROLL_FLING_MIN_VELOCITY * 2.0;
+        state.drag = Some(TimeScrollDrag {
+            pointer: TimeScrollPointer::Mouse,
+            start: Point::new(50.0, 60.0),
+            last: Point::new(50.0, 0.0),
+            last_at: Instant::now(),
+            has_scrolled: true,
+        });
+        let bounds = Rectangle::new(
+            Point::ORIGIN,
+            Size::new(
+                tokens::component::time_picker::TIME_SCROLL_FIELD_WIDTH,
+                tokens::component::time_picker::TIME_SCROLL_FIELD_HEIGHT,
+            ),
+        );
+
+        let _ = field
+            .release::<TimePickerAction>(
+                &mut state,
+                &event::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+                bounds,
+                mouse::Cursor::Available(Point::new(50.0, 0.0)),
+                TimeScrollPointer::Mouse,
+            )
+            .expect("mouse release should settle");
+
+        assert_eq!(state.velocity_y, 0.0);
+
+        state.velocity_y = TIME_SCROLL_FLING_MIN_VELOCITY * 2.0;
+        let _ = field
+            .advance_inertia::<TimePickerAction>(&mut state, Instant::now() + duration_ms(16))
+            .expect("touch inertia frame should advance while velocity is active");
+
+        assert!(state.offset_y > 0.0);
+        assert!(state.velocity_y > 0.0);
+        assert!(state.velocity_y < TIME_SCROLL_FLING_MIN_VELOCITY * 2.0);
+    }
+
+    #[test]
     fn time_scroll_uses_fixed_selection_layer_not_item_background() {
         let theme = Theme::Light;
         let item = time_scroll_item_style(&theme, Status::Active, true);
@@ -7701,6 +8358,99 @@ mod tests {
             mouse::Cursor::Available(right),
         )
         .expect("release should auto-switch after hour drag");
+        let (message, _, _) = release.into_inner();
+        assert_eq!(
+            message,
+            Some(TimePickerAction::SetSelection(
+                TimePickerSelectionMode::Minute
+            ))
+        );
+    }
+
+    #[test]
+    fn clock_face_touch_drag_works_without_cursor() {
+        let face = ClockFace {
+            hour: 12,
+            minute: 0,
+            is_24_hour: false,
+            selection: TimePickerSelectionMode::Hour,
+            previous_selection: TimePickerSelectionMode::Hour,
+            selected_selection: TimePickerSelectionMode::Hour,
+            selection_progress: 1.0,
+            auto_switch_to_minute: true,
+            selector_angle: time_selector_angle(12, 0, TimePickerSelectionMode::Hour),
+            on_action: Arc::new(|action: TimePickerAction| action),
+        };
+        let mut state = ClockFaceState::default();
+        let size = Size::new(
+            tokens::component::time_picker::CLOCK_DIAL_SIZE,
+            tokens::component::time_picker::CLOCK_DIAL_SIZE,
+        );
+        let bounds = Rectangle::new(Point::new(0.0, 0.0), size);
+        let center = Point::new(size.width / 2.0, size.height / 2.0);
+        let top = Point::new(
+            center.x,
+            center.y - size.height * tokens::component::time_picker::OUTER_CIRCLE_RADIUS_RATIO,
+        );
+        let right = Point::new(
+            center.x + size.height * tokens::component::time_picker::OUTER_CIRCLE_RADIUS_RATIO,
+            center.y,
+        );
+
+        let press = <ClockFace<_> as canvas::Program<
+            TimePickerAction,
+            Theme,
+            iced_widget::Renderer,
+        >>::update(
+            &face,
+            &mut state,
+            &event::Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(7),
+                position: top,
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+        )
+        .expect("touch press should publish selection");
+        let (message, _, _) = press.into_inner();
+        assert_eq!(message, Some(TimePickerAction::SelectHour(12)));
+
+        let drag = <ClockFace<_> as canvas::Program<
+            TimePickerAction,
+            Theme,
+            iced_widget::Renderer,
+        >>::update(
+            &face,
+            &mut state,
+            &event::Event::Touch(touch::Event::FingerMoved {
+                id: touch::Finger(7),
+                position: right,
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+        )
+        .expect("touch drag should publish selection while pressed");
+        let (message, _, _) = drag.into_inner();
+        assert_eq!(
+            message,
+            Some(TimePickerAction::DragHourAngle(3, pack_angle(0.0)))
+        );
+
+        let release = <ClockFace<_> as canvas::Program<
+            TimePickerAction,
+            Theme,
+            iced_widget::Renderer,
+        >>::update(
+            &face,
+            &mut state,
+            &event::Event::Touch(touch::Event::FingerLifted {
+                id: touch::Finger(7),
+                position: right,
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+        )
+        .expect("touch release should auto-switch after hour drag");
         let (message, _, _) = release.into_inner();
         assert_eq!(
             message,

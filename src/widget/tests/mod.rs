@@ -33,7 +33,22 @@ fn centered_icon_text_uses_square_icon_bounds() {
 }
 
 #[test]
-fn touch_cursor_uses_finger_position_when_cursor_is_unavailable() {
+fn text_field_touch_cursor_preserves_translated_cursor_position() {
+    let raw_position = Point::new(24.0, 48.0);
+    let translated_position = Point::new(24.0, 148.0);
+    let event = Event::Touch(touch::Event::FingerPressed {
+        id: touch::Finger(1),
+        position: raw_position,
+    });
+
+    assert_eq!(
+        text_field_touch_cursor(&event, mouse::Cursor::Available(translated_position)),
+        mouse::Cursor::Available(translated_position)
+    );
+}
+
+#[test]
+fn text_field_touch_cursor_uses_finger_position_without_cursor() {
     let position = Point::new(24.0, 48.0);
     let event = Event::Touch(touch::Event::FingerPressed {
         id: touch::Finger(1),
@@ -41,22 +56,8 @@ fn touch_cursor_uses_finger_position_when_cursor_is_unavailable() {
     });
 
     assert_eq!(
-        touch_cursor(&event, mouse::Cursor::Unavailable),
+        text_field_touch_cursor(&event, mouse::Cursor::Unavailable),
         mouse::Cursor::Available(position)
-    );
-}
-
-#[test]
-fn touch_cursor_keeps_existing_pointer_position() {
-    let pointer = Point::new(8.0, 16.0);
-    let event = Event::Touch(touch::Event::FingerPressed {
-        id: touch::Finger(1),
-        position: Point::new(24.0, 48.0),
-    });
-
-    assert_eq!(
-        touch_cursor(&event, mouse::Cursor::Available(pointer)),
-        mouse::Cursor::Available(pointer)
     );
 }
 
@@ -141,6 +142,250 @@ fn press_is_over_prefers_translated_cursor_for_touch() {
         bounds,
         mouse::Cursor::Levitating(Point::new(20.0, 30.0))
     ));
+}
+
+#[test]
+fn text_field_keyboard_activation_waits_for_confirmed_touch_tap() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let mut activation = None;
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 130.0))
+    ));
+    assert!(activation.is_some());
+
+    assert!(text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 130.0))
+    ));
+    assert!(activation.is_none());
+}
+
+#[test]
+fn text_field_keyboard_activation_cancels_touch_scroll() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let mut activation = None;
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerMoved {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0 + TEXT_FIELD_TOUCH_SLOP + 1.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(activation.is_none());
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Unavailable
+    ));
+}
+
+#[test]
+fn text_field_keyboard_activation_uses_translated_cursor_position() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let mut activation = None;
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 30.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 130.0))
+    ));
+    assert!(activation.is_some());
+
+    assert!(text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 30.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 130.0))
+    ));
+    assert!(activation.is_none());
+}
+
+#[test]
+fn text_field_keyboard_activation_rejects_raw_position_when_translated_cursor_is_outside() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let mut activation = None;
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 530.0))
+    ));
+    assert!(activation.is_none());
+
+    assert!(!text_field_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        bounds,
+        mouse::Cursor::Available(Point::new(20.0, 530.0))
+    ));
+}
+
+#[test]
+fn text_field_visible_keyboard_activation_rejects_touch_without_visible_bounds() {
+    let mut activation = Some(TextFieldTouchActivation::new(
+        touch::Finger(1),
+        Point::new(20.0, 130.0),
+    ));
+
+    assert!(!text_field_visible_keyboard_activation(
+        &mut activation,
+        &Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(1),
+            position: Point::new(20.0, 130.0),
+        }),
+        None,
+        mouse::Cursor::Unavailable
+    ));
+    assert!(activation.is_none());
+}
+
+#[test]
+fn text_field_inner_touch_handling_delays_inside_press() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+
+    assert_eq!(
+        text_field_inner_touch_handling(
+            true,
+            &Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(1),
+                position: Point::new(20.0, 130.0),
+            }),
+            bounds,
+            mouse::Cursor::Available(Point::new(20.0, 130.0)),
+            None,
+            false,
+        ),
+        TextFieldInnerTouchHandling::Suppress
+    );
+}
+
+#[test]
+fn text_field_inner_touch_handling_forwards_outside_press() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+
+    assert_eq!(
+        text_field_inner_touch_handling(
+            true,
+            &Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(1),
+                position: Point::new(200.0, 130.0),
+            }),
+            bounds,
+            mouse::Cursor::Available(Point::new(200.0, 130.0)),
+            None,
+            false,
+        ),
+        TextFieldInnerTouchHandling::Forward
+    );
+}
+
+#[test]
+fn text_field_inner_touch_handling_confirms_tap_on_release() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let activation = Some(TextFieldTouchActivation::new(
+        touch::Finger(1),
+        Point::new(20.0, 130.0),
+    ));
+
+    assert_eq!(
+        text_field_inner_touch_handling(
+            true,
+            &Event::Touch(touch::Event::FingerLifted {
+                id: touch::Finger(1),
+                position: Point::new(20.0, 130.0),
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+            activation,
+            true,
+        ),
+        TextFieldInnerTouchHandling::ConfirmedTap
+    );
+}
+
+#[test]
+fn text_field_inner_touch_handling_suppresses_pending_scroll() {
+    let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
+    let activation = Some(TextFieldTouchActivation::new(
+        touch::Finger(1),
+        Point::new(20.0, 130.0),
+    ));
+
+    assert_eq!(
+        text_field_inner_touch_handling(
+            true,
+            &Event::Touch(touch::Event::FingerMoved {
+                id: touch::Finger(1),
+                position: Point::new(20.0, 140.0),
+            }),
+            bounds,
+            mouse::Cursor::Unavailable,
+            activation,
+            false,
+        ),
+        TextFieldInnerTouchHandling::Suppress
+    );
+}
+
+#[test]
+fn text_field_inner_touch_handling_suppresses_touch_without_visible_bounds() {
+    assert_eq!(
+        text_field_inner_touch_handling_for_visible_bounds(
+            true,
+            &Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(1),
+                position: Point::new(20.0, 130.0),
+            }),
+            None,
+            mouse::Cursor::Unavailable,
+            None,
+            false,
+        ),
+        TextFieldInnerTouchHandling::Suppress
+    );
 }
 
 #[test]
