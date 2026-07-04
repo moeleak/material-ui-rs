@@ -1,4 +1,4 @@
-# iced_material [Live Demo](https://material.leak/moe)
+# iced_material [🌎Live Demo](https://material.leak.moe)
 
 Material 3 inspired widgets and theme defaults for
 [`iced`](https://iced.rs) 0.14.
