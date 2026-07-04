@@ -3,9 +3,9 @@
 use iced_widget::core::text as core_text;
 use iced_widget::core::{Background, Border, Color, Element, Length, Padding, alignment, border};
 use iced_widget::text_input::{Status, Style};
-use iced_widget::{Column, Container, Row, TextInput};
+use iced_widget::{Column, Container, Row, TextInput as IcedTextInput};
 
-use super::absolute_line_height;
+use super::{absolute_line_height, mobile_text_input};
 use crate::utils::{shadow_from_level, state_layer};
 use crate::{Theme, fonts, tokens};
 
@@ -37,13 +37,16 @@ where
 {
     let placeholder = placeholder.into();
     let input_text = tokens::component::search_bar::INPUT_TEXT;
-    let input = TextInput::new(&placeholder, value)
-        .on_input(on_input)
-        .padding(Padding::ZERO)
-        .size(input_text.size)
-        .line_height(absolute_line_height(input_text.line_height))
-        .style(input_style)
-        .width(Length::Fill);
+    let input = mobile_text_input(
+        IcedTextInput::new(&placeholder, value)
+            .on_input(on_input)
+            .padding(Padding::ZERO)
+            .size(input_text.size)
+            .line_height(absolute_line_height(input_text.line_height))
+            .style(input_style)
+            .width(Length::Fill),
+        true,
+    );
 
     let mut content = Row::new()
         .push(fonts::icon(
@@ -134,13 +137,16 @@ where
 {
     let placeholder = placeholder.into();
     let input_text = tokens::component::search_view::HEADER_INPUT_TEXT;
-    let input = TextInput::new(&placeholder, value)
-        .on_input(on_input)
-        .padding(Padding::ZERO)
-        .size(input_text.size)
-        .line_height(absolute_line_height(input_text.line_height))
-        .style(input_style)
-        .width(Length::Fill);
+    let input = mobile_text_input(
+        IcedTextInput::new(&placeholder, value)
+            .on_input(on_input)
+            .padding(Padding::ZERO)
+            .size(input_text.size)
+            .line_height(absolute_line_height(input_text.line_height))
+            .style(input_style)
+            .width(Length::Fill),
+        true,
+    );
 
     let header = Row::new()
         .push(fonts::icon(

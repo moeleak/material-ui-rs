@@ -17,8 +17,11 @@ use iced_widget::text::{self, LineHeight};
 use iced_widget::text_input::{self, Icon, TextInput};
 
 use super::menu_overlay;
-use super::{absolute_line_height, select};
-use crate::{Theme, menu as menu_style, text_input as text_input_style, tokens, web_input};
+use super::{
+    MobileTextInputState, absolute_line_height, mobile_text_input_activation,
+    register_mobile_text_region, select, sync_mobile_keyboard, update_mobile_text_input,
+};
+use crate::{Theme, menu as menu_style, text_input as text_input_style, tokens};
 
 #[derive(Clone)]
 enum DisplayValue<T> {
@@ -618,6 +621,7 @@ where
 
 struct MenuState<T, P: core_text::Paragraph> {
     menu: menu_overlay::State,
+    mobile_input: MobileTextInputState,
     hovered_option: Option<usize>,
     new_selection: Option<T>,
     filtered_options: Filtered<T>,
@@ -694,6 +698,7 @@ where
     fn state(&self) -> widget::tree::State {
         widget::tree::State::new(MenuState::<T, Renderer::Paragraph> {
             menu: menu_overlay::State::new(),
+            mobile_input: MobileTextInputState::default(),
             filtered_options: Filtered::empty(),
             hovered_option: Some(0),
             new_selection: None,
@@ -721,6 +726,13 @@ where
         let menu = tree
             .state
             .downcast_mut::<MenuState<T, Renderer::Paragraph>>();
+        let activation = mobile_text_input_activation(
+            true,
+            &mut menu.mobile_input,
+            event,
+            layout.bounds().intersection(viewport),
+            cursor,
+        );
 
         let started_focused = {
             let text_input_state = tree.children[0]
@@ -734,11 +746,12 @@ where
         let mut local_messages = Vec::new();
         let mut local_shell = Shell::new(&mut local_messages);
 
-        self.text_input.update(
+        update_mobile_text_input(
+            &mut self.text_input,
             &mut tree.children[0],
             event,
             layout,
-            cursor,
+            activation,
             renderer,
             clipboard,
             &mut local_shell,
@@ -899,18 +912,20 @@ where
             text_input_state.is_focused()
         };
 
+        sync_mobile_keyboard(
+            started_focused,
+            is_focused,
+            activation.request_mobile_keyboard,
+        );
+
         if started_focused != is_focused {
             shell.invalidate_widgets();
 
             if is_focused {
-                web_input::show_mobile_keyboard();
-
                 self.state.with_inner(|state| {
                     menu.menu
                         .start_open(state.filtered_options.options.len(), Instant::now());
                 });
-            } else {
-                web_input::hide_mobile_keyboard();
             }
 
             if !published_message_to_shell {
@@ -947,6 +962,8 @@ where
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
+        register_mobile_text_region(true, layout.bounds(), viewport);
+
         let is_focused = {
             let text_input_state = tree.children[0]
                 .state

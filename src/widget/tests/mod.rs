@@ -1,4 +1,4 @@
-use iced_widget::core::Element;
+use iced_widget::core::{Element, keyboard};
 
 use super::*;
 
@@ -90,6 +90,42 @@ fn touch_events_convert_to_mouse_events_for_text_editor() {
             mouse::Button::Left
         )))
     );
+}
+
+fn keyboard_key_pressed(key: keyboard::Key, text: Option<&str>) -> Event {
+    Event::Keyboard(keyboard::Event::KeyPressed {
+        key: key.clone(),
+        modified_key: key,
+        physical_key: keyboard::key::Physical::Unidentified(
+            keyboard::key::NativeCode::Unidentified,
+        ),
+        location: keyboard::Location::Standard,
+        modifiers: keyboard::Modifiers::default(),
+        text: text.map(Into::into),
+        repeat: false,
+    })
+}
+
+#[test]
+fn text_editor_caret_refresh_tracks_text_entry_events() {
+    assert!(text_editor_caret_refresh_event(&keyboard_key_pressed(
+        keyboard::Key::Character("a".into()),
+        Some("a"),
+    )));
+    assert!(text_editor_caret_refresh_event(&Event::InputMethod(
+        input_method::Event::Commit("a".into())
+    )));
+    assert!(text_editor_caret_refresh_event(&Event::InputMethod(
+        input_method::Event::Preedit("pinyin".into(), None)
+    )));
+}
+
+#[test]
+fn text_editor_caret_refresh_ignores_unfocus_keys() {
+    assert!(!text_editor_caret_refresh_event(&keyboard_key_pressed(
+        keyboard::Key::Named(keyboard::key::Named::Escape),
+        None,
+    )));
 }
 
 #[test]
@@ -1236,6 +1272,32 @@ fn material_text_input_constructor_compiles_to_element() {
     let _: TestElement<'_> = text_input::outlined("Write a note", "value")
         .on_input(|_| Message::Pressed)
         .into();
+}
+
+#[test]
+fn material_search_constructors_compile_to_elements() {
+    let results = Text::<Theme, iced_widget::Renderer>::new("Results");
+
+    let _: TestElement<'_> =
+        search::bar("Search Material components", "query", |_| Message::Pressed).into();
+    let _: TestElement<'_> = search::bar_with_trailing(
+        "Search Material components",
+        "query",
+        |_| Message::Pressed,
+        Some(
+            button::icon_button("close")
+                .on_press(Message::Pressed)
+                .into(),
+        ),
+    )
+    .into();
+    let _: TestElement<'_> =
+        search::docked_view("Search components", "query", |_| Message::Pressed, results).into();
+
+    let results = Text::<Theme, iced_widget::Renderer>::new("Results");
+    let _: TestElement<'_> =
+        search::full_screen_view("Search components", "query", |_| Message::Pressed, results)
+            .into();
 }
 
 #[test]
