@@ -220,6 +220,60 @@ fn release_is_over_uses_mouse_cursor_for_mouse_release() {
     ));
 }
 
+#[test]
+fn selection_control_hit_bounds_expand_small_icon_to_touch_target() {
+    let content = Rectangle::new(Point::new(20.0, 100.0), Size::new(120.0, 18.0));
+    let control = Rectangle::new(Point::new(20.0, 100.0), Size::new(18.0, 18.0));
+    let bounds = selection_control_hit_bounds_from_rects(
+        content,
+        control,
+        tokens::component::checkbox::STATE_LAYER_SIZE,
+    );
+
+    assert_eq!(
+        bounds,
+        Rectangle::new(Point::new(9.0, 89.0), Size::new(131.0, 40.0))
+    );
+}
+
+#[test]
+fn selection_control_hit_bounds_keep_radio_target_height() {
+    let content = Rectangle::new(Point::new(16.0, 80.0), Size::new(160.0, 20.0));
+    let control = Rectangle::new(Point::new(16.0, 80.0), Size::new(20.0, 20.0));
+    let bounds = selection_control_hit_bounds_from_rects(
+        content,
+        control,
+        tokens::component::radio::TARGET_SIZE,
+    );
+
+    assert_eq!(
+        bounds,
+        Rectangle::new(Point::new(2.0, 66.0), Size::new(174.0, 48.0))
+    );
+}
+
+#[test]
+fn selection_control_hit_bounds_cover_switch_state_layer_edges() {
+    let content = Rectangle::new(Point::new(24.0, 48.0), Size::new(168.0, 32.0));
+    let control = Rectangle::new(
+        Point::new(24.0, 48.0),
+        Size::new(
+            tokens::component::switch::TRACK_WIDTH,
+            tokens::component::switch::TRACK_HEIGHT,
+        ),
+    );
+    let bounds = selection_control_hit_bounds_from_rects(
+        content,
+        control,
+        tokens::component::switch::STATE_LAYER_SIZE,
+    );
+
+    assert_eq!(
+        bounds,
+        Rectangle::new(Point::new(20.0, 44.0), Size::new(172.0, 40.0))
+    );
+}
+
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
 #[test]
 fn ime_caret_suppression_is_enabled_on_desktop_composition_platforms() {
@@ -937,6 +991,78 @@ fn material_text_input_constructor_compiles_to_element() {
     let _: TestElement<'_> = text_input::outlined("Write a note", "value")
         .on_input(|_| Message::Pressed)
         .into();
+}
+
+#[test]
+fn material_picker_constructors_compile_to_elements() {
+    let date = picker::DatePickerState::new(picker::Date::new(2026, 7, 4));
+    let range = picker::DateRangePickerState::new(
+        picker::Date::new(2026, 7, 4),
+        picker::Date::new(2026, 7, 10),
+    );
+    let time = picker::TimePickerState::new(14, 30, false);
+
+    let _: TestElement<'_> = picker::date_picker(&date, |_| Message::Pressed);
+    let _: TestElement<'_> =
+        picker::date_picker_with_mode_toggle(&date, |_| Message::Pressed, false);
+    let _: TestElement<'_> = picker::date_picker_dialog(
+        &date,
+        |_| Message::Pressed,
+        picker::date_picker_dialog_actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
+    let _: TestElement<'_> = picker::date_picker_dialog_with_mode_toggle(
+        &date,
+        |_| Message::Pressed,
+        false,
+        picker::date_picker_dialog_actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
+    let _: TestElement<'_> = picker::date_range_picker(&range, |_| Message::Pressed);
+    let _: TestElement<'_> =
+        picker::date_range_picker_with_mode_toggle(&range, |_| Message::Pressed, false);
+    let _: TestElement<'_> = picker::date_range_picker_dialog(
+        &range,
+        |_| Message::Pressed,
+        picker::date_picker_dialog_actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
+    let _: TestElement<'_> = picker::date_range_picker_dialog_with_mode_toggle(
+        &range,
+        |_| Message::Pressed,
+        false,
+        picker::date_picker_dialog_actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
+    let _: TestElement<'_> = picker::time_picker(&time, |_| Message::Pressed);
+    let _: TestElement<'_> = picker::time_picker_dialog(
+        &time,
+        picker::TimePickerDisplayMode::Picker,
+        |_| Message::Pressed,
+        Some(Message::Toggled),
+        dialog::actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
+    let _: TestElement<'_> = picker::rich_time_picker_dialog(
+        &time,
+        picker::TimePickerDisplayMode::Scroll,
+        |_| Message::Pressed,
+        Some(Message::Toggled),
+        dialog::actions([
+            dialog::action_button("Cancel", Message::Pressed),
+            dialog::action_button("OK", Message::Pressed),
+        ]),
+    );
 }
 
 #[test]

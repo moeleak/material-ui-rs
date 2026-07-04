@@ -37,8 +37,21 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
             page::stack([select.into(), combo_box.into()]),
         )
         .into(),
+        page::section("Pickers", pickers(state)).into(),
         page::section("Search", search_bar(state)).into(),
         page::section("Dividers", dividers()).into(),
+    ])
+    .into()
+}
+
+fn pickers(state: &Showcase) -> material::Element<'_, Message> {
+    page::stack([
+        material::widget::picker::date_picker(&state.date_picker, Message::DatePickerChanged),
+        material::widget::picker::date_range_picker(
+            &state.date_range_picker,
+            Message::DateRangePickerChanged,
+        ),
+        material::widget::picker::time_picker(&state.time_picker, Message::TimePickerChanged),
     ])
     .into()
 }

@@ -4,7 +4,7 @@
 mod pages;
 
 use iced::time::Instant;
-use iced::{Size, Subscription};
+use iced::{Size, Subscription, Task};
 use iced_material as material;
 use material::Theme;
 use material::widget::{navigation, theme_picker};
@@ -34,6 +34,9 @@ enum Message {
     ComboSelected(&'static str),
     ComboInputChanged(String),
     SearchChanged(String),
+    DatePickerChanged(material::widget::picker::DatePickerAction),
+    DateRangePickerChanged(material::widget::picker::DateRangePickerAction),
+    TimePickerChanged(material::widget::picker::TimePickerAction),
     SliderChanged(f32),
     EnabledChanged(bool),
     ThemeChanged(theme_picker::ThemeAction),
@@ -148,6 +151,9 @@ struct Showcase {
     combo_choice: Option<&'static str>,
     combo_input: String,
     search_query: String,
+    date_picker: material::widget::picker::DatePickerState,
+    date_range_picker: material::widget::picker::DateRangePickerState,
+    time_picker: material::widget::picker::TimePickerState,
     progress: f32,
     enabled: bool,
     radio_choice: Option<RadioChoice>,
@@ -181,6 +187,14 @@ impl Default for Showcase {
             combo_choice: Some("Suggestion"),
             combo_input: String::new(),
             search_query: String::new(),
+            date_picker: material::widget::picker::DatePickerState::new(
+                material::widget::picker::Date::new(2026, 7, 4),
+            ),
+            date_range_picker: material::widget::picker::DateRangePickerState::new(
+                material::widget::picker::Date::new(2026, 7, 4),
+                material::widget::picker::Date::new(2026, 7, 10),
+            ),
+            time_picker: material::widget::picker::TimePickerState::new(14, 30, false),
             progress: 42.0,
             enabled: true,
             radio_choice: Some(RadioChoice::Standard),
@@ -216,35 +230,76 @@ impl Showcase {
     }
 }
 
-fn update(state: &mut Showcase, message: Message) {
+fn update(state: &mut Showcase, message: Message) -> Task<Message> {
     match message {
         Message::Navigate(page) => {
             state
                 .navigation
                 .select(page, Instant::now(), state.adaptive_navigation_layout());
+            Task::none()
         }
-        Message::Increment => state.count += 1,
-        Message::Decrement => state.count -= 1,
-        Message::TextChanged(note) => state.note = note,
-        Message::EditorAction(action) => state.editor_content.perform(action),
-        Message::SelectChanged(choice) => state.select_choice = Some(choice),
+        Message::Increment => {
+            state.count += 1;
+            Task::none()
+        }
+        Message::Decrement => {
+            state.count -= 1;
+            Task::none()
+        }
+        Message::TextChanged(note) => {
+            state.note = note;
+            Task::none()
+        }
+        Message::EditorAction(action) => {
+            state.editor_content.perform(action);
+            Task::none()
+        }
+        Message::SelectChanged(choice) => {
+            state.select_choice = Some(choice);
+            Task::none()
+        }
         Message::ComboSelected(choice) => {
             state.combo_choice = Some(choice);
             state.combo_input.clear();
             state.combo_options.set_selection(Some(&choice));
+            Task::none()
         }
         Message::ComboInputChanged(input) => {
             state.combo_options.set_input(input.clone());
             state.combo_input = input;
             state.combo_choice = None;
+            Task::none()
         }
-        Message::SearchChanged(query) => state.search_query = query,
-        Message::SliderChanged(progress) => state.progress = progress,
-        Message::EnabledChanged(enabled) => state.enabled = enabled,
-        Message::ChoiceSelected(choice) => state.radio_choice = Some(choice),
+        Message::SearchChanged(query) => {
+            state.search_query = query;
+            Task::none()
+        }
+        Message::DatePickerChanged(action) => state
+            .date_picker
+            .update_and_scroll_to_displayed_year(action),
+        Message::DateRangePickerChanged(action) => state
+            .date_range_picker
+            .update_and_scroll_to_displayed_year(action),
+        Message::TimePickerChanged(action) => {
+            state.time_picker.update(action);
+            Task::none()
+        }
+        Message::SliderChanged(progress) => {
+            state.progress = progress;
+            Task::none()
+        }
+        Message::EnabledChanged(enabled) => {
+            state.enabled = enabled;
+            Task::none()
+        }
+        Message::ChoiceSelected(choice) => {
+            state.radio_choice = Some(choice);
+            Task::none()
+        }
         Message::SegmentSelected(choice) => {
             state.segment_choice = choice;
             state.segment_state.select(choice.index(), Instant::now());
+            Task::none()
         }
         Message::PrimaryTabSelected(choice) => {
             state.primary_tab = choice;
@@ -253,6 +308,7 @@ fn update(state: &mut Showcase, message: Message) {
                 Instant::now(),
                 material::widget::tabs::Variant::Primary,
             );
+            Task::none()
         }
         Message::SecondaryTabSelected(choice) => {
             state.secondary_tab = choice;
@@ -261,27 +317,48 @@ fn update(state: &mut Showcase, message: Message) {
                 Instant::now(),
                 material::widget::tabs::Variant::Secondary,
             );
+            Task::none()
         }
-        Message::MenuPressed => state.navigation.toggle_menu_now(),
-        Message::DialogOpened => state.alert_dialog.show(Instant::now()),
-        Message::DialogDismissed => state.alert_dialog.dismiss(Instant::now()),
+        Message::MenuPressed => {
+            state.navigation.toggle_menu_now();
+            Task::none()
+        }
+        Message::DialogOpened => {
+            state.alert_dialog.show(Instant::now());
+            Task::none()
+        }
+        Message::DialogDismissed => {
+            state.alert_dialog.dismiss(Instant::now());
+            Task::none()
+        }
         Message::DialogConfirmed => {
             state.alert_dialog.dismiss(Instant::now());
             state.count += 1;
+            Task::none()
         }
-        Message::ShowSnackbar => state.snackbar.show(Instant::now()),
+        Message::ShowSnackbar => {
+            state.snackbar.show(Instant::now());
+            Task::none()
+        }
         Message::SnackbarUndo => {
             state.count -= 1;
             state.snackbar.dismiss(Instant::now());
+            Task::none()
         }
-        Message::WindowResized(size) => state.window_size = size,
+        Message::WindowResized(size) => {
+            state.window_size = size;
+            Task::none()
+        }
         Message::ThemeChanged(action) => {
             state.theme_controller.update(
                 action,
                 state.window_size,
-                theme_picker_bottom_margin(state.adaptive_navigation_layout()),
+                theme_picker::bottom_margin_for_navigation_layout(
+                    state.adaptive_navigation_layout(),
+                ),
                 Instant::now(),
             );
+            Task::none()
         }
         Message::Frame(now) => {
             let _ = state.theme_controller.advance(now);
@@ -292,6 +369,10 @@ fn update(state: &mut Showcase, message: Message) {
             state.progress_animation.advance(now);
             let _ = state.alert_dialog.advance(now);
             let _ = state.snackbar.advance(now);
+            let _ = state.date_picker.advance(now);
+            let _ = state.date_range_picker.advance(now);
+            let _ = state.time_picker.advance(now);
+            Task::none()
         }
     }
 }
@@ -311,6 +392,9 @@ fn subscription(state: &Showcase) -> Subscription<Message> {
         || state.secondary_tab_state.is_animating()
         || state.alert_dialog.is_animating()
         || state.snackbar.is_active()
+        || state.date_picker.is_animating()
+        || state.date_range_picker.is_animating()
+        || state.time_picker.is_animating()
         || (state.navigation.selected() == ShowcasePage::Feedback
             && state.progress_animation.is_animating())
     {
@@ -337,7 +421,7 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
         .view(Message::Navigate, page_content);
     let content = state.theme_controller.controls_over(
         content,
-        theme_picker_bottom_margin(state.adaptive_navigation_layout()),
+        theme_picker::bottom_margin_for_navigation_layout(state.adaptive_navigation_layout()),
         Message::ThemeChanged,
     );
 
@@ -349,17 +433,6 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
     );
 
     state.theme_controller.reveal_over(content, now)
-}
-
-fn theme_picker_bottom_margin(layout: navigation::AdaptiveLayout) -> f32 {
-    let navigation_clearance = match layout {
-        navigation::AdaptiveLayout::NavigationBar => {
-            material::tokens::component::navigation_bar::CONTAINER_HEIGHT
-        }
-        navigation::AdaptiveLayout::NavigationRail => 0.0,
-    };
-
-    theme_picker::FLOATING_MARGIN + navigation_clearance
 }
 
 fn alert_dialog(alpha: f32) -> material::Element<'static, Message> {
@@ -385,6 +458,7 @@ fn alert_dialog(alpha: f32) -> material::Element<'static, Message> {
 }
 
 #[cfg(test)]
+#[allow(unused_must_use)]
 mod tests {
     use super::*;
     use iced::Point;
@@ -402,6 +476,70 @@ mod tests {
 
         assert_eq!(showcase.combo_choice, Some("Assist"));
         assert_eq!(showcase.combo_input, "");
+    }
+
+    #[test]
+    fn date_picker_action_updates_showcase_state() {
+        let mut showcase = Showcase::default();
+        let date = material::widget::picker::Date::new(2026, 12, 25).unwrap();
+
+        update(
+            &mut showcase,
+            Message::DatePickerChanged(material::widget::picker::DatePickerAction::SelectDate(
+                date,
+            )),
+        );
+
+        assert_eq!(showcase.date_picker.selected_date(), Some(date));
+        assert_eq!(
+            showcase.date_picker.displayed_month(),
+            material::widget::picker::YearMonth::new(2026, 12).unwrap()
+        );
+    }
+
+    #[test]
+    fn date_range_picker_action_updates_showcase_state() {
+        let mut showcase = Showcase::default();
+        let start = material::widget::picker::Date::new(2026, 8, 1).unwrap();
+        let end = material::widget::picker::Date::new(2026, 8, 5).unwrap();
+
+        update(
+            &mut showcase,
+            Message::DateRangePickerChanged(
+                material::widget::picker::DateRangePickerAction::SelectDate(start),
+            ),
+        );
+        update(
+            &mut showcase,
+            Message::DateRangePickerChanged(
+                material::widget::picker::DateRangePickerAction::SelectDate(end),
+            ),
+        );
+
+        assert_eq!(
+            showcase.date_range_picker.selected_start_date(),
+            Some(start)
+        );
+        assert_eq!(showcase.date_range_picker.selected_end_date(), Some(end));
+    }
+
+    #[test]
+    fn time_picker_action_updates_showcase_state() {
+        let mut showcase = Showcase::default();
+
+        update(
+            &mut showcase,
+            Message::TimePickerChanged(material::widget::picker::TimePickerAction::SelectHour(9)),
+        );
+        update(
+            &mut showcase,
+            Message::TimePickerChanged(material::widget::picker::TimePickerAction::SelectMinute(
+                45,
+            )),
+        );
+
+        assert_eq!(showcase.time_picker.hour(), 21);
+        assert_eq!(showcase.time_picker.minute(), 45);
     }
 
     #[test]
@@ -484,12 +622,16 @@ mod tests {
     #[test]
     fn theme_picker_uses_navigation_bar_clearance() {
         assert_eq!(
-            theme_picker_bottom_margin(navigation::AdaptiveLayout::NavigationBar),
+            theme_picker::bottom_margin_for_navigation_layout(
+                navigation::AdaptiveLayout::NavigationBar
+            ),
             theme_picker::FLOATING_MARGIN
                 + material::tokens::component::navigation_bar::CONTAINER_HEIGHT
         );
         assert_eq!(
-            theme_picker_bottom_margin(navigation::AdaptiveLayout::NavigationRail),
+            theme_picker::bottom_margin_for_navigation_layout(
+                navigation::AdaptiveLayout::NavigationRail
+            ),
             theme_picker::FLOATING_MARGIN
         );
     }
@@ -551,7 +693,9 @@ mod tests {
 
         let expected_origin = theme_picker::swatch_center(
             showcase.window_size,
-            theme_picker_bottom_margin(showcase.adaptive_navigation_layout()),
+            theme_picker::bottom_margin_for_navigation_layout(
+                showcase.adaptive_navigation_layout(),
+            ),
             theme_picker::MaterialColor::Blue,
         );
         let animation = showcase

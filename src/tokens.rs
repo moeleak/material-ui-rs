@@ -647,6 +647,141 @@ pub mod component {
             super::super::typography::BODY_MEDIUM;
     }
 
+    pub mod date_picker {
+        pub const CONTAINER_WIDTH: f32 = 360.0;
+        pub const CONTAINER_HEIGHT: f32 = 568.0;
+        pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_LARGE;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
+        pub const HEADER_CONTAINER_HEIGHT: f32 = 120.0;
+        pub const HEADER_TITLE_START_SPACE: f32 = 24.0;
+        pub const HEADER_TITLE_END_SPACE: f32 = 12.0;
+        pub const HEADER_TITLE_TOP_SPACE: f32 = 16.0;
+        pub const HEADER_HEADLINE_START_SPACE: f32 = 24.0;
+        pub const HEADER_HEADLINE_END_SPACE: f32 = 12.0;
+        pub const HEADER_HEADLINE_BOTTOM_SPACE: f32 = 12.0;
+        pub const RANGE_HEADER_CONTAINER_HEIGHT: f32 = 128.0;
+        pub const HORIZONTAL_SPACE: f32 = 12.0;
+        pub const RANGE_MONTH_SUBHEAD_START_SPACE: f32 = 24.0;
+        pub const RANGE_MONTH_SUBHEAD_TOP_SPACE: f32 = 20.0;
+        pub const RANGE_MONTH_SUBHEAD_BOTTOM_SPACE: f32 = 8.0;
+        pub const DIALOG_ACTIONS_END_SPACE: f32 = 6.0;
+        pub const DIALOG_ACTIONS_BOTTOM_SPACE: f32 = 8.0;
+        pub const DIALOG_ACTIONS_MAIN_AXIS_SPACE: f32 = 8.0;
+        pub const DIALOG_ACTIONS_CROSS_AXIS_SPACE: f32 = 12.0;
+        pub const MONTH_YEAR_CONTAINER_HEIGHT: f32 = 56.0;
+        pub const WEEKDAY_CONTAINER_HEIGHT: f32 = 48.0;
+        pub const DATE_CONTAINER_WIDTH: f32 = 40.0;
+        pub const DATE_CONTAINER_HEIGHT: f32 = 40.0;
+        pub const DATE_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const DATE_STATE_LAYER_WIDTH: f32 = 40.0;
+        pub const DATE_STATE_LAYER_HEIGHT: f32 = 40.0;
+        pub const DATE_TODAY_OUTLINE_WIDTH: f32 = 1.0;
+        pub const CALENDAR_CELL_SIZE: f32 = 48.0;
+        pub const YEAR_CONTAINER_WIDTH: f32 = 72.0;
+        pub const YEAR_CONTAINER_HEIGHT: f32 = 36.0;
+        pub const YEAR_VERTICAL_SPACE: f32 = 16.0;
+        pub const YEARS_IN_ROW: usize = 3;
+        pub const MAX_CALENDAR_ROWS: usize = 6;
+        pub const TITLE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_LARGE;
+        pub const HEADLINE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::HEADLINE_LARGE;
+        pub const RANGE_HEADLINE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::TITLE_LARGE;
+        pub const RANGE_MONTH_SUBHEAD_TEXT: super::super::typography::TypeScale =
+            super::super::typography::TITLE_SMALL;
+        pub const DATE_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_LARGE;
+        pub const WEEKDAY_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_LARGE;
+        pub const YEAR_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_LARGE;
+    }
+
+    pub mod time_picker {
+        pub const CLOCK_DIAL_SIZE: f32 = 256.0;
+        pub const CLOCK_DIAL_SHAPE: f32 = super::super::shape::CORNER_FULL;
+        pub const CLOCK_DIAL_SELECTOR_CENTER_SIZE: f32 = 8.0;
+        pub const CLOCK_DIAL_SELECTOR_HANDLE_SIZE: f32 = 48.0;
+        pub const CLOCK_DIAL_SELECTOR_TRACK_WIDTH: f32 = 2.0;
+        pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_LARGE;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
+        pub const PERIOD_SELECTOR_HORIZONTAL_WIDTH: f32 = 216.0;
+        pub const PERIOD_SELECTOR_HORIZONTAL_HEIGHT: f32 = 38.0;
+        pub const PERIOD_SELECTOR_VERTICAL_WIDTH: f32 = 52.0;
+        pub const PERIOD_SELECTOR_VERTICAL_HEIGHT: f32 = 80.0;
+        pub const PERIOD_TOGGLE_MARGIN: f32 = 12.0;
+        pub const PERIOD_SELECTOR_START_SPACE: f32 = PERIOD_TOGGLE_MARGIN;
+        pub const PERIOD_SELECTOR_ITEM_GAP: f32 = PERIOD_SELECTOR_OUTLINE_WIDTH;
+        pub const PERIOD_SELECTOR_SHAPE: f32 = super::super::shape::CORNER_SMALL;
+        pub const PERIOD_SELECTOR_OUTLINE_WIDTH: f32 = 1.0;
+        pub const TIME_SELECTOR_WIDTH: f32 = 96.0;
+        pub const TIME_SELECTOR_24H_WIDTH: f32 = 114.0;
+        pub const TIME_SELECTOR_HEIGHT: f32 = 80.0;
+        pub const TIME_SELECTOR_SHAPE: f32 = super::super::shape::CORNER_SMALL;
+        pub const TIME_SCROLL_FIELD_WIDTH: f32 = 100.0;
+        pub const TIME_SCROLL_FIELD_HEIGHT: f32 = 120.0;
+        pub const TIME_SCROLL_ITEM_HEIGHT: f32 = 40.0;
+        pub const TIME_SCROLL_SEPARATOR_WIDTH: f32 = 16.0;
+        pub const RICH_PERIOD_SELECTOR_WIDTH: f32 = 56.0;
+        pub const RICH_PERIOD_SELECTOR_HEIGHT: f32 = 120.0;
+        pub const RICH_PERIOD_SELECTOR_START_SPACE: f32 = 16.0;
+        pub const RICH_PERIOD_SELECTOR_ITEM_GAP: f32 = PERIOD_SELECTOR_OUTLINE_WIDTH;
+        pub const CLOCK_DISPLAY_BOTTOM_SPACE: f32 = 36.0;
+        pub const CLOCK_FACE_BOTTOM_SPACE: f32 = 24.0;
+        pub const DISPLAY_SEPARATOR_WIDTH: f32 = 24.0;
+        pub const OUTER_CIRCLE_RADIUS_RATIO: f32 = 101.0 / CLOCK_DIAL_SIZE;
+        pub const INNER_CIRCLE_RADIUS_RATIO: f32 = 69.0 / CLOCK_DIAL_SIZE;
+        pub const MAX_DISTANCE: f32 = 74.0;
+        pub const HEADLINE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_MEDIUM;
+        pub const CLOCK_DIAL_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_LARGE;
+        pub const PERIOD_SELECTOR_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::TITLE_MEDIUM;
+        pub const TIME_SELECTOR_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::DISPLAY_LARGE;
+    }
+
+    pub mod time_picker_dialog {
+        pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_LARGE;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
+        pub const CONTENT_PADDING: f32 = 24.0;
+        pub const TITLE_TOP_SPACE: f32 = 24.0;
+        pub const TITLE_BOTTOM_SPACE: f32 = 20.0;
+        pub const ACTIONS_BOTTOM_SPACE: f32 = 24.0;
+        pub const ACTIONS_HORIZONTAL_SPACE: f32 = 8.0;
+        pub const MIN_HEIGHT_FOR_TIME_PICKER: f32 = 300.0;
+        pub const RICH_CONTENT_PADDING: f32 = 12.0;
+        pub const RICH_CONTENT_TOP_SPACE: f32 = 12.0;
+        pub const RICH_CONTENT_ACTIONS_SPACE: f32 = 12.0;
+        pub const RICH_ACTIONS_BOTTOM_SPACE: f32 = 12.0;
+        pub const TITLE_TEXT: super::super::typography::TypeScale =
+            super::super::typography::LABEL_MEDIUM;
+    }
+
+    pub mod time_input {
+        pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_LARGE;
+        pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
+        pub const PERIOD_SELECTOR_CONTAINER_WIDTH: f32 = 52.0;
+        pub const PERIOD_SELECTOR_CONTAINER_HEIGHT: f32 = 72.0;
+        pub const PERIOD_SELECTOR_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_SMALL;
+        pub const PERIOD_SELECTOR_OUTLINE_WIDTH: f32 = 1.0;
+        pub const TIME_FIELD_CONTAINER_WIDTH: f32 = 96.0;
+        pub const TIME_FIELD_CONTAINER_HEIGHT: f32 = 72.0;
+        pub const TIME_FIELD_CONTAINER_SHAPE: f32 = super::super::shape::CORNER_SMALL;
+        pub const TIME_FIELD_FOCUS_OUTLINE_WIDTH: f32 = 2.0;
+        pub const TIME_FIELD_SUPPORTING_TEXT_TOP_SPACE: f32 = 7.0;
+        pub const TIME_FIELD_SUPPORTING_TEXT_LINES: f32 = 2.0;
+        pub const DISPLAY_SEPARATOR_WIDTH: f32 = 24.0;
+        pub const PERIOD_SELECTOR_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::TITLE_MEDIUM;
+        pub const TIME_FIELD_LABEL_TEXT: super::super::typography::TypeScale =
+            super::super::typography::DISPLAY_MEDIUM;
+        pub const TIME_FIELD_SUPPORTING_TEXT: super::super::typography::TypeScale =
+            super::super::typography::BODY_SMALL;
+    }
+
     pub mod data_table {
         pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_EXTRA_SMALL;
         pub const OUTLINE_WIDTH: f32 = 1.0;
@@ -1162,6 +1297,84 @@ mod tests {
             component::checkbox::SELECTED_DISABLED_CONTAINER_OPACITY,
             0.38
         );
+        assert_eq!(component::date_picker::CONTAINER_WIDTH, 360.0);
+        assert_eq!(component::date_picker::CONTAINER_HEIGHT, 568.0);
+        assert_eq!(component::date_picker::DATE_CONTAINER_WIDTH, 40.0);
+        assert_eq!(component::date_picker::DATE_CONTAINER_HEIGHT, 40.0);
+        assert_eq!(component::date_picker::HEADER_CONTAINER_HEIGHT, 120.0);
+        assert_eq!(component::date_picker::RANGE_HEADER_CONTAINER_HEIGHT, 128.0);
+        assert_eq!(
+            component::date_picker::RANGE_MONTH_SUBHEAD_START_SPACE,
+            24.0
+        );
+        assert_eq!(component::date_picker::RANGE_MONTH_SUBHEAD_TOP_SPACE, 20.0);
+        assert_eq!(
+            component::date_picker::RANGE_MONTH_SUBHEAD_BOTTOM_SPACE,
+            8.0
+        );
+        assert_eq!(component::date_picker::DIALOG_ACTIONS_END_SPACE, 6.0);
+        assert_eq!(component::date_picker::DIALOG_ACTIONS_BOTTOM_SPACE, 8.0);
+        assert_eq!(component::date_picker::DIALOG_ACTIONS_MAIN_AXIS_SPACE, 8.0);
+        assert_eq!(
+            component::date_picker::DIALOG_ACTIONS_CROSS_AXIS_SPACE,
+            12.0
+        );
+        assert_eq!(component::date_picker::YEAR_CONTAINER_WIDTH, 72.0);
+        assert_eq!(component::date_picker::YEAR_CONTAINER_HEIGHT, 36.0);
+        assert_eq!(component::time_picker::CLOCK_DIAL_SIZE, 256.0);
+        assert_eq!(
+            component::time_picker::CLOCK_DIAL_SELECTOR_HANDLE_SIZE,
+            48.0
+        );
+        assert_eq!(component::time_picker::CLOCK_DIAL_SELECTOR_TRACK_WIDTH, 2.0);
+        assert_eq!(
+            component::time_picker::PERIOD_SELECTOR_HORIZONTAL_WIDTH,
+            216.0
+        );
+        assert_eq!(
+            component::time_picker::PERIOD_SELECTOR_VERTICAL_HEIGHT,
+            80.0
+        );
+        assert_eq!(component::time_picker::PERIOD_TOGGLE_MARGIN, 12.0);
+        assert_eq!(component::time_picker::PERIOD_SELECTOR_START_SPACE, 12.0);
+        assert_eq!(component::time_picker::PERIOD_SELECTOR_ITEM_GAP, 1.0);
+        assert_eq!(component::time_picker::TIME_SELECTOR_WIDTH, 96.0);
+        assert_eq!(component::time_picker::TIME_SELECTOR_HEIGHT, 80.0);
+        assert_eq!(component::time_picker::TIME_SCROLL_FIELD_WIDTH, 100.0);
+        assert_eq!(component::time_picker::TIME_SCROLL_FIELD_HEIGHT, 120.0);
+        assert_eq!(component::time_picker::TIME_SCROLL_SEPARATOR_WIDTH, 16.0);
+        assert_eq!(component::time_picker::RICH_PERIOD_SELECTOR_WIDTH, 56.0);
+        assert_eq!(component::time_picker::RICH_PERIOD_SELECTOR_HEIGHT, 120.0);
+        assert_eq!(component::time_picker::RICH_PERIOD_SELECTOR_ITEM_GAP, 1.0);
+        assert_eq!(component::time_picker_dialog::CONTENT_PADDING, 24.0);
+        assert_eq!(component::time_picker_dialog::TITLE_TOP_SPACE, 24.0);
+        assert_eq!(component::time_picker_dialog::TITLE_BOTTOM_SPACE, 20.0);
+        assert_eq!(component::time_picker_dialog::ACTIONS_BOTTOM_SPACE, 24.0);
+        assert_eq!(
+            component::time_picker_dialog::MIN_HEIGHT_FOR_TIME_PICKER,
+            300.0
+        );
+        assert_eq!(component::time_picker_dialog::RICH_CONTENT_PADDING, 12.0);
+        assert_eq!(component::time_picker_dialog::RICH_CONTENT_TOP_SPACE, 12.0);
+        assert_eq!(
+            component::time_picker_dialog::RICH_CONTENT_ACTIONS_SPACE,
+            12.0
+        );
+        assert_eq!(
+            component::time_picker_dialog::RICH_ACTIONS_BOTTOM_SPACE,
+            12.0
+        );
+        assert_eq!(component::time_input::TIME_FIELD_CONTAINER_WIDTH, 96.0);
+        assert_eq!(component::time_input::TIME_FIELD_CONTAINER_HEIGHT, 72.0);
+        assert_eq!(
+            component::time_input::TIME_FIELD_SUPPORTING_TEXT_TOP_SPACE,
+            7.0
+        );
+        assert_eq!(
+            component::time_input::PERIOD_SELECTOR_CONTAINER_HEIGHT,
+            72.0
+        );
+        assert_eq!(component::time_input::DISPLAY_SEPARATOR_WIDTH, 24.0);
         assert_eq!(component::switch::TRACK_WIDTH, 52.0);
         assert_eq!(component::switch::TRACK_HEIGHT, 32.0);
         assert_eq!(component::switch::TRACK_OUTLINE_WIDTH, 2.0);

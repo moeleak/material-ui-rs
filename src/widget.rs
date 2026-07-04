@@ -46,6 +46,7 @@ pub mod list;
 mod menu_overlay;
 pub mod navigation;
 pub mod page;
+pub mod picker;
 pub mod progress_bar;
 pub mod search;
 pub mod segmented_button;
@@ -56,6 +57,7 @@ mod support;
 pub mod tabs;
 pub mod theme_picker;
 pub mod toolbar;
+pub mod viewport;
 
 use support::{
     AnimatedScalar, SelectionState, TextFieldState, alpha_border, alpha_color, bool_value,
@@ -212,6 +214,53 @@ fn touch_event_is_over(position: Point, bounds: Rectangle, cursor: mouse::Cursor
     }
 
     bounds.contains(position)
+}
+
+fn selection_control_hit_bounds(layout: Layout<'_>, target_size: f32) -> Rectangle {
+    let content_bounds = layout.bounds();
+    let control_bounds = layout
+        .children()
+        .next()
+        .map_or(content_bounds, |control| control.bounds());
+
+    selection_control_hit_bounds_from_rects(content_bounds, control_bounds, target_size)
+}
+
+fn selection_control_hit_bounds_from_rects(
+    content_bounds: Rectangle,
+    control_bounds: Rectangle,
+    target_size: f32,
+) -> Rectangle {
+    let target_height = content_bounds.height.max(target_size);
+    let content_target = Rectangle {
+        y: content_bounds.center_y() - target_height / 2.0,
+        height: target_height,
+        ..content_bounds
+    };
+    let control_padding =
+        ((target_size - control_bounds.width.min(control_bounds.height)) / 2.0).max(0.0);
+    let control_target = Rectangle {
+        x: control_bounds.x - control_padding,
+        y: control_bounds.y - control_padding,
+        width: control_bounds.width + control_padding * 2.0,
+        height: control_bounds.height + control_padding * 2.0,
+    };
+
+    union_bounds(content_target, control_target)
+}
+
+fn union_bounds(a: Rectangle, b: Rectangle) -> Rectangle {
+    let x = a.x.min(b.x);
+    let y = a.y.min(b.y);
+    let right = (a.x + a.width).max(b.x + b.width);
+    let bottom = (a.y + a.height).max(b.y + b.height);
+
+    Rectangle {
+        x,
+        y,
+        width: right - x,
+        height: bottom - y,
+    }
 }
 
 fn should_suppress_ime_caret() -> bool {
@@ -1127,30 +1176,28 @@ pub mod text_input {
         Floating,
     }
 
-    fn input_layer_style(theme: &Theme, status: iced_text_input::Status) -> iced_text_input::Style {
+    fn input_layer_style_alpha(
+        theme: &Theme,
+        status: iced_text_input::Status,
+        content_alpha: f32,
+    ) -> iced_text_input::Style {
         let mut style = text_input_style::default(theme, status);
 
         style.background = Background::Color(Color::TRANSPARENT);
         style.border.width = 0.0;
         style.border.color = Color::TRANSPARENT;
+        style.icon = alpha_color(style.icon, content_alpha);
         style.placeholder = Color::TRANSPARENT;
+        style.value = alpha_color(style.value, content_alpha);
+        style.selection = alpha_color(style.selection, content_alpha);
 
         style
-    }
-
-    fn caretless_input_layer_style(
-        theme: &Theme,
-        _status: iced_text_input::Status,
-    ) -> iced_text_input::Style {
-        input_layer_style(
-            theme,
-            iced_text_input::Status::Focused { is_hovered: false },
-        )
     }
 
     fn status_style(
         theme: &Theme,
         is_enabled: bool,
+        is_error: bool,
         is_focused: bool,
         is_hovered: bool,
     ) -> (Color, f32, Color) {
@@ -1168,6 +1215,16 @@ pub mod text_input {
                     tokens::component::text_field::DISABLED_LABEL_TEXT_OPACITY,
                 ),
             )
+        } else if is_error {
+            let outline_width = if is_focused {
+                tokens::component::text_field::FOCUS_OUTLINE_WIDTH
+            } else if is_hovered {
+                tokens::component::text_field::HOVER_OUTLINE_WIDTH
+            } else {
+                tokens::component::text_field::OUTLINE_WIDTH
+            };
+
+            (colors.error.color, outline_width, colors.error.color)
         } else if is_focused {
             (
                 colors.primary.color,
@@ -1257,6 +1314,8 @@ pub mod text_input {
         is_populated: bool,
         is_enabled: bool,
         is_secure: bool,
+        is_error: bool,
+        content_alpha: f32,
         width: Length,
         font: Option<Renderer::Font>,
         label_mode: LabelMode,
@@ -1272,6 +1331,8 @@ pub mod text_input {
                 .field("is_populated", &self.is_populated)
                 .field("is_enabled", &self.is_enabled)
                 .field("is_secure", &self.is_secure)
+                .field("is_error", &self.is_error)
+                .field("content_alpha", &self.content_alpha)
                 .field("width", &self.width)
                 .field("label_mode", &self.label_mode)
                 .finish_non_exhaustive()
@@ -1308,7 +1369,7 @@ pub mod text_input {
                 .line_height(absolute_line_height(
                     tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
                 ))
-                .style(input_layer_style);
+                .style(|theme, status| input_layer_style_alpha(theme, status, 1.0));
 
             Self {
                 label: label.into_fragment(),
@@ -1316,6 +1377,8 @@ pub mod text_input {
                 is_populated: !value.is_empty(),
                 is_enabled: false,
                 is_secure: false,
+                is_error: false,
+                content_alpha: 1.0,
                 width: Length::Fill,
                 font: None,
                 label_mode,
@@ -1353,6 +1416,22 @@ pub mod text_input {
 
         pub fn on_paste(mut self, on_paste: impl Fn(String) -> Message + 'a) -> Self {
             self.input = self.input.on_paste(on_paste);
+            self
+        }
+
+        pub fn error(mut self, is_error: bool) -> Self {
+            self.is_error = is_error;
+            self
+        }
+
+        pub fn alpha(mut self, content_alpha: f32) -> Self {
+            let content_alpha = content_alpha.clamp(0.0, 1.0);
+
+            self.content_alpha = content_alpha;
+            self.input = self
+                .input
+                .style(move |theme, status| input_layer_style_alpha(theme, status, content_alpha));
+
             self
         }
 
@@ -1660,8 +1739,15 @@ pub mod text_input {
                 0.0
             };
             let is_hovered = cursor.is_over(bounds);
-            let (outline_color, outline_width, label_color) =
-                status_style(theme, self.is_enabled, state.is_focused, is_hovered);
+            let (outline_color, outline_width, label_color) = status_style(
+                theme,
+                self.is_enabled,
+                self.is_error,
+                state.is_focused,
+                is_hovered,
+            );
+            let outline_color = alpha_color(outline_color, self.content_alpha);
+            let label_color = alpha_color(label_color, self.content_alpha);
             let label_width = state.label.raw().min_bounds().width;
             let floating_label_width = state.floating_label.raw().min_bounds().width;
             let label_line_height = tokens::component::text_field::LABEL_TEXT_LINE_HEIGHT;
@@ -1675,13 +1761,14 @@ pub mod text_input {
                 outline_width,
                 floating_label_width,
                 progress,
-                theme.colors().surface.container.high,
+                alpha_color(theme.colors().surface.container.high, self.content_alpha),
             );
 
             let input_layout = layout.children().next().unwrap();
             let caretless_input;
             let input =
                 if state.ime_preedit_active && self.is_enabled && should_suppress_ime_caret() {
+                    let content_alpha = self.content_alpha;
                     // Keep iced_winit's IME preedit overlay, but suppress iced's own
                     // blinking caret so composition does not show two insertion marks.
                     let mut input = IcedTextInput::new("", self.value.as_str())
@@ -1696,7 +1783,9 @@ pub mod text_input {
                         .line_height(absolute_line_height(
                             tokens::component::text_field::INPUT_TEXT_LINE_HEIGHT,
                         ))
-                        .style(caretless_input_layer_style);
+                        .style(move |theme, status| {
+                            input_layer_style_alpha(theme, status, content_alpha)
+                        });
 
                     if self.is_secure {
                         input = input.secure(true);
@@ -1816,6 +1905,27 @@ pub mod text_input {
         Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     {
         TextInput::placeholder(label, value)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::utils::disabled_text;
+
+        #[test]
+        fn outlined_text_input_alpha_scales_input_layer_colors() {
+            let theme = Theme::Light;
+            let colors = theme.colors();
+            let style = input_layer_style_alpha(&theme, iced_text_input::Status::Active, 0.5);
+
+            assert_eq!(style.value, alpha_color(colors.surface.text, 0.5));
+            assert_eq!(style.icon, alpha_color(colors.surface.text_variant, 0.5));
+            assert_eq!(
+                style.selection,
+                alpha_color(disabled_text(colors.primary.color), 0.5)
+            );
+            assert_eq!(style.placeholder, Color::TRANSPARENT);
+        }
     }
 }
 
@@ -2374,11 +2484,13 @@ pub mod radio {
             let state = tree
                 .state
                 .downcast_mut::<SelectionState<Renderer::Paragraph, iced_radio::Status>>();
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::radio::TARGET_SIZE);
 
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if self.on_click.is_some() && press_is_over(event, layout.bounds(), cursor) {
+                    if self.on_click.is_some() && press_is_over(event, hit_bounds, cursor) {
                         state.is_pressed = true;
                         state.press_origin = None;
                         shell.capture_event();
@@ -2388,7 +2500,7 @@ pub mod radio {
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerLifted { .. }) => {
                     if state.is_pressed {
-                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+                        let is_released_over = release_is_over(event, hit_bounds, cursor);
 
                         state.is_pressed = false;
                         state.press_origin = None;
@@ -2442,7 +2554,7 @@ pub mod radio {
                 shell.request_redraw();
             }
 
-            let current_status = self.current_status(layout.bounds(), cursor);
+            let current_status = self.current_status(hit_bounds, cursor);
 
             if let Some(now) = now {
                 if state.advance(now) {
@@ -2467,7 +2579,10 @@ pub mod radio {
             _viewport: &Rectangle,
             _renderer: &Renderer,
         ) -> mouse::Interaction {
-            if cursor.is_over(layout.bounds()) {
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::radio::TARGET_SIZE);
+
+            if cursor.is_over(hit_bounds) {
                 if self.on_click.is_some() {
                     mouse::Interaction::Pointer
                 } else {
@@ -2911,11 +3026,13 @@ pub mod checkbox {
             let state = tree
                 .state
                 .downcast_mut::<SelectionState<Renderer::Paragraph, iced_checkbox::Status>>();
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::checkbox::STATE_LAYER_SIZE);
 
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if self.on_toggle.is_some() && press_is_over(event, layout.bounds(), cursor) {
+                    if self.on_toggle.is_some() && press_is_over(event, hit_bounds, cursor) {
                         state.is_pressed = true;
                         state.press_origin = None;
                         shell.capture_event();
@@ -2925,7 +3042,7 @@ pub mod checkbox {
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerLifted { .. }) => {
                     if state.is_pressed {
-                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+                        let is_released_over = release_is_over(event, hit_bounds, cursor);
 
                         state.is_pressed = false;
                         state.press_origin = None;
@@ -2983,7 +3100,7 @@ pub mod checkbox {
                 shell.request_redraw();
             }
 
-            let current_status = self.current_status(layout.bounds(), cursor);
+            let current_status = self.current_status(hit_bounds, cursor);
 
             if let Some(now) = now {
                 if state.advance(now) {
@@ -3008,7 +3125,10 @@ pub mod checkbox {
             _viewport: &Rectangle,
             _renderer: &Renderer,
         ) -> mouse::Interaction {
-            if cursor.is_over(layout.bounds()) && self.on_toggle.is_some() {
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::checkbox::STATE_LAYER_SIZE);
+
+            if cursor.is_over(hit_bounds) && self.on_toggle.is_some() {
                 mouse::Interaction::Pointer
             } else {
                 mouse::Interaction::default()
@@ -3535,11 +3655,13 @@ pub mod toggler {
             let state = tree
                 .state
                 .downcast_mut::<SelectionState<Renderer::Paragraph, iced_toggler::Status>>();
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::switch::STATE_LAYER_SIZE);
 
             match event {
                 Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                    if self.has_on_toggle() && press_is_over(event, layout.bounds(), cursor) {
+                    if self.has_on_toggle() && press_is_over(event, hit_bounds, cursor) {
                         state.is_pressed = true;
                         state.press_origin =
                             Some(toggler_event_origin(event, layout.bounds(), cursor));
@@ -3550,7 +3672,7 @@ pub mod toggler {
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerLifted { .. }) => {
                     if state.is_pressed {
-                        let is_released_over = release_is_over(event, layout.bounds(), cursor);
+                        let is_released_over = release_is_over(event, hit_bounds, cursor);
                         let origin = state.press_origin.unwrap_or_else(|| {
                             toggler_event_origin(event, layout.bounds(), cursor)
                         });
@@ -3654,7 +3776,7 @@ pub mod toggler {
                 shell.request_redraw();
             }
 
-            let current_status = self.current_status(layout.bounds(), cursor);
+            let current_status = self.current_status(hit_bounds, cursor);
 
             if let Some(now) = now {
                 if state.advance(now) {
@@ -3679,7 +3801,10 @@ pub mod toggler {
             _viewport: &Rectangle,
             _renderer: &Renderer,
         ) -> mouse::Interaction {
-            if cursor.is_over(layout.bounds()) {
+            let hit_bounds =
+                selection_control_hit_bounds(layout, tokens::component::switch::STATE_LAYER_SIZE);
+
+            if cursor.is_over(hit_bounds) {
                 if self.has_on_toggle() {
                     mouse::Interaction::Pointer
                 } else {

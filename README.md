@@ -56,6 +56,7 @@ The crate provides Material-sized constructors and token-backed styles for:
 
 - Buttons, floating action buttons, icon buttons, and chips
 - Text input, text editor, select, and searchable combo box
+- Date picker, date range picker, time picker, time input, and time scroll
 - Checkbox, switch, radio, slider, and progress indicator
 - Dividers, tooltips, badges, lists, cards, data tables, toolbars, and theme picker
 - Application, centered window, page surface, and adaptive navigation helpers

@@ -10,6 +10,7 @@ use iced_widget::core::{svg as core_svg, text as core_text};
 use iced_widget::graphics::geometry;
 use iced_widget::{Column, Container, Row, Space, Stack, text};
 
+use super::navigation;
 use super::{absolute_line_height, button::Button};
 use crate::animation::{ThemeRevealTransition, max_radius_from_origin};
 use crate::utils::{HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, mix, shadow_from_level};
@@ -39,6 +40,18 @@ const THEME_REVEAL_MIN_BLUR_WIDTH: f32 = 36.0;
 const THEME_REVEAL_MAX_BLUR_WIDTH: f32 = 180.0;
 const THEME_REVEAL_START_FILL_THRESHOLD: f32 = 0.45;
 const THEME_REVEAL_EDGE_FADE_THRESHOLD: f32 = 0.75;
+
+/// Returns the floating control bottom margin after accounting for an adaptive
+/// navigation layout.
+pub fn bottom_margin_for_navigation_layout(layout: navigation::AdaptiveLayout) -> f32 {
+    FLOATING_MARGIN
+        + match layout {
+            navigation::AdaptiveLayout::NavigationBar => {
+                tokens::component::navigation_bar::CONTAINER_HEIGHT
+            }
+            navigation::AdaptiveLayout::NavigationRail => 0.0,
+        }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct State {
@@ -918,6 +931,18 @@ mod tests {
 
         state.close();
         assert!(!state.is_open());
+    }
+
+    #[test]
+    fn bottom_margin_accounts_for_adaptive_navigation_clearance() {
+        assert_eq!(
+            bottom_margin_for_navigation_layout(navigation::AdaptiveLayout::NavigationBar),
+            FLOATING_MARGIN + tokens::component::navigation_bar::CONTAINER_HEIGHT
+        );
+        assert_eq!(
+            bottom_margin_for_navigation_layout(navigation::AdaptiveLayout::NavigationRail),
+            FLOATING_MARGIN
+        );
     }
 
     #[test]
