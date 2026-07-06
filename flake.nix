@@ -19,11 +19,9 @@
           inherit system;
         };
         inherit (pkgs) lib;
-
-        rustPlatform = pkgs.makeRustPlatform {
-          cargo = pkgs.cargo;
-          rustc = pkgs.rustc;
-        };
+        windowsPkgs = pkgs.pkgsCross.mingwW64;
+        nativePackages = pkgs.callPackage ./package.nix { };
+        windowsPackages = windowsPkgs.callPackage ./package.nix { };
 
         rustToolchain =
           with pkgs;
@@ -48,14 +46,12 @@
           '';
         };
 
-        packages.default = rustPlatform.buildRustPackage {
-          pname = "iced_material";
-          version = "0.2.0";
-          src = ./.;
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-          };
-          buildInputs = lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ];
+        packages = {
+          inherit (nativePackages) default iced_material;
+
+          native = nativePackages.iced_material;
+          windows = windowsPackages.iced_material;
+          iced_material-windows = windowsPackages.iced_material;
         };
       }
     );
