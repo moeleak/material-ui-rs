@@ -434,8 +434,6 @@ where
                         radius,
                         label_radius,
                         angle,
-                        selection,
-                        value,
                         &value.to_string(),
                         scale,
                         alpha,
@@ -455,8 +453,6 @@ where
                             radius,
                             inner_radius,
                             angle,
-                            selection,
-                            hour,
                             &hour.to_string(),
                             scale,
                             alpha,
@@ -475,8 +471,6 @@ where
                         radius,
                         label_radius,
                         angle,
-                        selection,
-                        minute,
                         &two_digit(minute),
                         scale,
                         alpha,
@@ -495,8 +489,6 @@ where
         clock_radius: f32,
         label_radius: f32,
         angle: f32,
-        selection: TimePickerSelectionMode,
-        value: u8,
         label: &str,
         scale: tokens::typography::TypeScale,
         alpha: f32,
@@ -519,16 +511,13 @@ where
                 );
             }
             ClockLabelPass::SelectedForeground => {
-                if !self.label_matches_selected_value(selection, value)
-                    || !self.label_matches_selector_ring(clock_radius, label_radius)
-                    || !self.label_intersects_selector(
-                        center,
-                        clock_radius,
-                        label_radius,
-                        angle,
-                        scale,
-                    )
-                {
+                if !self.label_uses_selector_foreground(
+                    center,
+                    clock_radius,
+                    label_radius,
+                    angle,
+                    scale,
+                ) {
                     return;
                 }
 
@@ -569,17 +558,22 @@ where
         (handle_center, handle_radius, selector_radius)
     }
 
-    fn label_matches_selected_value(&self, selection: TimePickerSelectionMode, value: u8) -> bool {
-        match selection {
-            TimePickerSelectionMode::Hour => {
-                if self.is_24_hour {
-                    value == selected_24_hour_label_value(self.hour)
-                } else {
-                    value == hour_for_display(self.hour, false)
-                }
-            }
-            TimePickerSelectionMode::Minute => value == self.minute,
-        }
+    fn label_uses_selector_foreground(
+        &self,
+        center: Point,
+        clock_radius: f32,
+        label_radius: f32,
+        label_angle: f32,
+        scale: tokens::typography::TypeScale,
+    ) -> bool {
+        self.label_matches_selector_ring(clock_radius, label_radius)
+            && self.label_intersects_selector(
+                center,
+                clock_radius,
+                label_radius,
+                label_angle,
+                scale,
+            )
     }
 
     fn label_matches_selector_ring(&self, clock_radius: f32, label_radius: f32) -> bool {

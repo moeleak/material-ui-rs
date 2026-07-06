@@ -1736,20 +1736,34 @@ fn clock_face_overlay_label_follows_selector_geometry() {
 
     assert!(face.label_intersects_selector(center, radius, label_radius, hour_angle(4), scale));
     assert!(!face.label_intersects_selector(center, radius, label_radius, hour_angle(5), scale));
+    assert!(face.label_uses_selector_foreground(
+        center,
+        radius,
+        label_radius,
+        hour_angle(4),
+        scale
+    ));
+    assert!(!face.label_uses_selector_foreground(
+        center,
+        radius,
+        label_radius,
+        hour_angle(5),
+        scale
+    ));
 }
 
 #[test]
-fn clock_face_overlay_label_uses_exact_visible_minute_only() {
+fn clock_face_overlay_label_masks_visible_minutes_under_selector() {
     let face = ClockFace {
         hour: 12,
-        minute: 15,
+        minute: 17,
         is_24_hour: false,
         selection: TimePickerSelectionMode::Minute,
         previous_selection: TimePickerSelectionMode::Minute,
         selected_selection: TimePickerSelectionMode::Minute,
         selection_progress: 1.0,
         auto_switch_to_minute: true,
-        selector_angle: minute_angle(13),
+        selector_angle: minute_angle(17),
         on_action: Arc::new(|action: TimePickerAction| action),
     };
     let size = Size::new(
@@ -1761,18 +1775,30 @@ fn clock_face_overlay_label_uses_exact_visible_minute_only() {
     let label_radius = radius * 2.0 * tokens::component::time_picker::OUTER_CIRCLE_RADIUS_RATIO;
     let scale = tokens::component::time_picker::CLOCK_DIAL_LABEL_TEXT;
 
-    assert!(face.label_intersects_selector(center, radius, label_radius, minute_angle(10), scale));
     assert!(face.label_intersects_selector(center, radius, label_radius, minute_angle(15), scale));
-    assert!(!face.label_matches_selected_value(TimePickerSelectionMode::Minute, 10));
-    assert!(face.label_matches_selected_value(TimePickerSelectionMode::Minute, 15));
-    let off_tick_face = ClockFace {
-        minute: 17,
-        selector_angle: minute_angle(17),
-        ..face
-    };
-
-    assert!(!off_tick_face.label_matches_selected_value(TimePickerSelectionMode::Minute, 15));
-    assert!(!off_tick_face.label_matches_selected_value(TimePickerSelectionMode::Minute, 20));
+    assert!(face.label_intersects_selector(center, radius, label_radius, minute_angle(20), scale));
+    assert!(!face.label_intersects_selector(center, radius, label_radius, minute_angle(10), scale));
+    assert!(face.label_uses_selector_foreground(
+        center,
+        radius,
+        label_radius,
+        minute_angle(15),
+        scale
+    ));
+    assert!(face.label_uses_selector_foreground(
+        center,
+        radius,
+        label_radius,
+        minute_angle(20),
+        scale
+    ));
+    assert!(!face.label_uses_selector_foreground(
+        center,
+        radius,
+        label_radius,
+        minute_angle(10),
+        scale
+    ));
 }
 
 #[test]
