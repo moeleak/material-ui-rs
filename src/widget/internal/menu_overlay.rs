@@ -239,6 +239,7 @@ where
     fn layout(&mut self, renderer: &Renderer, bounds: Size) -> layout::Node {
         let space_below = bounds.height - (self.position.y + self.target_height);
         let space_above = self.position.y;
+        let shadow_padding = menu_shadow_padding();
 
         let limits = layout::Limits::new(
             Size::ZERO,
@@ -255,12 +256,21 @@ where
 
         let node = self.list.layout(self.tree, renderer, &limits);
         let size = node.size();
+        let content_position =
+            menu_content_position(self.position, self.target_height, size, bounds.height);
+        let overlay_position = Point::new(
+            content_position.x - shadow_padding,
+            content_position.y - shadow_padding,
+        );
 
-        node.move_to(if space_below > space_above {
-            self.position + Vector::new(0.0, self.target_height)
-        } else {
-            self.position - Vector::new(0.0, size.height)
-        })
+        layout::Node::with_children(
+            Size::new(
+                size.width + shadow_padding * 2.0,
+                size.height + shadow_padding * 2.0,
+            ),
+            vec![node.move_to(Point::new(shadow_padding, shadow_padding))],
+        )
+        .move_to(overlay_position)
     }
 
     fn update(
@@ -272,10 +282,20 @@ where
         clipboard: &mut dyn Clipboard,
         shell: &mut Shell<'_, Message>,
     ) {
-        let bounds = layout.bounds();
+        let Some(content_layout) = layout.children().next() else {
+            return;
+        };
+        let bounds = content_layout.bounds();
 
         self.list.update(
-            self.tree, event, layout, cursor, renderer, clipboard, shell, &bounds,
+            self.tree,
+            event,
+            content_layout,
+            cursor,
+            renderer,
+            clipboard,
+            shell,
+            &bounds,
         );
 
         if let Event::Window(window::Event::RedrawRequested(now)) = event
@@ -291,8 +311,12 @@ where
         cursor: mouse::Cursor,
         renderer: &Renderer,
     ) -> mouse::Interaction {
+        let Some(content_layout) = layout.children().next() else {
+            return mouse::Interaction::default();
+        };
+
         self.list
-            .mouse_interaction(self.tree, layout, cursor, &self.viewport, renderer)
+            .mouse_interaction(self.tree, content_layout, cursor, &self.viewport, renderer)
     }
 
     fn draw(
@@ -303,7 +327,10 @@ where
         layout: Layout<'_>,
         cursor: mouse::Cursor,
     ) {
-        let bounds = layout.bounds();
+        let Some(content_layout) = layout.children().next() else {
+            return;
+        };
+        let bounds = content_layout.bounds();
         let frame = self.animation.frame(opens_down(
             self.position,
             self.target_height,
@@ -320,9 +347,10 @@ where
             alpha,
         );
         let reveal = frame.reveal_bounds(bounds);
+        let reveal_shadow_bounds = menu_shadow_bounds(reveal);
 
         renderer.with_layer(self.viewport, |renderer| {
-            renderer.with_layer(reveal, |renderer| {
+            renderer.with_layer(reveal_shadow_bounds, |renderer| {
                 renderer.fill_quad(
                     renderer::Quad {
                         bounds,
@@ -334,7 +362,13 @@ where
                 );
 
                 self.list.draw(
-                    self.tree, renderer, theme, defaults, layout, cursor, &bounds,
+                    self.tree,
+                    renderer,
+                    theme,
+                    defaults,
+                    content_layout,
+                    cursor,
+                    &bounds,
                 );
             });
         });
@@ -670,6 +704,37 @@ impl MenuAnimationFrame {
         } else {
             position.y >= bounds.height * (EXPANDED_ALPHA_TARGET - self.reveal)
         }
+    }
+}
+
+fn menu_shadow_padding() -> f32 {
+    let layer =
+        tokens::elevation::shadow(tokens::component::menu::CONTAINER_ELEVATION_LEVEL).ambient;
+
+    layer.blur + layer.y.abs()
+}
+
+fn menu_shadow_bounds(bounds: Rectangle) -> Rectangle {
+    let padding = menu_shadow_padding();
+
+    Rectangle {
+        x: bounds.x - padding,
+        y: bounds.y - padding,
+        width: bounds.width + padding * 2.0,
+        height: bounds.height + padding * 2.0,
+    }
+}
+
+fn menu_content_position(
+    position: Point,
+    target_height: f32,
+    content_size: Size,
+    viewport_height: f32,
+) -> Point {
+    if opens_down(position, target_height, viewport_height) {
+        position + Vector::new(0.0, target_height)
+    } else {
+        position - Vector::new(0.0, content_size.height)
     }
 }
 

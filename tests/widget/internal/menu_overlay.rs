@@ -58,3 +58,35 @@ fn reveal_bounds_expand_from_anchor_edge() {
     assert_eq!(up.reveal_bounds(bounds).y, 241.0);
     assert_eq!(up.reveal_bounds(bounds).height, 75.0);
 }
+
+#[test]
+fn menu_shadow_padding_matches_material_menu_elevation() {
+    assert_eq!(tokens::component::menu::CONTAINER_ELEVATION_LEVEL, 2);
+    assert_eq!(menu_shadow_padding(), 8.0);
+}
+
+#[test]
+fn menu_shadow_bounds_expand_without_moving_surface() {
+    let surface = Rectangle::new(Point::new(30.0, 132.0), Size::new(266.0, 384.0));
+    let shadow = menu_shadow_bounds(surface);
+
+    assert_eq!(shadow.x, 22.0);
+    assert_eq!(shadow.y, 124.0);
+    assert_eq!(shadow.width, 282.0);
+    assert_eq!(shadow.height, 400.0);
+}
+
+#[test]
+fn menu_content_position_stays_aligned_to_anchor() {
+    let anchor = Point::new(30.0, 20.0);
+    let size = Size::new(266.0, 384.0);
+
+    assert_eq!(
+        menu_content_position(anchor, 112.0, size, 600.0),
+        Point::new(30.0, 132.0)
+    );
+    assert_eq!(
+        menu_content_position(Point::new(30.0, 520.0), 112.0, size, 600.0),
+        Point::new(30.0, 136.0)
+    );
+}
