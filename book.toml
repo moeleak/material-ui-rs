@@ -1,0 +1,15 @@
+[book]
+title = "iced_material"
+authors = ["pml68", "MoeLeak"]
+language = "en"
+src = "docs"
+description = "Material 3 inspired widgets and theme defaults for iced."
+
+[build]
+build-dir = "target/book"
+create-missing = false
+
+[output.html]
+git-repository-url = "https://github.com/moeleak/iced_material"
+edit-url-template = "https://github.com/moeleak/iced_material/edit/main/{path}"
+site-url = "/"

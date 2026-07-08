@@ -1,92 +1,88 @@
-# iced_material [🌎Live Demo](https://material.leak.moe)
+# iced_material
 
-Material 3 inspired widgets and theme defaults for
-[`iced`](https://iced.rs) 0.14.
+[Live demo](https://material.leak.moe)
 
-Showcase
+Material 3 inspired widgets and theme defaults for [`iced`](https://iced.rs)
+0.14.
 
 ![iced_material light showcase](assets/screenshots/light.png)
 ![iced_material dark showcase](assets/screenshots/dark.png)
 
 ## Quick Start
 
-Run the 91-line animated quick start app:
+Run the compact tutorial app:
 
 ```sh
 cargo run --example quickstart
 ```
 
-Build and run the WebAssembly showcase locally:
+Run the full component showcase:
+
+```sh
+cargo run --example showcase
+```
+
+Build and serve the WebAssembly showcase:
 
 ```sh
 trunk build web/index.html --release --dist dist --public-url /
 python3 -m http.server 4173 --directory dist
 ```
 
-Then open <http://127.0.0.1:4173/>. Serve `dist/` over HTTP instead of opening
-`dist/index.html` directly, so the browser loads the JavaScript module and WASM
-with the correct MIME types.
+Open <http://127.0.0.1:4173/>. Serve `dist/` over HTTP instead of opening the
+HTML file directly, so the browser loads the JavaScript module and WASM with the
+correct MIME types.
 
-```rust
-use iced::Size;
-use iced_material as material;
+## Documentation
 
-fn main() -> iced::Result {
-    material::application(boot, update, view)
-        .title("iced_material quick start")
-        .subscription(subscription)
-        .window(material::window_with_min_size(
-            Size::new(1080.0, 980.0),
-            Size::new(420.0, 720.0),
-        ))
-        .run()
-}
+The documentation is organized with Diátaxis:
+
+- [Tutorials](docs/tutorials/first-material-app.md): learn by building a first
+  Material app.
+- [How-to guides](docs/how-to/run-examples.md): run examples, build the web
+  showcase, use fonts, adaptive navigation, theme picking, forms, and feedback.
+- [Reference](docs/reference/application.md): find module-level API entry
+  points.
+- [Explanation](docs/explanation/architecture.md): understand the architecture,
+  tokens, theme model, and native/WebAssembly split.
+
+Build the mdBook locally:
+
+```sh
+mdbook build
 ```
 
-Core view composition uses page, menu navigation, and widget helpers:
+With Nix:
 
-```rust
-use material::widget::{button, navigation, page};
-
-fn view(app: &App) -> material::Element<'_, Message> {
-    let content = page::surface(
-        page::header("Home", "A small Material app"),
-        button::filled("Increment").on_press(Message::Increment),
-    );
-
-    navigation::suite(&destinations, &app.navigation)
-        .dimensions(1080.0, 980.0)
-        .with_menu("Quick start", Message::Menu)
-        .view(Message::Open, content)
-}
+```sh
+nix develop -c mdbook build
 ```
+
+API documentation is available on [docs.rs](https://docs.rs/iced_material).
 
 ## Components
 
 The crate provides Material-sized constructors and token-backed styles for:
 
-- Buttons, floating action buttons, icon buttons, and chips
-- Text input (`text_input`), text editor (`text_editor`), select, and searchable combobox
-- Date picker, date range picker, time picker, time input, and time scroll
-- Checkbox, switch, radio, slider, and progress indicator
-- Dividers, tooltips, badges, lists, cards, data_tables (`data_table`), toolbars, and theme picker (`theme_picker`)
-- Application, centered window, page surface, and adaptive navigation helpers
-- Material color schemes, typography tokens, shape tokens, elevation, and motion constants
-- Bundled Roboto and Material Symbols Rounded font helpers
-- Noto Sans CJK SC font family helpers for applications that provide CJK fonts
-
-## API Layout
-
-- `material::widget::*`: Material-sized widget constructors and custom widgets.
-- `material::style::*`: iced catalog style functions for `Theme`.
-- `material::text::*`: Material typography text constructors and text color styles.
-- `material::tokens::*`: Material component, typography, shape, elevation, and motion tokens.
+- Buttons, floating action buttons, icon buttons, and chips.
+- Text input, text editor, select, and searchable combobox.
+- Date picker, date range picker, time picker, time input, and time scroll.
+- Checkbox, switch, radio, slider, tabs, segmented buttons, and progress
+  indicators.
+- Dividers, tooltips, badges, lists, cards, data tables, toolbars, sheets,
+  dialogs, snackbars, and theme picker.
+- Application, centered window, page surface, and adaptive navigation helpers.
+- Material color schemes, typography, shape, elevation, motion, and state
+  tokens.
+- Bundled Roboto and Material Symbols Rounded font helpers.
+- Noto Sans CJK SC font family helpers for applications that provide CJK fonts.
 
 ## Features
 
-- `default`: Enables SVG support and Material animations.
+- `default`: Enables SVG support, animations, and canvas drawing.
 - `serde`: Adds `serde` support for theme data.
 - `animate`: Enables integration with `iced_anim`.
+- `canvas`: Enables path-based canvas drawing.
 - `crisp`: Enables pixel snapping for crisp edges.
 - `dialog`: Enables `iced_dialog` support.
 - `selection`: Enables `iced_selection` support.

@@ -32,6 +32,7 @@
             cargo
             lld
             trunk
+            mdbook
             binaryen
             wasm-bindgen-cli
             nodejs_24
