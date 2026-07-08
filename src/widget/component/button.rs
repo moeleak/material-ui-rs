@@ -332,56 +332,52 @@ where
         let should_snap_initial_redraw_hover =
             button_should_snap_initial_redraw_hover(event, state, is_hovered);
 
-        if button_should_sync_hover(event, cursor) {
-            if state.sync_hover(is_hovered, now_or_current()) {
-                if should_snap_initial_redraw_hover {
-                    state.snap_state_layer_to_hover_target();
-                }
-
-                shell.request_redraw();
+        if button_should_sync_hover(event, cursor) && state.sync_hover(is_hovered, now_or_current())
+        {
+            if should_snap_initial_redraw_hover {
+                state.snap_state_layer_to_hover_target();
             }
+
+            shell.request_redraw();
         }
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                if self.on_press.is_some() {
-                    if let Some(origin) = press_origin(event, bounds, cursor) {
-                        state.press(origin, now_or_current());
-                        state.touch_press_position = touch_position(event, cursor);
-                        shell.capture_event();
-                        shell.request_redraw();
-                    }
-                }
-            }
-            Event::Touch(touch::Event::FingerMoved { .. }) => {
-                if state.is_pressed
-                    && touch_moved_beyond_click_slop(state.touch_press_position, event, cursor)
-                {
-                    state.cancel(now_or_current());
-                    shell.request_redraw();
-                }
-            }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. }) => {
-                if state.is_pressed {
-                    state.release(now_or_current());
-
-                    if release_is_over(event, bounds, cursor) {
-                        if let Some(on_press) = &self.on_press {
-                            shell.publish(on_press.get());
-                        }
-                    }
-
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if self.on_press.is_some() =>
+            {
+                if let Some(origin) = press_origin(event, bounds, cursor) {
+                    state.press(origin, now_or_current());
+                    state.touch_press_position = touch_position(event, cursor);
                     shell.capture_event();
                     shell.request_redraw();
                 }
             }
-            Event::Touch(touch::Event::FingerLost { .. }) => {
-                if state.is_pressed {
-                    state.cancel(now_or_current());
-                    shell.request_redraw();
+            Event::Touch(touch::Event::FingerMoved { .. })
+                if state.is_pressed
+                    && touch_moved_beyond_click_slop(state.touch_press_position, event, cursor) =>
+            {
+                state.cancel(now_or_current());
+                shell.request_redraw();
+            }
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+                if state.is_pressed =>
+            {
+                state.release(now_or_current());
+
+                if release_is_over(event, bounds, cursor)
+                    && let Some(on_press) = &self.on_press
+                {
+                    shell.publish(on_press.get());
                 }
+
+                shell.capture_event();
+                shell.request_redraw();
+            }
+            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+                state.cancel(now_or_current());
+                shell.request_redraw();
             }
             _ => {}
         }

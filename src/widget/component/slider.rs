@@ -256,64 +256,62 @@ where
                 }
                 Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
                 | Event::Touch(touch::Event::FingerLifted { .. })
-                | Event::Touch(touch::Event::FingerLost { .. }) => {
-                    if state.is_dragging {
-                        if let Some(on_release) = self.on_release.clone() {
-                            shell.publish(on_release);
-                        }
-
-                        state.is_dragging = false;
+                | Event::Touch(touch::Event::FingerLost { .. })
+                    if state.is_dragging =>
+                {
+                    if let Some(on_release) = self.on_release.clone() {
+                        shell.publish(on_release);
                     }
+
+                    state.is_dragging = false;
                 }
                 Event::Mouse(mouse::Event::CursorMoved { .. })
-                | Event::Touch(touch::Event::FingerMoved { .. }) => {
-                    if state.is_dragging {
-                        if let Some(value) = cursor.land().position().and_then(locate) {
-                            change(value);
-                        }
-
-                        shell.capture_event();
+                | Event::Touch(touch::Event::FingerMoved { .. })
+                    if state.is_dragging =>
+                {
+                    if let Some(value) = cursor.land().position().and_then(locate) {
+                        change(value);
                     }
+
+                    shell.capture_event();
                 }
                 Event::Mouse(mouse::Event::WheelScrolled { delta })
-                    if state.keyboard_modifiers.control() =>
+                    if state.keyboard_modifiers.control() && cursor.is_over(layout.bounds()) =>
                 {
-                    if cursor.is_over(layout.bounds()) {
-                        let delta = match delta {
-                            mouse::ScrollDelta::Lines { x: _, y } => y,
-                            mouse::ScrollDelta::Pixels { x: _, y } => y,
-                        };
+                    let delta = match delta {
+                        mouse::ScrollDelta::Lines { x: _, y } => y,
+                        mouse::ScrollDelta::Pixels { x: _, y } => y,
+                    };
 
-                        if *delta < 0.0 {
+                    if *delta < 0.0 {
+                        if let Some(value) = decrement(current_value) {
+                            change(value);
+                        }
+                    } else if let Some(value) = increment(current_value) {
+                        change(value);
+                    }
+
+                    shell.capture_event();
+                }
+                Event::Keyboard(keyboard::Event::KeyPressed { key, .. })
+                    if cursor.is_over(layout.bounds()) =>
+                {
+                    match key {
+                        Key::Named(key::Named::ArrowUp) => {
+                            if let Some(value) = increment(current_value) {
+                                change(value);
+                            }
+
+                            shell.capture_event();
+                        }
+                        Key::Named(key::Named::ArrowDown) => {
                             if let Some(value) = decrement(current_value) {
                                 change(value);
                             }
-                        } else if let Some(value) = increment(current_value) {
-                            change(value);
+
+                            shell.capture_event();
                         }
-
-                        shell.capture_event();
-                    }
-                }
-                Event::Keyboard(keyboard::Event::KeyPressed { key, .. }) => {
-                    if cursor.is_over(layout.bounds()) {
-                        match key {
-                            Key::Named(key::Named::ArrowUp) => {
-                                if let Some(value) = increment(current_value) {
-                                    change(value);
-                                }
-
-                                shell.capture_event();
-                            }
-                            Key::Named(key::Named::ArrowDown) => {
-                                if let Some(value) = decrement(current_value) {
-                                    change(value);
-                                }
-
-                                shell.capture_event();
-                            }
-                            _ => (),
-                        }
+                        _ => (),
                     }
                 }
                 Event::Keyboard(keyboard::Event::ModifiersChanged(modifiers)) => {

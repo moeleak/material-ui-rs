@@ -336,41 +336,39 @@ where
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                if self.has_on_toggle() && press_is_over(event, hit_bounds, cursor) {
-                    state.is_pressed = true;
-                    state.press_origin = Some(toggler_event_origin(event, layout.bounds(), cursor));
-                    shell.capture_event();
-                    shell.request_redraw();
-                }
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if self.has_on_toggle() && press_is_over(event, hit_bounds, cursor) =>
+            {
+                state.is_pressed = true;
+                state.press_origin = Some(toggler_event_origin(event, layout.bounds(), cursor));
+                shell.capture_event();
+                shell.request_redraw();
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. }) => {
-                if state.is_pressed {
-                    let is_released_over = release_is_over(event, hit_bounds, cursor);
-                    let origin = state
-                        .press_origin
-                        .unwrap_or_else(|| toggler_event_origin(event, layout.bounds(), cursor));
+            | Event::Touch(touch::Event::FingerLifted { .. })
+                if state.is_pressed =>
+            {
+                let is_released_over = release_is_over(event, hit_bounds, cursor);
+                let origin = state
+                    .press_origin
+                    .unwrap_or_else(|| toggler_event_origin(event, layout.bounds(), cursor));
 
-                    state.is_pressed = false;
-                    state.press_origin = None;
+                state.is_pressed = false;
+                state.press_origin = None;
 
-                    if is_released_over
-                        && let Some(message) = self.toggle_message(!self.is_toggled, origin)
-                    {
-                        shell.publish(message);
-                    }
-
-                    shell.capture_event();
-                    shell.request_redraw();
+                if is_released_over
+                    && let Some(message) = self.toggle_message(!self.is_toggled, origin)
+                {
+                    shell.publish(message);
                 }
+
+                shell.capture_event();
+                shell.request_redraw();
             }
-            Event::Touch(touch::Event::FingerLost { .. }) => {
-                if state.is_pressed {
-                    state.is_pressed = false;
-                    state.press_origin = None;
-                    shell.request_redraw();
-                }
+            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+                state.is_pressed = false;
+                state.press_origin = None;
+                shell.request_redraw();
             }
             _ => {}
         }

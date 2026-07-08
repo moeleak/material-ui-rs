@@ -261,36 +261,34 @@ where
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                if self.on_toggle.is_some() && press_is_over(event, hit_bounds, cursor) {
-                    state.is_pressed = true;
-                    state.press_origin = None;
-                    shell.capture_event();
-                    shell.request_redraw();
-                }
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if self.on_toggle.is_some() && press_is_over(event, hit_bounds, cursor) =>
+            {
+                state.is_pressed = true;
+                state.press_origin = None;
+                shell.capture_event();
+                shell.request_redraw();
             }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. }) => {
-                if state.is_pressed {
-                    let is_released_over = release_is_over(event, hit_bounds, cursor);
+            | Event::Touch(touch::Event::FingerLifted { .. })
+                if state.is_pressed =>
+            {
+                let is_released_over = release_is_over(event, hit_bounds, cursor);
 
-                    state.is_pressed = false;
-                    state.press_origin = None;
+                state.is_pressed = false;
+                state.press_origin = None;
 
-                    if is_released_over && let Some(on_toggle) = &self.on_toggle {
-                        shell.publish((on_toggle)(!self.is_checked));
-                    }
-
-                    shell.capture_event();
-                    shell.request_redraw();
+                if is_released_over && let Some(on_toggle) = &self.on_toggle {
+                    shell.publish((on_toggle)(!self.is_checked));
                 }
+
+                shell.capture_event();
+                shell.request_redraw();
             }
-            Event::Touch(touch::Event::FingerLost { .. }) => {
-                if state.is_pressed {
-                    state.is_pressed = false;
-                    state.press_origin = None;
-                    shell.request_redraw();
-                }
+            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+                state.is_pressed = false;
+                state.press_origin = None;
+                shell.request_redraw();
             }
             _ => {}
         }

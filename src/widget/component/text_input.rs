@@ -422,24 +422,22 @@ where
                         shell.request_redraw();
                     }
                 }
-                Event::InputMethod(input_method::Event::Preedit(content, _)) => {
-                    if state.set_ime_preedit(content) {
-                        shell.request_redraw();
-                    }
+                Event::InputMethod(input_method::Event::Preedit(content, _))
+                    if state.set_ime_preedit(content) =>
+                {
+                    shell.request_redraw();
                 }
                 Event::InputMethod(
                     input_method::Event::Opened
                     | input_method::Event::Closed
                     | input_method::Event::Commit(_),
-                ) => {
-                    if state.clear_ime_preedit() {
-                        shell.request_redraw();
-                    }
+                ) if state.clear_ime_preedit() => {
+                    shell.request_redraw();
                 }
-                Event::Window(window::Event::RedrawRequested(now)) => {
-                    if state.label_float.advance(*now) {
-                        shell.request_redraw();
-                    }
+                Event::Window(window::Event::RedrawRequested(now))
+                    if state.label_float.advance(*now) =>
+                {
+                    shell.request_redraw();
                 }
                 _ => {}
             }

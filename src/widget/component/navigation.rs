@@ -2187,46 +2187,44 @@ where
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                if navigation_event_is_over(event, layout.bounds(), cursor) {
-                    let indicator_bounds = self.indicator.bounds(layout.bounds());
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if navigation_event_is_over(event, layout.bounds(), cursor) =>
+            {
+                let indicator_bounds = self.indicator.bounds(layout.bounds());
 
-                    if let Some(origin) = navigation_press_origin(event, indicator_bounds, cursor) {
-                        state.press(origin, now.unwrap_or_else(Instant::now));
-                        shell.request_redraw();
-                        shell.capture_event();
-                    }
-                }
-            }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. }) => {
-                if state.is_pressed {
-                    let is_released_over = navigation_event_is_over(event, layout.bounds(), cursor);
-                    let is_touch_release = matches!(event, Event::Touch(_));
-
-                    if is_touch_release {
-                        state.release_with_hover(
-                            is_released_over,
-                            false,
-                            now.unwrap_or_else(Instant::now),
-                        );
-                    } else {
-                        state.release(is_released_over, now.unwrap_or_else(Instant::now));
-                    }
+                if let Some(origin) = navigation_press_origin(event, indicator_bounds, cursor) {
+                    state.press(origin, now.unwrap_or_else(Instant::now));
                     shell.request_redraw();
-
-                    if is_released_over {
-                        shell.publish(self.on_press.clone());
-                    }
-
                     shell.capture_event();
                 }
             }
-            Event::Touch(touch::Event::FingerLost { .. }) => {
-                if state.is_pressed {
-                    state.cancel(now.unwrap_or_else(Instant::now));
-                    shell.request_redraw();
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
+            | Event::Touch(touch::Event::FingerLifted { .. })
+                if state.is_pressed =>
+            {
+                let is_released_over = navigation_event_is_over(event, layout.bounds(), cursor);
+                let is_touch_release = matches!(event, Event::Touch(_));
+
+                if is_touch_release {
+                    state.release_with_hover(
+                        is_released_over,
+                        false,
+                        now.unwrap_or_else(Instant::now),
+                    );
+                } else {
+                    state.release(is_released_over, now.unwrap_or_else(Instant::now));
                 }
+                shell.request_redraw();
+
+                if is_released_over {
+                    shell.publish(self.on_press.clone());
+                }
+
+                shell.capture_event();
+            }
+            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+                state.cancel(now.unwrap_or_else(Instant::now));
+                shell.request_redraw();
             }
             _ => {}
         }
