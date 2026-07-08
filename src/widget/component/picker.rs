@@ -1984,6 +1984,50 @@ pub enum TimePickerAction {
     MinuteInputChanged(String),
 }
 
+/// Visual options shared by date picker surfaces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DatePickerOptions {
+    pub show_mode_toggle: bool,
+}
+
+impl Default for DatePickerOptions {
+    fn default() -> Self {
+        Self {
+            show_mode_toggle: true,
+        }
+    }
+}
+
+impl DatePickerOptions {
+    /// Sets whether the picker/input mode toggle is shown in the header.
+    pub const fn show_mode_toggle(mut self, show_mode_toggle: bool) -> Self {
+        self.show_mode_toggle = show_mode_toggle;
+        self
+    }
+}
+
+/// Visual options for the analog time picker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimePickerOptions {
+    pub layout: TimePickerLayout,
+}
+
+impl Default for TimePickerOptions {
+    fn default() -> Self {
+        Self {
+            layout: TimePickerLayout::Vertical,
+        }
+    }
+}
+
+impl TimePickerOptions {
+    /// Sets the analog time picker layout.
+    pub const fn layout(mut self, layout: TimePickerLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+}
+
 /// Creates a Material 3 date picker.
 pub fn date_picker<'a, Message, Renderer>(
     state: &'a DatePickerState,
@@ -1994,21 +2038,21 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    date_picker_with_mode_toggle(state, on_action, true)
+    date_picker_with(state, on_action, DatePickerOptions::default())
 }
 
-/// Creates a Material 3 date picker with explicit mode toggle visibility.
-pub fn date_picker_with_mode_toggle<'a, Message, Renderer>(
+/// Creates a Material 3 date picker with custom visual options.
+pub fn date_picker_with<'a, Message, Renderer>(
     state: &'a DatePickerState,
     on_action: impl Fn(DatePickerAction) -> Message + Clone + 'a,
-    show_mode_toggle: bool,
+    options: DatePickerOptions,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    Container::new(date_picker_body(state, on_action, show_mode_toggle))
+    Container::new(date_picker_body(state, on_action, options.show_mode_toggle))
         .width(Length::Fixed(
             tokens::component::date_picker::CONTAINER_WIDTH,
         ))
@@ -2029,14 +2073,14 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    date_range_picker_with_mode_toggle(state, on_action, true)
+    date_range_picker_with(state, on_action, DatePickerOptions::default())
 }
 
-/// Creates a Material 3 date range picker with explicit mode toggle visibility.
-pub fn date_range_picker_with_mode_toggle<'a, Message, Renderer>(
+/// Creates a Material 3 date range picker with custom visual options.
+pub fn date_range_picker_with<'a, Message, Renderer>(
     state: &'a DateRangePickerState,
     on_action: impl Fn(DateRangePickerAction) -> Message + Clone + 'a,
-    show_mode_toggle: bool,
+    options: DatePickerOptions,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
@@ -2046,7 +2090,7 @@ where
     Container::new(date_range_picker_body(
         state,
         on_action,
-        show_mode_toggle,
+        options.show_mode_toggle,
         tokens::component::date_picker::CONTAINER_HEIGHT,
     ))
     .width(Length::Fixed(
@@ -2070,15 +2114,15 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    date_picker_dialog_with_mode_toggle(state, on_action, true, actions)
+    date_picker_dialog_with(state, on_action, actions, DatePickerOptions::default())
 }
 
-/// Creates a Material 3 date picker dialog surface with explicit mode toggle visibility.
-pub fn date_picker_dialog_with_mode_toggle<'a, Message, Renderer>(
+/// Creates a Material 3 date picker dialog surface with custom visual options.
+pub fn date_picker_dialog_with<'a, Message, Renderer>(
     state: &'a DatePickerState,
     on_action: impl Fn(DatePickerAction) -> Message + Clone + 'a,
-    show_mode_toggle: bool,
     actions: impl Into<Element<'a, Message, Theme, Renderer>>,
+    options: DatePickerOptions,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
@@ -2086,7 +2130,7 @@ where
     iced_widget::core::Font: Into<Renderer::Font>,
 {
     date_picker_dialog_surface(
-        date_picker_body(state, on_action, show_mode_toggle),
+        date_picker_body(state, on_action, options.show_mode_toggle),
         actions,
     )
 }
@@ -2102,15 +2146,15 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    date_range_picker_dialog_with_mode_toggle(state, on_action, true, actions)
+    date_range_picker_dialog_with(state, on_action, actions, DatePickerOptions::default())
 }
 
-/// Creates a Material 3 date range picker dialog surface with explicit mode toggle visibility.
-pub fn date_range_picker_dialog_with_mode_toggle<'a, Message, Renderer>(
+/// Creates a Material 3 date range picker dialog surface with custom visual options.
+pub fn date_range_picker_dialog_with<'a, Message, Renderer>(
     state: &'a DateRangePickerState,
     on_action: impl Fn(DateRangePickerAction) -> Message + Clone + 'a,
-    show_mode_toggle: bool,
     actions: impl Into<Element<'a, Message, Theme, Renderer>>,
+    options: DatePickerOptions,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
@@ -2121,7 +2165,7 @@ where
         date_range_picker_body(
             state,
             on_action,
-            show_mode_toggle,
+            options.show_mode_toggle,
             date_picker_dialog_content_height(),
         ),
         actions,
@@ -2155,21 +2199,21 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    time_picker_with_layout(state, on_action, TimePickerLayout::Vertical)
+    time_picker_with(state, on_action, TimePickerOptions::default())
 }
 
-/// Creates a Material 3 analog time picker with an explicit layout.
-pub fn time_picker_with_layout<'a, Message, Renderer>(
+/// Creates a Material 3 analog time picker with custom visual options.
+pub fn time_picker_with<'a, Message, Renderer>(
     state: &'a TimePickerState,
     on_action: impl Fn(TimePickerAction) -> Message + Clone + 'a,
-    layout: TimePickerLayout,
+    options: TimePickerOptions,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'static + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    Container::new(time_picker_body(state, on_action, layout))
+    Container::new(time_picker_body(state, on_action, options.layout))
         .padding(24.0)
         .style(time_picker_container_style)
         .into()

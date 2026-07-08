@@ -1475,8 +1475,11 @@ fn material_picker_constructors_compile_to_elements() {
     let time = picker::TimePickerState::new(14, 30, false);
 
     let _: TestElement<'_> = picker::date_picker(&date, |_| Message::Pressed);
-    let _: TestElement<'_> =
-        picker::date_picker_with_mode_toggle(&date, |_| Message::Pressed, false);
+    let _: TestElement<'_> = picker::date_picker_with(
+        &date,
+        |_| Message::Pressed,
+        picker::DatePickerOptions::default().show_mode_toggle(false),
+    );
     let _: TestElement<'_> = picker::date_picker_dialog(
         &date,
         |_| Message::Pressed,
@@ -1485,18 +1488,21 @@ fn material_picker_constructors_compile_to_elements() {
             dialog::action_button("OK", Message::Pressed),
         ]),
     );
-    let _: TestElement<'_> = picker::date_picker_dialog_with_mode_toggle(
+    let _: TestElement<'_> = picker::date_picker_dialog_with(
         &date,
         |_| Message::Pressed,
-        false,
         picker::date_picker_dialog_actions([
             dialog::action_button("Cancel", Message::Pressed),
             dialog::action_button("OK", Message::Pressed),
         ]),
+        picker::DatePickerOptions::default().show_mode_toggle(false),
     );
     let _: TestElement<'_> = picker::date_range_picker(&range, |_| Message::Pressed);
-    let _: TestElement<'_> =
-        picker::date_range_picker_with_mode_toggle(&range, |_| Message::Pressed, false);
+    let _: TestElement<'_> = picker::date_range_picker_with(
+        &range,
+        |_| Message::Pressed,
+        picker::DatePickerOptions::default().show_mode_toggle(false),
+    );
     let _: TestElement<'_> = picker::date_range_picker_dialog(
         &range,
         |_| Message::Pressed,
@@ -1505,16 +1511,21 @@ fn material_picker_constructors_compile_to_elements() {
             dialog::action_button("OK", Message::Pressed),
         ]),
     );
-    let _: TestElement<'_> = picker::date_range_picker_dialog_with_mode_toggle(
+    let _: TestElement<'_> = picker::date_range_picker_dialog_with(
         &range,
         |_| Message::Pressed,
-        false,
         picker::date_picker_dialog_actions([
             dialog::action_button("Cancel", Message::Pressed),
             dialog::action_button("OK", Message::Pressed),
         ]),
+        picker::DatePickerOptions::default().show_mode_toggle(false),
     );
     let _: TestElement<'_> = picker::time_picker(&time, |_| Message::Pressed);
+    let _: TestElement<'_> = picker::time_picker_with(
+        &time,
+        |_| Message::Pressed,
+        picker::TimePickerOptions::default().layout(picker::TimePickerLayout::Horizontal),
+    );
     let _: TestElement<'_> = picker::time_picker_dialog(
         &time,
         picker::TimePickerDisplayMode::Picker,
