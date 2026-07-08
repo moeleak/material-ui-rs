@@ -9,7 +9,7 @@ on:
       tag:
         description: Release tag to publish
         required: true
-        default: "0.3.0"
+        default: "0.4.0"
 
 permissions:
   contents: write
