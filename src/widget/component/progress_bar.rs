@@ -79,73 +79,63 @@ pub struct LinearProgress {
     four_color: bool,
 }
 
-/// Creates an expressive determinate linear progress indicator.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LinearProgressMode {
+    Determinate { progress: f32, phase: f32 },
+    Indeterminate { phase: f32 },
+    FourColorIndeterminate { phase: f32, color_phase: f32 },
+}
+
+impl LinearProgressMode {
+    pub const fn determinate(progress: f32, phase: f32) -> Self {
+        Self::Determinate { progress, phase }
+    }
+
+    pub const fn indeterminate(phase: f32) -> Self {
+        Self::Indeterminate { phase }
+    }
+
+    pub fn four_color_indeterminate(phase: f32) -> Self {
+        Self::FourColorIndeterminate {
+            phase,
+            color_phase: phase * 0.5,
+        }
+    }
+
+    pub const fn four_color_indeterminate_with_color_phase(phase: f32, color_phase: f32) -> Self {
+        Self::FourColorIndeterminate { phase, color_phase }
+    }
+}
+
+/// Creates a Material linear progress indicator.
 pub fn linear<'a, Message, Renderer>(
-    progress: f32,
-    phase: f32,
+    mode: LinearProgressMode,
 ) -> Canvas<LinearProgress, Message, Theme, Renderer>
 where
     Renderer: iced_widget::graphics::geometry::Renderer + 'a,
 {
-    linear_wavy(progress, phase)
-}
+    let (mode, progress, phase, color_phase, four_color) = match mode {
+        LinearProgressMode::Determinate { progress, phase } => (
+            LinearMode::Determinate,
+            progress.clamp(0.0, 1.0),
+            phase,
+            phase,
+            false,
+        ),
+        LinearProgressMode::Indeterminate { phase } => {
+            (LinearMode::Indeterminate, 0.0, phase, phase, false)
+        }
+        LinearProgressMode::FourColorIndeterminate { phase, color_phase } => {
+            (LinearMode::Indeterminate, 0.0, phase, color_phase, true)
+        }
+    };
 
-/// Creates an expressive determinate linear progress indicator.
-pub fn linear_wavy<'a, Message, Renderer>(
-    progress: f32,
-    phase: f32,
-) -> Canvas<LinearProgress, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
     Canvas::new(LinearProgress {
-        mode: LinearMode::Determinate,
-        progress: progress.clamp(0.0, 1.0),
-        phase,
-        color_phase: phase,
-        four_color: false,
-    })
-    .width(Length::Fill)
-    .height(Length::Fixed(
-        tokens::component::linear_progress::WAVE_HEIGHT,
-    ))
-}
-
-/// Creates a Material indeterminate linear progress indicator.
-pub fn linear_indeterminate<'a, Message, Renderer>(
-    phase: f32,
-    four_color: bool,
-) -> Canvas<LinearProgress, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
-    Canvas::new(LinearProgress {
-        mode: LinearMode::Indeterminate,
-        progress: 0.0,
-        phase,
-        color_phase: phase * 0.5,
-        four_color,
-    })
-    .width(Length::Fill)
-    .height(Length::Fixed(
-        tokens::component::linear_progress::WAVE_HEIGHT,
-    ))
-}
-
-/// Creates a Material indeterminate linear progress indicator with explicit color phase.
-pub fn linear_indeterminate_with_color_phase<'a, Message, Renderer>(
-    phase: f32,
-    color_phase: f32,
-) -> Canvas<LinearProgress, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
-    Canvas::new(LinearProgress {
-        mode: LinearMode::Indeterminate,
-        progress: 0.0,
+        mode,
+        progress,
         phase,
         color_phase,
-        four_color: true,
+        four_color,
     })
     .width(Length::Fill)
     .height(Length::Fixed(
@@ -222,77 +212,58 @@ pub struct LoadingIndicator {
     phase: f32,
 }
 
-/// Creates an expressive indeterminate loading indicator.
-pub fn loading_indicator<'a, Message, Renderer>(
-    phase: f32,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum LoadingIndicatorMode {
+    Indeterminate { phase: f32 },
+    ContainedIndeterminate { phase: f32 },
+    Determinate { progress: f32 },
+    ContainedDeterminate { progress: f32 },
+}
+
+impl LoadingIndicatorMode {
+    pub const fn indeterminate(phase: f32) -> Self {
+        Self::Indeterminate { phase }
+    }
+
+    pub const fn contained_indeterminate(phase: f32) -> Self {
+        Self::ContainedIndeterminate { phase }
+    }
+
+    pub const fn determinate(progress: f32) -> Self {
+        Self::Determinate { progress }
+    }
+
+    pub const fn contained_determinate(progress: f32) -> Self {
+        Self::ContainedDeterminate { progress }
+    }
+}
+
+/// Creates an expressive loading indicator.
+pub fn loading<'a, Message, Renderer>(
+    mode: LoadingIndicatorMode,
 ) -> Canvas<LoadingIndicator, Message, Theme, Renderer>
 where
     Renderer: iced_widget::graphics::geometry::Renderer + 'a,
 {
+    let (mode, progress, phase) = match mode {
+        LoadingIndicatorMode::Indeterminate { phase } => (LoadingMode::Uncontained, None, phase),
+        LoadingIndicatorMode::ContainedIndeterminate { phase } => {
+            (LoadingMode::Contained, None, phase)
+        }
+        LoadingIndicatorMode::Determinate { progress } => (
+            LoadingMode::Uncontained,
+            Some(progress.clamp(0.0, 1.0)),
+            0.0,
+        ),
+        LoadingIndicatorMode::ContainedDeterminate { progress } => {
+            (LoadingMode::Contained, Some(progress.clamp(0.0, 1.0)), 0.0)
+        }
+    };
+
     Canvas::new(LoadingIndicator {
-        mode: LoadingMode::Uncontained,
-        progress: None,
+        mode,
+        progress,
         phase,
-    })
-    .width(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_WIDTH,
-    ))
-    .height(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_HEIGHT,
-    ))
-}
-
-/// Creates an expressive contained indeterminate loading indicator.
-pub fn contained_loading_indicator<'a, Message, Renderer>(
-    phase: f32,
-) -> Canvas<LoadingIndicator, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
-    Canvas::new(LoadingIndicator {
-        mode: LoadingMode::Contained,
-        progress: None,
-        phase,
-    })
-    .width(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_WIDTH,
-    ))
-    .height(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_HEIGHT,
-    ))
-}
-
-/// Creates an expressive determinate loading indicator.
-pub fn determinate_loading_indicator<'a, Message, Renderer>(
-    progress: f32,
-) -> Canvas<LoadingIndicator, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
-    Canvas::new(LoadingIndicator {
-        mode: LoadingMode::Uncontained,
-        progress: Some(progress.clamp(0.0, 1.0)),
-        phase: 0.0,
-    })
-    .width(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_WIDTH,
-    ))
-    .height(Length::Fixed(
-        tokens::component::loading_indicator::CONTAINER_HEIGHT,
-    ))
-}
-
-/// Creates an expressive contained determinate loading indicator.
-pub fn determinate_contained_loading_indicator<'a, Message, Renderer>(
-    progress: f32,
-) -> Canvas<LoadingIndicator, Message, Theme, Renderer>
-where
-    Renderer: iced_widget::graphics::geometry::Renderer + 'a,
-{
-    Canvas::new(LoadingIndicator {
-        mode: LoadingMode::Contained,
-        progress: Some(progress.clamp(0.0, 1.0)),
-        phase: 0.0,
     })
     .width(Length::Fixed(
         tokens::component::loading_indicator::CONTAINER_WIDTH,

@@ -1281,12 +1281,24 @@ fn material_data_table_cells_use_token_heights() {
 #[test]
 fn material_slider_and_progress_constructors_compile_to_elements() {
     let _: TestElement<'_> = slider::continuous(0.0..=100.0, 42.0, |_| Message::Pressed).into();
-    let _: TestElement<'_> = progress_bar::linear(0.42, 0.0).into();
-    let _: TestElement<'_> = progress_bar::linear_indeterminate(0.0, true).into();
-    let _: TestElement<'_> = progress_bar::loading_indicator(0.0).into();
-    let _: TestElement<'_> = progress_bar::contained_loading_indicator(0.0).into();
-    let _: TestElement<'_> = progress_bar::determinate_loading_indicator(0.42).into();
-    let _: TestElement<'_> = progress_bar::determinate_contained_loading_indicator(0.42).into();
+    let _: TestElement<'_> =
+        progress_bar::linear(progress_bar::LinearProgressMode::determinate(0.42, 0.0)).into();
+    let _: TestElement<'_> = progress_bar::linear(
+        progress_bar::LinearProgressMode::four_color_indeterminate(0.0),
+    )
+    .into();
+    let _: TestElement<'_> =
+        progress_bar::loading(progress_bar::LoadingIndicatorMode::indeterminate(0.0)).into();
+    let _: TestElement<'_> = progress_bar::loading(
+        progress_bar::LoadingIndicatorMode::contained_indeterminate(0.0),
+    )
+    .into();
+    let _: TestElement<'_> =
+        progress_bar::loading(progress_bar::LoadingIndicatorMode::determinate(0.42)).into();
+    let _: TestElement<'_> = progress_bar::loading(
+        progress_bar::LoadingIndicatorMode::contained_determinate(0.42),
+    )
+    .into();
 }
 
 #[test]

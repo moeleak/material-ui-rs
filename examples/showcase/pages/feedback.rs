@@ -15,6 +15,8 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
 }
 
 fn progress_indicators(state: &Showcase) -> material::Element<'_, Message> {
+    use material::widget::progress_bar::{self, LinearProgressMode, LoadingIndicatorMode};
+
     let progress = state.progress / 100.0;
     let linear_phase = state.progress_animation.linear_phase();
     let loading_phase = state.progress_animation.loading_phase();
@@ -24,11 +26,12 @@ fn progress_indicators(state: &Showcase) -> material::Element<'_, Message> {
         material::widget::slider::continuous(0.0..=100.0, state.progress, Message::SliderChanged)
             .step(1.0)
             .into(),
-        material::widget::progress_bar::linear(progress, linear_phase).into(),
-        material::widget::progress_bar::linear_indeterminate(linear_phase, false).into(),
+        progress_bar::linear(LinearProgressMode::determinate(progress, linear_phase)).into(),
+        progress_bar::linear(LinearProgressMode::indeterminate(linear_phase)).into(),
         page::indicator_row([
-            material::widget::progress_bar::loading_indicator(loading_phase).into(),
-            material::widget::progress_bar::contained_loading_indicator(loading_phase).into(),
+            progress_bar::loading(LoadingIndicatorMode::indeterminate(loading_phase)).into(),
+            progress_bar::loading(LoadingIndicatorMode::contained_indeterminate(loading_phase))
+                .into(),
         ])
         .into(),
     ])
