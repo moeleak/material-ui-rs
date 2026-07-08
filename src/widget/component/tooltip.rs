@@ -672,23 +672,19 @@ where
             .shrink(Padding::new(total_padding)),
         );
 
-        let tooltip_bounds = rich_tooltip_surface_bounds(RichTooltipLayout {
-            content_bounds: self.content_bounds,
-            tooltip_size: tooltip_layout.bounds().size(),
-            viewport,
-            cursor_position: self.state.cursor_position,
-            position: self.position,
-            gap: self.gap,
-            padding: self.padding,
-            clip_padding: self.clip_padding,
-            snap_within_viewport: self.snap_within_viewport,
-        });
-
-        layout::Node::with_children(
-            tooltip_bounds.size(),
-            vec![tooltip_layout.translate(Vector::new(total_padding, total_padding))],
+        position_rich_tooltip_layout(
+            tooltip_layout,
+            RichTooltipPlacement {
+                content_bounds: self.content_bounds,
+                viewport,
+                cursor_position: self.state.cursor_position,
+                position: self.position,
+                gap: self.gap,
+                padding: self.padding,
+                clip_padding: self.clip_padding,
+                snap_within_viewport: self.snap_within_viewport,
+            },
         )
-        .translate(Vector::new(tooltip_bounds.x, tooltip_bounds.y))
     }
 
     fn update(
@@ -840,9 +836,8 @@ fn translated_bounds(bounds: Rectangle, translation: Vector) -> Rectangle {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct RichTooltipLayout {
+struct RichTooltipPlacement {
     content_bounds: Rectangle,
-    tooltip_size: Size,
     viewport: Rectangle,
     cursor_position: Point,
     position: Position,
@@ -852,61 +847,81 @@ struct RichTooltipLayout {
     snap_within_viewport: bool,
 }
 
-fn rich_tooltip_surface_bounds(layout: RichTooltipLayout) -> Rectangle {
+fn position_rich_tooltip_layout(
+    tooltip_layout: layout::Node,
+    placement: RichTooltipPlacement,
+) -> layout::Node {
+    let total_padding = placement.padding + placement.clip_padding;
+    let tooltip_bounds = rich_tooltip_surface_bounds(&tooltip_layout, placement);
+
+    layout::Node::with_children(
+        tooltip_bounds.size(),
+        vec![tooltip_layout.translate(Vector::new(total_padding, total_padding))],
+    )
+    .translate(Vector::new(tooltip_bounds.x, tooltip_bounds.y))
+}
+
+fn rich_tooltip_surface_bounds(
+    tooltip_layout: &layout::Node,
+    placement: RichTooltipPlacement,
+) -> Rectangle {
+    let measured = tooltip_layout.bounds().size();
     let surface_size = Size::new(
-        layout.tooltip_size.width + layout.padding * 2.0,
-        layout.tooltip_size.height + layout.padding * 2.0,
+        measured.width + placement.padding * 2.0,
+        measured.height + placement.padding * 2.0,
     );
     let x_center =
-        layout.content_bounds.x + (layout.content_bounds.width - surface_size.width) / 2.0;
+        placement.content_bounds.x + (placement.content_bounds.width - surface_size.width) / 2.0;
     let y_center =
-        layout.content_bounds.y + (layout.content_bounds.height - surface_size.height) / 2.0;
+        placement.content_bounds.y + (placement.content_bounds.height - surface_size.height) / 2.0;
 
-    let offset = match layout.position {
+    let offset = match placement.position {
         Position::Top => Vector::new(
             x_center,
-            layout.content_bounds.y - surface_size.height - layout.gap,
+            placement.content_bounds.y - surface_size.height - placement.gap,
         ),
         Position::Bottom => Vector::new(
             x_center,
-            layout.content_bounds.y + layout.content_bounds.height + layout.gap,
+            placement.content_bounds.y + placement.content_bounds.height + placement.gap,
         ),
         Position::Left => Vector::new(
-            layout.content_bounds.x - surface_size.width - layout.gap,
+            placement.content_bounds.x - surface_size.width - placement.gap,
             y_center,
         ),
         Position::Right => Vector::new(
-            layout.content_bounds.x + layout.content_bounds.width + layout.gap,
+            placement.content_bounds.x + placement.content_bounds.width + placement.gap,
             y_center,
         ),
         Position::FollowCursor => Vector::new(
-            layout.cursor_position.x,
-            layout.cursor_position.y - surface_size.height,
+            placement.cursor_position.x,
+            placement.cursor_position.y - surface_size.height,
         ),
     };
 
     let mut tooltip_bounds = Rectangle {
-        x: offset.x - layout.clip_padding,
-        y: offset.y - layout.clip_padding,
-        width: surface_size.width + layout.clip_padding * 2.0,
-        height: surface_size.height + layout.clip_padding * 2.0,
+        x: offset.x - placement.clip_padding,
+        y: offset.y - placement.clip_padding,
+        width: surface_size.width + placement.clip_padding * 2.0,
+        height: surface_size.height + placement.clip_padding * 2.0,
     };
 
-    if layout.snap_within_viewport {
-        if tooltip_bounds.x < layout.viewport.x {
-            tooltip_bounds.x = layout.viewport.x;
-        } else if layout.viewport.x + layout.viewport.width
+    if placement.snap_within_viewport {
+        if tooltip_bounds.x < placement.viewport.x {
+            tooltip_bounds.x = placement.viewport.x;
+        } else if placement.viewport.x + placement.viewport.width
             < tooltip_bounds.x + tooltip_bounds.width
         {
-            tooltip_bounds.x = layout.viewport.x + layout.viewport.width - tooltip_bounds.width;
+            tooltip_bounds.x =
+                placement.viewport.x + placement.viewport.width - tooltip_bounds.width;
         }
 
-        if tooltip_bounds.y < layout.viewport.y {
-            tooltip_bounds.y = layout.viewport.y;
-        } else if layout.viewport.y + layout.viewport.height
+        if tooltip_bounds.y < placement.viewport.y {
+            tooltip_bounds.y = placement.viewport.y;
+        } else if placement.viewport.y + placement.viewport.height
             < tooltip_bounds.y + tooltip_bounds.height
         {
-            tooltip_bounds.y = layout.viewport.y + layout.viewport.height - tooltip_bounds.height;
+            tooltip_bounds.y =
+                placement.viewport.y + placement.viewport.height - tooltip_bounds.height;
         }
     }
 

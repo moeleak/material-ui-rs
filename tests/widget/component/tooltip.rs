@@ -51,17 +51,20 @@ fn rich_tooltip_surface_keeps_material_gap_from_anchor() {
         height: 32.0,
     };
     let clip_padding = rich_tooltip_shadow_padding();
-    let tooltip = rich_tooltip_surface_bounds(RichTooltipLayout {
-        content_bounds: content,
-        tooltip_size: Size::new(180.0, 96.0),
-        viewport: Rectangle::new(Point::ORIGIN, Size::new(400.0, 400.0)),
-        cursor_position: Point::ORIGIN,
-        position: Position::Top,
-        gap: tokens::component::tooltip::SPACING_BETWEEN_TOOLTIP_AND_ANCHOR,
-        padding: 0.0,
-        clip_padding,
-        snap_within_viewport: true,
-    });
+    let tooltip_node = layout::Node::new(Size::new(180.0, 96.0));
+    let tooltip = rich_tooltip_surface_bounds(
+        &tooltip_node,
+        RichTooltipPlacement {
+            content_bounds: content,
+            viewport: Rectangle::new(Point::ORIGIN, Size::new(400.0, 400.0)),
+            cursor_position: Point::ORIGIN,
+            position: Position::Top,
+            gap: tokens::component::tooltip::SPACING_BETWEEN_TOOLTIP_AND_ANCHOR,
+            padding: 0.0,
+            clip_padding,
+            snap_within_viewport: true,
+        },
+    );
     let surface = rich_tooltip_visual_bounds(tooltip, clip_padding);
 
     assert_eq!(

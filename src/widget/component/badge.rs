@@ -165,7 +165,7 @@ where
             renderer,
             &layout::Limits::NONE,
         );
-        let badge_position = badged_box_badge_position(size, badge.size(), self.placement);
+        let badge_position = badged_box_badge_position(&anchor, &badge, self.placement);
 
         layout::Node::with_children(
             size,
@@ -308,13 +308,16 @@ where
 }
 
 fn badged_box_badge_position(
-    anchor_size: Size,
-    badge_size: Size,
+    anchor: &layout::Node,
+    badge: &layout::Node,
     placement: BadgedBoxPlacement,
 ) -> Point {
+    let anchor_measured = anchor.size();
+    let badge_measured = badge.size();
+
     Point::new(
-        anchor_size.width - placement.horizontal_offset(),
-        -badge_size.height + placement.vertical_offset(),
+        anchor_measured.width - placement.horizontal_offset(),
+        -badge_measured.height + placement.vertical_offset(),
     )
 }
 
