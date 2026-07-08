@@ -152,11 +152,21 @@ jobs:
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
+          cat > release-notes.md <<EOF
+          material-ui-rs ${TAG} is published on crates.io.
+
+          Crate package: material-ui-rs
+          Rust crate name: material_ui_rs
+
+          This release includes optimized showcase binaries for Linux, macOS, and Windows.
+          EOF
+
           if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" --notes-file release-notes.md
             gh release upload "${TAG}" release-assets/* --clobber
           else
             gh release create "${TAG}" release-assets/* \
               --verify-tag \
               --title "${TAG}" \
-              --notes "Optimized material-ui-rs showcase binaries for ${TAG}."
+              --notes-file release-notes.md
           fi
