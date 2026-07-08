@@ -46,9 +46,8 @@ repository = "https://github.com/moeleak/material-ui-rs"
 
 [features]
 animate = ["dep:iced_anim"]
-canvas = ["iced_widget/canvas"]
 crisp = ["iced_widget/crisp"]
-default = ["svg", "animate", "canvas"]
+default = ["svg", "animate"]
 dialog = ["dep:iced_dialog"]
 markdown = ["iced_widget/markdown"]
 qr_code = ["iced_widget/qr_code"]
@@ -99,6 +98,7 @@ optional = true
 
 [dependencies.iced_widget]
 version = "0.14"
+features = ["canvas"]
 
 [dependencies.iced_winit]
 version = "0.14"

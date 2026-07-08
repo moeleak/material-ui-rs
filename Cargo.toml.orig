@@ -17,13 +17,11 @@ exclude = [
 ]
 
 [features]
-default = ["svg", "animate", "canvas"]
+default = ["svg", "animate"]
 # Provides `serde` support.
 serde = ["serde/derive"]
 # Provides support for animating with `iced_anim`.
 animate = ["dep:iced_anim"]
-# Provides support for path-based canvas drawing.
-canvas = ["iced_widget/canvas"]
 # Enables pixel snapping for crisp edges by default (can cause jitter!).
 crisp = ["iced_widget/crisp"]
 # Provides support for `iced_dialog`.
@@ -41,7 +39,7 @@ __showcase_web = []
 
 [dependencies]
 iced = "0.14"
-iced_widget = "0.14"
+iced_widget = { version = "0.14", features = ["canvas"] }
 iced_winit = "0.14"
 iced_anim = { version = "0.3", optional = true, features = ["derive"] }
 iced_dialog = { version = "0.14", optional = true }
