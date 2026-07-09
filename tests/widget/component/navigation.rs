@@ -1,5 +1,6 @@
 use super::*;
 use iced_widget::core::time::Duration;
+use iced_widget::core::{Pixels, Transformation, image};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -492,6 +493,28 @@ fn navigation_rail_expanded_geometry_matches_material_expressive_attributes() {
 }
 
 #[test]
+fn expanded_rail_header_title_stays_single_line_while_collapsing() {
+    let scale = tokens::component::navigation_drawer::HEADLINE_TEXT;
+    let mut headline = single_line_type_text::<SingleLineTestRenderer>("Xiaomi Powerbank", scale);
+    let mut tree = Tree::new(&headline as &dyn Widget<Message, Theme, SingleLineTestRenderer>);
+    let renderer = SingleLineTestRenderer;
+    let limits = layout::Limits::new(Size::ZERO, Size::new(24.0, 200.0));
+
+    let node = Widget::<Message, Theme, SingleLineTestRenderer>::layout(
+        &mut headline,
+        &mut tree,
+        &renderer,
+        &limits,
+    );
+    let paragraph = tree
+        .state
+        .downcast_ref::<iced_widget::core::widget::text::State<SingleLineTestParagraph>>();
+
+    assert_eq!(paragraph.as_text().wrapping, text::Wrapping::None);
+    assert_eq!(node.size().height, scale.line_height);
+}
+
+#[test]
 fn navigation_rail_expanded_keeps_collapsed_vertical_slots() {
     assert_eq!(
         RailMetrics::item_slot_height(),
@@ -519,6 +542,298 @@ fn navigation_rail_expanded_keeps_collapsed_vertical_slots() {
         RailMetrics::collapsed_icon_center_y()
     );
     assert_eq!(RailMetrics::collapsed_icon_center_y(), 22.0);
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SingleLineTestRenderer;
+
+impl renderer::Renderer for SingleLineTestRenderer {
+    fn start_layer(&mut self, _bounds: Rectangle) {}
+
+    fn end_layer(&mut self) {}
+
+    fn start_transformation(&mut self, _transformation: Transformation) {}
+
+    fn end_transformation(&mut self) {}
+
+    fn reset(&mut self, _new_bounds: Rectangle) {}
+
+    fn fill_quad(&mut self, _quad: renderer::Quad, _background: impl Into<Background>) {}
+
+    fn allocate_image(
+        &mut self,
+        _handle: &image::Handle,
+        _callback: impl FnOnce(Result<image::Allocation, image::Error>) + Send + 'static,
+    ) {
+    }
+}
+
+impl core_text::Renderer for SingleLineTestRenderer {
+    type Font = Font;
+    type Paragraph = SingleLineTestParagraph;
+    type Editor = SingleLineTestEditor;
+
+    const ICON_FONT: Self::Font = Font::DEFAULT;
+    const CHECKMARK_ICON: char = '0';
+    const ARROW_DOWN_ICON: char = '0';
+    const SCROLL_UP_ICON: char = '0';
+    const SCROLL_DOWN_ICON: char = '0';
+    const SCROLL_LEFT_ICON: char = '0';
+    const SCROLL_RIGHT_ICON: char = '0';
+    const ICED_LOGO: char = '0';
+
+    fn default_font(&self) -> Self::Font {
+        Font::DEFAULT
+    }
+
+    fn default_size(&self) -> Pixels {
+        Pixels(16.0)
+    }
+
+    fn fill_paragraph(
+        &mut self,
+        _text: &Self::Paragraph,
+        _position: Point,
+        _color: Color,
+        _clip_bounds: Rectangle,
+    ) {
+    }
+
+    fn fill_editor(
+        &mut self,
+        _editor: &Self::Editor,
+        _position: Point,
+        _color: Color,
+        _clip_bounds: Rectangle,
+    ) {
+    }
+
+    fn fill_text(
+        &mut self,
+        _text: core_text::Text<String, Self::Font>,
+        _position: Point,
+        _color: Color,
+        _clip_bounds: Rectangle,
+    ) {
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct SingleLineTestEditor;
+
+impl core_text::Editor for SingleLineTestEditor {
+    type Font = Font;
+
+    fn with_text(_text: &str) -> Self {
+        Self
+    }
+
+    fn is_empty(&self) -> bool {
+        true
+    }
+
+    fn cursor(&self) -> core_text::editor::Cursor {
+        core_text::editor::Cursor {
+            position: core_text::editor::Position { line: 0, column: 0 },
+            selection: None,
+        }
+    }
+
+    fn selection(&self) -> core_text::editor::Selection {
+        core_text::editor::Selection::Caret(Point::ORIGIN)
+    }
+
+    fn copy(&self) -> Option<String> {
+        None
+    }
+
+    fn line(&self, _index: usize) -> Option<core_text::editor::Line<'_>> {
+        None
+    }
+
+    fn line_count(&self) -> usize {
+        0
+    }
+
+    fn perform(&mut self, _action: core_text::editor::Action) {}
+
+    fn move_to(&mut self, _cursor: core_text::editor::Cursor) {}
+
+    fn bounds(&self) -> Size {
+        Size::ZERO
+    }
+
+    fn min_bounds(&self) -> Size {
+        Size::ZERO
+    }
+
+    fn update(
+        &mut self,
+        _new_bounds: Size,
+        _new_font: Self::Font,
+        _new_size: Pixels,
+        _new_line_height: LineHeight,
+        _new_wrapping: text::Wrapping,
+        _new_highlighter: &mut impl core_text::Highlighter,
+    ) {
+    }
+
+    fn highlight<H: core_text::Highlighter>(
+        &mut self,
+        _font: Self::Font,
+        _highlighter: &mut H,
+        _format_highlight: impl Fn(&H::Highlight) -> core_text::highlighter::Format<Self::Font>,
+    ) {
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SingleLineTestParagraph {
+    content_width: f32,
+    bounds: Size,
+    size: Pixels,
+    line_height: LineHeight,
+    font: Font,
+    align_x: text::Alignment,
+    align_y: alignment::Vertical,
+    wrapping: text::Wrapping,
+    shaping: text::Shaping,
+}
+
+impl Default for SingleLineTestParagraph {
+    fn default() -> Self {
+        Self {
+            content_width: 0.0,
+            bounds: Size::ZERO,
+            size: Pixels(16.0),
+            line_height: LineHeight::default(),
+            font: Font::DEFAULT,
+            align_x: text::Alignment::Default,
+            align_y: alignment::Vertical::Top,
+            wrapping: text::Wrapping::default(),
+            shaping: text::Shaping::default(),
+        }
+    }
+}
+
+impl core_text::paragraph::Paragraph for SingleLineTestParagraph {
+    type Font = Font;
+
+    fn with_text(text: core_text::Text<&str, Self::Font>) -> Self {
+        Self {
+            content_width: text.content.chars().count() as f32 * 8.0,
+            bounds: text.bounds,
+            size: text.size,
+            line_height: text.line_height,
+            font: text.font,
+            align_x: text.align_x,
+            align_y: text.align_y,
+            wrapping: text.wrapping,
+            shaping: text.shaping,
+        }
+    }
+
+    fn with_spans<Link>(
+        text: core_text::Text<&[core_text::Span<'_, Link, Self::Font>], Self::Font>,
+    ) -> Self {
+        Self {
+            bounds: text.bounds,
+            size: text.size,
+            line_height: text.line_height,
+            font: text.font,
+            align_x: text.align_x,
+            align_y: text.align_y,
+            wrapping: text.wrapping,
+            shaping: text.shaping,
+            ..Self::default()
+        }
+    }
+
+    fn resize(&mut self, new_bounds: Size) {
+        self.bounds = new_bounds;
+    }
+
+    fn compare(&self, text: core_text::Text<(), Self::Font>) -> core_text::Difference {
+        if self.size != text.size
+            || self.line_height != text.line_height
+            || self.font != text.font
+            || self.align_x != text.align_x
+            || self.align_y != text.align_y
+            || self.wrapping != text.wrapping
+            || self.shaping != text.shaping
+        {
+            core_text::Difference::Shape
+        } else if self.bounds != text.bounds {
+            core_text::Difference::Bounds
+        } else {
+            core_text::Difference::None
+        }
+    }
+
+    fn size(&self) -> Pixels {
+        self.size
+    }
+
+    fn font(&self) -> Self::Font {
+        self.font
+    }
+
+    fn line_height(&self) -> LineHeight {
+        self.line_height
+    }
+
+    fn align_x(&self) -> text::Alignment {
+        self.align_x
+    }
+
+    fn align_y(&self) -> alignment::Vertical {
+        self.align_y
+    }
+
+    fn wrapping(&self) -> text::Wrapping {
+        self.wrapping
+    }
+
+    fn shaping(&self) -> text::Shaping {
+        self.shaping
+    }
+
+    fn bounds(&self) -> Size {
+        self.bounds
+    }
+
+    fn min_bounds(&self) -> Size {
+        let line_height = self.line_height.to_absolute(self.size).0;
+
+        if self.wrapping == text::Wrapping::None {
+            return Size::new(self.content_width, line_height);
+        }
+
+        let line_count = (self.content_width / self.bounds.width.max(1.0))
+            .ceil()
+            .max(1.0);
+
+        Size::new(
+            self.content_width.min(self.bounds.width),
+            line_height * line_count,
+        )
+    }
+
+    fn hit_test(&self, _point: Point) -> Option<core_text::Hit> {
+        None
+    }
+
+    fn hit_span(&self, _point: Point) -> Option<usize> {
+        None
+    }
+
+    fn span_bounds(&self, _index: usize) -> Vec<Rectangle> {
+        Vec::new()
+    }
+
+    fn grapheme_position(&self, _line: usize, _index: usize) -> Option<Point> {
+        None
+    }
 }
 
 #[test]

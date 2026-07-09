@@ -1639,13 +1639,22 @@ where
     Font: Into<Renderer::Font>,
 {
     let headline_scale = tokens::component::navigation_drawer::HEADLINE_TEXT;
-    let headline = type_text(headline, headline_scale).style(move |theme| text::Style {
-        color: Some(alpha_color(
-            theme.colors().surface.text_variant,
-            metrics.label_alpha(),
-        )),
-    });
+    let headline =
+        single_line_type_text(headline, headline_scale).style(move |theme| text::Style {
+            color: Some(alpha_color(
+                theme.colors().surface.text_variant,
+                metrics.label_alpha(),
+            )),
+        });
+    let headline = Container::new(headline)
+        .width(Length::Fill)
+        .height(Length::Fixed(
+            tokens::component::icon_button::CONTAINER_HEIGHT,
+        ))
+        .align_y(alignment::Vertical::Center)
+        .clip(true);
     let content = Row::new()
+        .width(Length::Fill)
         .height(Length::Fixed(
             tokens::component::icon_button::CONTAINER_HEIGHT,
         ))
@@ -3006,6 +3015,17 @@ where
         .font(fonts::roboto_for_type_scale(scale))
         .size(scale.size)
         .line_height(LineHeight::Absolute(scale.line_height.into()))
+}
+
+fn single_line_type_text<'a, Renderer>(
+    content: &'static str,
+    scale: tokens::typography::TypeScale,
+) -> Text<'a, Theme, Renderer>
+where
+    Renderer: core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+{
+    type_text(content, scale).wrapping(text::Wrapping::None)
 }
 
 fn bar_container(theme: &Theme) -> iced_widget::container::Style {
