@@ -26,7 +26,7 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
 fn header(state: &Showcase, page: ShowcasePage) -> material::Element<'static, Message> {
     let header = material::widget::page::header("material-ui-rs 0.4.2", page_label(page));
 
-    if state.cjk_font_loaded {
+    if state.cjk_font_status == super::CjkFontStatus::Loaded {
         header
             .push(
                 material::text::body_large("中文字体已按需加载")

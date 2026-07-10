@@ -35,6 +35,9 @@ browsers. It focuses a real DOM input from the trusted touch gesture, keeps IME
 composition keys inside the browser, and forwards committed text plus
 `beforeinput` delete and Enter actions to the iced canvas.
 
+The CJK font is also demand-loaded: the initial WASM page does not request it
+until CJK text is first entered in the note field.
+
 Run its DOM-level regression tests with Node.js 24 or newer:
 
 ```sh

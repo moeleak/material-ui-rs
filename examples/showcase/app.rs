@@ -12,7 +12,7 @@ use material_ui_rs as material;
 pub fn main() -> iced::Result {
     let window_size = Size::new(1080.0, 980.0);
 
-    material::application(boot, update, view)
+    material::application(Showcase::default, update, view)
         .title("material-ui-rs showcase")
         .subscription(subscription)
         .theme(theme)
@@ -23,17 +23,8 @@ pub fn main() -> iced::Result {
         .run()
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 const CJK_FONT_URL: &str = "https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf";
-
-fn boot() -> (Showcase, Task<Message>) {
-    #[cfg(target_arch = "wasm32")]
-    let load_cjk_font = material::fonts::load_web_font(CJK_FONT_URL).map(Message::CjkFontLoaded);
-    #[cfg(not(target_arch = "wasm32"))]
-    let load_cjk_font = Task::none();
-
-    (Showcase::default(), load_cjk_font)
-}
 
 #[derive(Debug, Clone)]
 enum Message {
@@ -76,6 +67,14 @@ enum ShowcasePage {
     Surfaces,
     Navigation,
     Structure,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(any(target_arch = "wasm32", test)), allow(dead_code))]
+enum CjkFontStatus {
+    NotLoaded,
+    Loading,
+    Loaded,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -155,7 +154,7 @@ const INVENTORY_ROWS: [InventoryRow; 3] = [
 
 #[derive(Debug)]
 struct Showcase {
-    cjk_font_loaded: bool,
+    cjk_font_status: CjkFontStatus,
     navigation: navigation::NavigationState<ShowcasePage>,
     window_size: Size,
     count: i32,
@@ -187,7 +186,7 @@ struct Showcase {
 impl Default for Showcase {
     fn default() -> Self {
         Self {
-            cjk_font_loaded: false,
+            cjk_font_status: CjkFontStatus::NotLoaded,
             navigation: navigation::NavigationState::new(ShowcasePage::Inputs),
             window_size: Size::new(1080.0, 980.0),
             count: 0,
@@ -250,7 +249,11 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
     match message {
         #[cfg(any(target_arch = "wasm32", test))]
         Message::CjkFontLoaded(result) => {
-            state.cjk_font_loaded = result.is_ok();
+            state.cjk_font_status = if result.is_ok() {
+                CjkFontStatus::Loaded
+            } else {
+                CjkFontStatus::NotLoaded
+            };
             Task::none()
         }
         Message::Navigate(page) => {
@@ -268,8 +271,9 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::TextChanged(note) => {
+            let load_cjk_font = load_cjk_font_if_needed(state, &note);
             state.note = note;
-            Task::none()
+            load_cjk_font
         }
         Message::EditorAction(action) => {
             state.editor_content.perform(action);
@@ -392,6 +396,20 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             Task::none()
         }
     }
+}
+
+fn load_cjk_font_if_needed(state: &mut Showcase, content: &str) -> Task<Message> {
+    #[cfg(any(target_arch = "wasm32", test))]
+    if state.cjk_font_status == CjkFontStatus::NotLoaded && material::fonts::contains_cjk(content) {
+        state.cjk_font_status = CjkFontStatus::Loading;
+
+        return material::fonts::load_web_font(CJK_FONT_URL).map(Message::CjkFontLoaded);
+    }
+
+    #[cfg(not(any(target_arch = "wasm32", test)))]
+    let _ = (state, content);
+
+    Task::none()
 }
 
 fn theme(state: &Showcase) -> Theme {
@@ -740,17 +758,20 @@ mod tests {
 
     #[test]
     fn successful_web_font_load_enables_cjk_sample() {
-        let mut showcase = Showcase::default();
+        let mut showcase = Showcase {
+            cjk_font_status: CjkFontStatus::Loading,
+            ..Showcase::default()
+        };
 
         let _ = update(&mut showcase, Message::CjkFontLoaded(Ok(())));
 
-        assert!(showcase.cjk_font_loaded);
+        assert_eq!(showcase.cjk_font_status, CjkFontStatus::Loaded);
     }
 
     #[test]
     fn failed_web_font_load_keeps_cjk_sample_hidden() {
         let mut showcase = Showcase {
-            cjk_font_loaded: true,
+            cjk_font_status: CjkFontStatus::Loading,
             ..Showcase::default()
         };
 
@@ -759,7 +780,18 @@ mod tests {
             Message::CjkFontLoaded(Err(material::fonts::WebFontError::RequestFailed)),
         );
 
-        assert!(!showcase.cjk_font_loaded);
+        assert_eq!(showcase.cjk_font_status, CjkFontStatus::NotLoaded);
+    }
+
+    #[test]
+    fn cjk_font_load_starts_only_after_cjk_input() {
+        let mut showcase = Showcase::default();
+
+        let _ = update(&mut showcase, Message::TextChanged("Latin".into()));
+        assert_eq!(showcase.cjk_font_status, CjkFontStatus::NotLoaded);
+
+        let _ = update(&mut showcase, Message::TextChanged("中文".into()));
+        assert_eq!(showcase.cjk_font_status, CjkFontStatus::Loading);
     }
 
     #[test]
