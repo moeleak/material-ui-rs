@@ -4,12 +4,10 @@ import test from "node:test";
 import vm from "node:vm";
 
 const SENTINEL = "\u200b";
-const html = readFileSync(new URL("index.html", import.meta.url), "utf8");
-const bridgeSource = html.match(/<script>\s*([\s\S]*?)<\/script>/)?.[1];
-
-if (!bridgeSource) {
-  throw new Error("mobile input bridge script was not found");
-}
+const bridgeSource = readFileSync(
+  new URL("../src/internal/web_input.js", import.meta.url),
+  "utf8",
+).replaceAll("export function ", "function ");
 
 class FakeEventTarget {
   constructor() {
@@ -182,13 +180,20 @@ function createBridge() {
     window,
   });
   vm.runInContext(bridgeSource, context, { filename: "web/index.html" });
+  const api = vm.runInContext(
+    "({ hideMobileKeyboard, registerTextRegion, showMobileKeyboard })",
+    context,
+  );
 
   return {
+    ...api,
     canvas,
     document,
-    input: document.input,
     visualViewport,
     window,
+    get input() {
+      return document.input;
+    },
     flushAnimationFrames() {
       const callbacks = [...animationFrames.values()];
       animationFrames.clear();
@@ -200,9 +205,22 @@ function createBridge() {
   };
 }
 
+test("wasm module installs the bridge lazily and only once", () => {
+  const bridge = createBridge();
+
+  assert.equal(bridge.input, undefined);
+
+  bridge.showMobileKeyboard();
+  const input = bridge.input;
+  bridge.showMobileKeyboard();
+
+  assert.equal(bridge.input, input);
+  assert.equal(bridge.document.activeElement, input);
+});
+
 test("composition-owned keys stay in the IME and commit exactly once", async () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
 
   bridge.input.dispatchEvent(fakeEvent("compositionstart"));
   bridge.input.dispatchEvent(
@@ -244,7 +262,7 @@ test("composition-owned keys stay in the IME and commit exactly once", async () 
 
 test("canceling composition does not delete application text", () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
   bridge.input.dispatchEvent(fakeEvent("compositionstart"));
   bridge.input.value = "";
   bridge.input.dispatchEvent(fakeEvent("compositionend", { data: "" }));
@@ -254,19 +272,19 @@ test("canceling composition does not delete application text", () => {
 
 test("composition commit is flushed before a following blur can reset it", () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
   bridge.input.dispatchEvent(fakeEvent("compositionstart"));
   bridge.input.value = `${SENTINEL}語`;
 
   bridge.input.dispatchEvent(fakeEvent("compositionend", { data: "語" }));
-  bridge.window.__icedMaterialHideMobileKeyboard();
+  bridge.hideMobileKeyboard();
 
   assert.deepEqual(bridge.canvas.keys, ["語"]);
 });
 
 test("beforeinput forwards soft-keyboard delete and enter actions once", async () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
 
   bridge.input.dispatchEvent(
     fakeEvent("keydown", { cancelable: true, key: "Backspace" }),
@@ -298,7 +316,7 @@ test("beforeinput forwards soft-keyboard delete and enter actions once", async (
 
 test("non-cancelable mobile deletion suppresses the following input duplicate", async () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
 
   bridge.input.dispatchEvent(
     fakeEvent("beforeinput", {
@@ -322,7 +340,7 @@ test("non-cancelable mobile deletion suppresses the following input duplicate", 
 
 test("refocus frame does not reset an active composition", () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialShowMobileKeyboard();
+  bridge.showMobileKeyboard();
   bridge.input.dispatchEvent(fakeEvent("compositionstart"));
   bridge.input.value = `${SENTINEL}pin`;
 
@@ -333,8 +351,8 @@ test("refocus frame does not reset an active composition", () => {
 
 test("visual keyboard resize preserves registered text regions", () => {
   const bridge = createBridge();
-  bridge.window.__icedMaterialRegisterTextRegion(0, 0, 100, 100);
-  bridge.window.__icedMaterialHideMobileKeyboard();
+  bridge.registerTextRegion(0, 0, 100, 100);
+  bridge.hideMobileKeyboard();
   bridge.visualViewport.dispatchEvent(fakeEvent("resize"));
 
   bridge.canvas.dispatchEvent(

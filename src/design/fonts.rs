@@ -114,7 +114,7 @@ pub fn all() -> [Cow<'static, [u8]>; 5] {
 /// # use material_ui_rs::fonts;
 /// # #[derive(Debug, Clone)]
 /// # enum Message { FontLoaded(Result<(), fonts::WebFontError>) }
-/// let task = fonts::load_web_font("/fonts/NotoSansCJKsc-Regular.otf")
+/// let task = fonts::load_web_font("fonts/NotoSansCJKsc-Regular.otf")
 ///     .map(Message::FontLoaded);
 /// # let _ = task;
 /// ```

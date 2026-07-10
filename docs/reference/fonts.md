@@ -35,7 +35,8 @@ that font family themselves.
 `fonts::load_web_font(url)` returns an iced task that fetches a raw TTF, OTF, or
 TTC file and loads it into the renderer at runtime. This keeps large font bytes
 out of the WASM module. Map the task result to an application message and return
-it from boot or update. On native targets the task returns
+it from boot or update; the request starts only when that task is returned. On
+native targets the task returns
 `WebFontError::UnsupportedPlatform`.
 
 ## Helpers

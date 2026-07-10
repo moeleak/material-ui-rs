@@ -9,7 +9,7 @@
 # How-to Guides
 
 - [Run the examples](how-to/run-examples.md)
-- [Build the WebAssembly showcase](how-to/build-web-showcase.md)
+- [Build a WebAssembly app with Trunk](how-to/build-web-showcase.md)
 - [Use bundled and CJK fonts](how-to/use-fonts.md)
 - [Build adaptive navigation](how-to/adaptive-navigation.md)
 - [Add a theme picker](how-to/theme-picker.md)

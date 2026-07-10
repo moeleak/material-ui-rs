@@ -47,17 +47,45 @@ font's ligature support in the renderer.
 ## Load CJK Fonts on WebAssembly
 
 Full CJK fonts are intentionally not embedded in the crate because they add
-many megabytes to the WASM module. Start the application immediately, then
-return a web-font task from boot so the browser downloads a font separately:
+many megabytes to the WASM module. Keep the application startup path small and
+return a web-font task only after content first needs CJK glyphs:
 
 ```rust
-fn boot() -> (State, iced::Task<Message>) {
-    let load_font = material::fonts::load_web_font(
-        "/fonts/NotoSansCJKsc-Regular.otf",
-    )
-    .map(Message::CjkFontLoaded);
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum CjkFontStatus {
+    #[default]
+    Idle,
+    Loading,
+    Loaded,
+}
 
-    (State::default(), load_font)
+fn update(state: &mut State, message: Message) -> iced::Task<Message> {
+    match message {
+        Message::TextChanged(value) => {
+            let should_load = cfg!(target_arch = "wasm32")
+                && state.cjk_font == CjkFontStatus::Idle
+                && material::fonts::contains_cjk(&value);
+            state.text = value;
+
+            if should_load {
+                state.cjk_font = CjkFontStatus::Loading;
+
+                return material::fonts::load_web_font(
+                    "fonts/NotoSansCJKsc-Regular.otf",
+                )
+                .map(Message::CjkFontLoaded);
+            }
+        }
+        Message::CjkFontLoaded(result) => {
+            state.cjk_font = if result.is_ok() {
+                CjkFontStatus::Loaded
+            } else {
+                CjkFontStatus::Idle
+            };
+        }
+    }
+
+    iced::Task::none()
 }
 ```
 
@@ -69,7 +97,16 @@ subset that matches the content your application supports.
 
 Handle `Message::CjkFontLoaded` to stop showing a loading fallback and redraw
 CJK content. The downloaded bytes remain outside the `.wasm` binary and can be
-cached independently by the browser.
+cached independently by the browser. `load_web_font` does not start until its
+task is returned from boot or update, so the example makes no font request at
+startup.
+
+To let Trunk copy a self-hosted `web/fonts/` directory, add this optional host
+page asset next to the Rust link:
+
+```html
+<link data-trunk rel="copy-dir" href="fonts" />
+```
 
 ## Use CJK Font Constants
 

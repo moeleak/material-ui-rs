@@ -33,7 +33,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('Cargo.toml', 'Cargo.toml.orig', 'flake.nix', 'flake.lock', 'web/index.html', 'web/mobile_ime.test.mjs', '.github/workflows/deploy-worker.yml') }}
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('Cargo.toml', 'Cargo.toml.orig', 'flake.nix', 'flake.lock', 'src/internal/web_input.js', 'web/index.html', 'web/mobile_ime.test.mjs', '.github/workflows/deploy-worker.yml') }}
           restore-keys: |
             ${{ runner.os }}-cargo-wasm-
 
