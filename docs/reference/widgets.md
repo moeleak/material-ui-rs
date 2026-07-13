@@ -36,7 +36,8 @@ modules.
   display components.
 - `log_viewer` provides structured severity rows, selection state, contextual
   close/copy actions, and bottom-anchored scrolling. Page titles remain the
-  responsibility of an existing `app_bar` constructor.
+  responsibility of the caller; advance its state from frame events while the
+  contextual bar is animating.
 - `theme_picker` provides a floating Material color picker and animated theme
   reveal helpers.
 

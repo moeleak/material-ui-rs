@@ -393,6 +393,7 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             let _ = state.segment_state.advance(now);
             let _ = state.primary_tab_state.advance(now);
             let _ = state.secondary_tab_state.advance(now);
+            let _ = state.log_viewer.advance(now);
             state.progress_animation.advance(now);
             let _ = state.alert_dialog.advance(now);
             let _ = state.snackbar.advance(now);
@@ -479,6 +480,7 @@ fn subscription(state: &Showcase) -> Subscription<Message> {
         || state.segment_state.is_animating()
         || state.primary_tab_state.is_animating()
         || state.secondary_tab_state.is_animating()
+        || state.log_viewer.is_animating()
         || state.alert_dialog.is_animating()
         || state.snackbar.is_active()
         || state.date_picker.is_animating()

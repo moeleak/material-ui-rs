@@ -1,3 +1,4 @@
+use iced_widget::core::time::{Duration, Instant};
 use iced_widget::core::{Background, Color};
 
 use super::*;
@@ -75,6 +76,54 @@ fn removed_entries_do_not_count_or_copy_and_can_be_pruned() {
 
     state.retain_entries(&remaining);
     assert_eq!(state.selected_ids(), &[30]);
+}
+
+#[test]
+fn selection_bar_animates_without_changing_selection_state() {
+    let start = Instant::now();
+    let mut state = State::new();
+
+    assert!(state.toggle_at(10, start));
+    assert!(state.is_animating());
+    assert_eq!(state.selection_bar_progress(), 0.0);
+    assert_eq!(state.selected_ids(), &[10]);
+
+    assert!(state.advance(start + Duration::from_millis(125)));
+    assert!(state.selection_bar_progress() > 0.0);
+    assert!(state.selection_bar_progress() < 1.0);
+
+    assert!(!state.advance(start + Duration::from_millis(250)));
+    assert_eq!(state.selection_bar_progress(), 1.0);
+
+    state.clear_selection_at(start + Duration::from_millis(250));
+    assert!(state.is_animating());
+    assert!(state.selected_ids().is_empty());
+    assert!(state.advance(start + Duration::from_millis(350)));
+    assert!(state.selection_bar_progress() > 0.0);
+    assert!(state.selection_bar_progress() < 1.0);
+    assert!(!state.advance(start + Duration::from_millis(450)));
+    assert_eq!(state.selection_bar_progress(), 0.0);
+}
+
+#[test]
+fn selection_bar_fades_surface_without_shadow_padding() {
+    let theme = Theme::Dark;
+    let hidden = selection_bar_style(&theme, 0.0);
+    let shown = selection_bar_style(&theme, 1.0);
+    let Some(Background::Color(hidden_background)) = hidden.background else {
+        panic!("selection bar should use a solid background");
+    };
+    let Some(Background::Color(shown_background)) = shown.background else {
+        panic!("selection bar should use a solid background");
+    };
+
+    assert_eq!(hidden_background.a, 0.0);
+    assert_eq!(shown_background.a, 1.0);
+    assert_eq!(shown.shadow, iced_widget::core::Shadow::default());
+    assert_eq!(
+        tokens::component::log_viewer::SELECTION_BAR_HEIGHT,
+        tokens::component::app_bar::SMALL_SEARCH_CONTAINER_HEIGHT
+    );
 }
 
 #[test]

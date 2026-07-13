@@ -4,6 +4,7 @@ use iced_widget::button::{Status as ButtonStatus, Style as ButtonStyle};
 use iced_widget::checkbox::{Status as CheckboxStatus, Style as CheckboxStyle};
 use iced_widget::core::svg as core_svg;
 use iced_widget::core::text as core_text;
+use iced_widget::core::time::Instant;
 use iced_widget::core::widget;
 use iced_widget::core::{
     Background, Border, Element, Font, Length, Padding, Shadow, alignment, border,
@@ -11,11 +12,12 @@ use iced_widget::core::{
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
 use iced_widget::text::{self, LineHeight};
-use iced_widget::{Column, Container, Row, Scrollable, Stack, Text};
+use iced_widget::{Column, Container, Row, Scrollable, Stack, Text, opaque};
 
 use super::app_bar;
 use super::button::Button;
-use crate::style::checkbox as checkbox_style;
+use super::support::{AnimatedScalar, alpha_color, duration_ms};
+use crate::style::{button as button_style, checkbox as checkbox_style};
 use crate::{Theme, text as text_style, tokens};
 
 /// Severity attached to a structured log entry.
@@ -107,6 +109,8 @@ pub enum Action<Id> {
 pub struct State<Id> {
     selected: Vec<Id>,
     scrollable_id: widget::Id,
+    selection_bar_visibility: AnimatedScalar,
+    selection_bar_count: usize,
 }
 
 impl<Id> Default for State<Id> {
@@ -121,6 +125,8 @@ impl<Id> State<Id> {
         Self {
             selected: Vec::new(),
             scrollable_id: widget::Id::unique(),
+            selection_bar_visibility: AnimatedScalar::new(0.0),
+            selection_bar_count: 0,
         }
     }
 
@@ -131,7 +137,59 @@ impl<Id> State<Id> {
 
     /// Clears the current selection.
     pub fn clear_selection(&mut self) {
+        self.clear_selection_at(Instant::now());
+    }
+
+    /// Advances the contextual selection bar animation.
+    ///
+    /// Call this from window frame events while [`Self::is_animating`] is true.
+    pub fn advance(&mut self, now: Instant) -> bool {
+        let animating = self.selection_bar_visibility.advance(now);
+
+        if !animating
+            && self.selection_bar_visibility.value <= f32::EPSILON
+            && self.selected.is_empty()
+        {
+            self.selection_bar_count = 0;
+        }
+
+        animating
+    }
+
+    /// Returns whether the contextual selection bar is animating.
+    pub fn is_animating(&self) -> bool {
+        self.selection_bar_visibility.is_animating()
+    }
+
+    /// Returns the contextual selection bar visibility progress.
+    pub fn selection_bar_progress(&self) -> f32 {
+        self.selection_bar_visibility.value.clamp(0.0, 1.0)
+    }
+
+    fn clear_selection_at(&mut self, now: Instant) {
         self.selected.clear();
+        self.sync_selection_bar(now);
+    }
+
+    fn sync_selection_bar(&mut self, now: Instant) {
+        let count = self.selected.len();
+
+        if count > 0 {
+            self.selection_bar_count = count;
+            self.selection_bar_visibility.set_target(
+                1.0,
+                now,
+                duration_ms(tokens::component::log_viewer::SELECTION_BAR_ENTER_DURATION_MS),
+                tokens::component::log_viewer::SELECTION_BAR_ENTER_EASING,
+            );
+        } else {
+            self.selection_bar_visibility.set_target(
+                0.0,
+                now,
+                duration_ms(tokens::component::log_viewer::SELECTION_BAR_EXIT_DURATION_MS),
+                tokens::component::log_viewer::SELECTION_BAR_EXIT_EASING,
+            );
+        }
     }
 }
 
@@ -143,11 +201,17 @@ impl<Id: Eq> State<Id> {
 
     /// Toggles an identifier and returns its new selected state.
     pub fn toggle(&mut self, id: Id) -> bool {
+        self.toggle_at(id, Instant::now())
+    }
+
+    fn toggle_at(&mut self, id: Id, now: Instant) -> bool {
         if let Some(index) = self.selected.iter().position(|selected| selected == &id) {
             let _ = self.selected.remove(index);
+            self.sync_selection_bar(now);
             false
         } else {
             self.selected.push(id);
+            self.sync_selection_bar(now);
             true
         }
     }
@@ -156,6 +220,7 @@ impl<Id: Eq> State<Id> {
     pub fn retain_entries(&mut self, entries: &[LogEntry<Id>]) {
         self.selected
             .retain(|selected| entries.iter().any(|entry| entry.id() == selected));
+        self.sync_selection_bar(Instant::now());
     }
 
     /// Counts selected entries that are still present in the supplied list.
@@ -208,6 +273,7 @@ impl<Id: Eq> State<Id> {
 ///
 /// Page titles are intentionally outside this component. Compose this viewer
 /// below an existing top app bar such as [`super::app_bar::large`].
+/// Advance [`State`] from frame events to animate the contextual bar.
 pub fn view<'a, Id, Message, Renderer>(
     entries: &'a [LogEntry<Id>],
     state: &'a State<Id>,
@@ -225,24 +291,6 @@ where
     Font: Into<Renderer::Font>,
 {
     let selected_count = state.selected_count(entries);
-    let mut content = Column::new()
-        .spacing(0)
-        .width(Length::Fill)
-        .height(Length::Fill);
-
-    if selected_count > 0 {
-        content = content.push(app_bar::small_on_scroll(
-            format!("{selected_count} selected"),
-            Some(app_bar::icon_action(
-                "close",
-                on_action(Action::CloseSelection),
-            )),
-            [app_bar::icon_action(
-                "content_copy",
-                on_action(Action::CopySelection),
-            )],
-        ));
-    }
 
     let items = Container::new(
         Column::with_children(
@@ -261,13 +309,126 @@ where
     })
     .width(Length::Fill);
 
-    content.push(
-        Scrollable::new(items)
-            .id(state.scrollable_id.clone())
-            .anchor_bottom()
-            .width(Length::Fill)
-            .height(Length::Fill),
-    )
+    let logs: Element<'a, Message, Theme, Renderer> = Scrollable::new(items)
+        .id(state.scrollable_id.clone())
+        .anchor_bottom()
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into();
+    let progress = state.selection_bar_progress();
+    let mut layers = Stack::new()
+        .push(logs)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+    if selected_count > 0 || progress > f32::EPSILON {
+        let count = if selected_count > 0 {
+            selected_count
+        } else {
+            state.selection_bar_count
+        };
+        let bar = selection_bar(
+            count,
+            progress,
+            on_action(Action::CloseSelection),
+            on_action(Action::CopySelection),
+        );
+        layers = layers.push(opaque(bar));
+    }
+
+    Column::new()
+        .push(layers)
+        .width(Length::Fill)
+        .height(Length::Fill)
+}
+
+fn selection_bar<'a, Message, Renderer>(
+    selected_count: usize,
+    progress: f32,
+    close: Message,
+    copy: Message,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: iced_widget::core::Renderer
+        + geometry::Renderer
+        + primitive::Renderer
+        + core_text::Renderer
+        + 'a,
+    Font: Into<Renderer::Font>,
+{
+    let progress = progress.clamp(0.0, 1.0);
+    let title_text = tokens::component::app_bar::SMALL_TITLE_TEXT;
+    let close = selection_icon_button("close", close, progress);
+    let copy = selection_icon_button("content_copy", copy, progress);
+    let content = Row::new()
+        .push(close)
+        .push(
+            Text::new(format!("{selected_count} selected"))
+                .size(title_text.size)
+                .line_height(LineHeight::Absolute(title_text.line_height.into()))
+                .width(Length::Fill)
+                .style(move |theme: &Theme| iced_widget::text::Style {
+                    color: Some(alpha_color(theme.colors().surface.text, progress)),
+                }),
+        )
+        .push(copy)
+        .spacing(tokens::component::app_bar::ICON_BUTTON_SPACE)
+        .padding(Padding {
+            top: 0.0,
+            right: tokens::component::app_bar::TRAILING_SPACE,
+            bottom: 0.0,
+            left: tokens::component::app_bar::LEADING_SPACE,
+        })
+        .align_y(alignment::Vertical::Center)
+        .width(Length::Fill);
+
+    Container::new(content)
+        .width(Length::Fill)
+        .height(Length::Fixed(
+            tokens::component::log_viewer::SELECTION_BAR_HEIGHT,
+        ))
+        .align_y(alignment::Vertical::Center)
+        .style(move |theme| selection_bar_style(theme, progress))
+}
+
+fn selection_icon_button<'a, Message, Renderer>(
+    icon: &'static str,
+    on_press: Message,
+    progress: f32,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+{
+    app_bar::icon_button(icon)
+        .style(move |theme, status| {
+            let mut style = button_style::icon(theme, status);
+            style.text_color = alpha_color(style.text_color, progress);
+            style.background = style.background.map(|background| match background {
+                Background::Color(color) => Background::Color(alpha_color(color, progress)),
+                Background::Gradient(gradient) => Background::Gradient(gradient),
+            });
+            style
+        })
+        .on_press(on_press)
+        .into()
+}
+
+fn selection_bar_style(theme: &Theme, progress: f32) -> iced_widget::container::Style {
+    let colors = theme.colors();
+
+    iced_widget::container::Style {
+        background: Some(Background::Color(alpha_color(
+            colors.surface.container.base,
+            progress,
+        ))),
+        text_color: Some(alpha_color(colors.surface.text, progress)),
+        border: border::rounded(tokens::component::app_bar::CONTAINER_SHAPE),
+        snap: cfg!(feature = "crisp"),
+        ..iced_widget::container::Style::default()
+    }
 }
 
 fn item<'a, Id, Message, Renderer>(
