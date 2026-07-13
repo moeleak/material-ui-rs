@@ -31,6 +31,15 @@ fn entry_preserves_source_format_after_level() {
 }
 
 #[test]
+fn log_text_uses_a_bundled_font_available_on_wasm() {
+    assert_eq!(
+        log_text_font(),
+        fonts::roboto_for_type_scale(tokens::component::log_viewer::LOG_TEXT)
+    );
+    assert_ne!(log_text_font(), Font::MONOSPACE);
+}
+
+#[test]
 fn selection_toggles_and_closes_cleanly() {
     let logs = entries();
     let mut state = State::new();

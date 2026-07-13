@@ -20,7 +20,7 @@ use super::reveal::{RevealAnimation, RevealFrame};
 use super::support::alpha_color;
 use super::viewport::Viewport;
 use crate::style::{button as button_style, checkbox as checkbox_style};
-use crate::{Theme, text as text_style, tokens};
+use crate::{Theme, fonts, text as text_style, tokens};
 
 /// Severity attached to a structured log entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -463,7 +463,7 @@ where
     let line = Text::new(entry.line())
         .size(scale.size)
         .line_height(LineHeight::Absolute(scale.line_height.into()))
-        .font(Font::MONOSPACE)
+        .font(log_text_font())
         .wrapping(text::Wrapping::WordOrGlyph)
         .width(Length::Fill)
         .style(text_style::surface);
@@ -471,7 +471,7 @@ where
     let colored_level = Text::new(level.label())
         .size(scale.size)
         .line_height(LineHeight::Absolute(scale.line_height.into()))
-        .font(Font::MONOSPACE)
+        .font(log_text_font())
         .style(move |theme| level_text_style(theme, level));
     let log_text = Stack::new()
         .push(line)
@@ -501,6 +501,10 @@ where
         .width(Length::Fill)
         .style(move |theme| item_container_style(theme, selected))
         .into()
+}
+
+fn log_text_font() -> Font {
+    fonts::roboto_for_type_scale(tokens::component::log_viewer::LOG_TEXT)
 }
 
 fn checkbox_visual_style(theme: &Theme, selected: bool) -> CheckboxStyle {
