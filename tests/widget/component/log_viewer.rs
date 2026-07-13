@@ -199,6 +199,24 @@ fn selected_item_style_uses_outline_without_changing_surface() {
 }
 
 #[test]
+fn log_checkbox_preserves_checked_and_unchecked_animation_endpoints() {
+    let theme = Theme::Light;
+    let unchecked = checkbox_visual_style(&theme, CheckboxStatus::Disabled { is_checked: false });
+    let checked = checkbox_visual_style(&theme, CheckboxStatus::Disabled { is_checked: true });
+
+    assert_eq!(
+        unchecked,
+        checkbox_style::default(&theme, CheckboxStatus::Active { is_checked: false })
+    );
+    assert_eq!(
+        checked,
+        checkbox_style::default(&theme, CheckboxStatus::Active { is_checked: true })
+    );
+    assert_ne!(unchecked.background, checked.background);
+    assert_ne!(unchecked.border, checked.border);
+}
+
+#[test]
 fn row_button_uses_one_rounded_state_layer() {
     let theme = Theme::Light;
     let style = item_button_style(&theme, ButtonStatus::Hovered);

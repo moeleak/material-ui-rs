@@ -447,8 +447,7 @@ where
     Font: Into<Renderer::Font>,
 {
     let selected = state.is_selected(entry.id());
-    let checkbox = super::checkbox::control(selected)
-        .style(move |theme, _status| checkbox_visual_style(theme, selected));
+    let checkbox = super::checkbox::control(selected).style(checkbox_visual_style);
     let checkbox_slot = Container::new(checkbox)
         .width(Length::Fixed(
             tokens::component::log_viewer::CHECKBOX_SLOT_WIDTH,
@@ -507,13 +506,14 @@ fn log_text_font() -> Font {
     fonts::roboto_for_type_scale(tokens::component::log_viewer::LOG_TEXT)
 }
 
-fn checkbox_visual_style(theme: &Theme, selected: bool) -> CheckboxStyle {
-    checkbox_style::default(
-        theme,
-        CheckboxStatus::Active {
-            is_checked: selected,
-        },
-    )
+fn checkbox_visual_style(theme: &Theme, status: CheckboxStatus) -> CheckboxStyle {
+    let is_checked = match status {
+        CheckboxStatus::Active { is_checked }
+        | CheckboxStatus::Hovered { is_checked }
+        | CheckboxStatus::Disabled { is_checked } => is_checked,
+    };
+
+    checkbox_style::default(theme, CheckboxStatus::Active { is_checked })
 }
 
 fn item_button_style(theme: &Theme, _status: ButtonStatus) -> ButtonStyle {
