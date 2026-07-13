@@ -40,6 +40,11 @@ fn log_text_uses_a_bundled_font_available_on_wasm() {
 }
 
 #[test]
+fn log_list_opens_at_the_top() {
+    assert_eq!(LOG_SCROLL_ANCHOR, scrollable::Anchor::Start);
+}
+
+#[test]
 fn selection_toggles_and_closes_cleanly() {
     let logs = entries();
     let mut state = State::new();

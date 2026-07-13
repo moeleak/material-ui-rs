@@ -11,6 +11,7 @@ use iced_widget::core::{
 };
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
+use iced_widget::scrollable;
 use iced_widget::text::{self, LineHeight};
 use iced_widget::{Column, Container, Row, Scrollable, Stack, Text, opaque};
 
@@ -21,6 +22,8 @@ use super::support::alpha_color;
 use super::viewport::Viewport;
 use crate::style::{button as button_style, checkbox as checkbox_style};
 use crate::{Theme, fonts, text as text_style, tokens};
+
+const LOG_SCROLL_ANCHOR: scrollable::Anchor = scrollable::Anchor::Start;
 
 /// Severity attached to a structured log entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -300,7 +303,7 @@ where
 
     let logs: Element<'a, Message, Theme, Renderer> = Scrollable::new(items)
         .id(state.scrollable_id.clone())
-        .anchor_bottom()
+        .anchor_y(LOG_SCROLL_ANCHOR)
         .width(Length::Fill)
         .height(Length::Fill)
         .into();
