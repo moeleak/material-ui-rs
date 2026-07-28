@@ -5,7 +5,14 @@ set of platform wrappers needed for the platforms you select.
 
 ## Install and initialize
 
-Install the Cargo subcommand from this repository:
+The default Nix development shell already contains the Cargo subcommand:
+
+```sh
+nix develop
+cargo material-ui init
+```
+
+Without Nix, install the Cargo subcommand from this repository:
 
 ```sh
 cargo install --path tools/cargo-material-ui
@@ -52,7 +59,9 @@ cargo material-ui configure \
 When the backend is Nix, `flake.nix` contains only enabled platform tools and
 Rust standard-library targets. For example, Android adds the Android SDK, NDK,
 JDK, `cargo-apk`, patch utility, and configured Android Rust targets; it does
-not add Web or Windows tools.
+not add Web or Windows tools. The generated development shell also includes
+`cargo-material-ui`, so `cargo material-ui configure`, `doctor`, and `build`
+remain available after entering the project with `nix develop`.
 
 Generated files are recorded in `.material-ui/generated-state.json`. Files that
 still match their recorded hash are updated automatically. If a generated file

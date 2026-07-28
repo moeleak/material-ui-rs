@@ -45,15 +45,16 @@
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = rustToolchain;
+          packages = rustToolchain ++ [ nativePackages.cargo_material_ui ];
           shellHook = ''
             export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="${pkgs.lld}/bin/wasm-ld"
           '';
         };
 
         packages = {
-          inherit (nativePackages) default material_ui_rs;
+          inherit (nativePackages) default material_ui_rs cargo_material_ui;
           "material-ui-rs" = nativePackages.material_ui_rs;
+          "cargo-material-ui" = nativePackages.cargo_material_ui;
 
           native = nativePackages.material_ui_rs;
           windows = windowsPackages.material_ui_rs;

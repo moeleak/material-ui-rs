@@ -8,9 +8,14 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    material-ui-rs = {
+      url = "github:moeleak/material-ui-rs";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-utils.follows = "flake-utils";
+    };
   };
 
-  outputs = { nixpkgs, flake-utils, rust-overlay, ... }:
+  outputs = { nixpkgs, flake-utils, rust-overlay, material-ui-rs, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -21,6 +26,7 @@
             android_sdk.accept_license = true;
           };
         };
+        materialUiCli = material-ui-rs.packages.${system}.cargo-material-ui;
         rustToolchain = pkgs.rust-bin.stable."1.88.0".default.override {
           targets = [
 {{rust_targets}}          ];
@@ -32,6 +38,7 @@
             rustToolchain
             rust-analyzer
             lld
+            materialUiCli
 {{platform_packages}}{{android_package}}          ];
 
           shellHook = ''

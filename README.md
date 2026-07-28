@@ -35,7 +35,17 @@ correct MIME types.
 
 ## Application CLI
 
-Install the workspace CLI, then start the interactive project wizard:
+The default Nix development shell includes the workspace CLI:
+
+```sh
+nix develop
+cargo material-ui init
+```
+
+Projects initialized with the Nix backend also include `cargo-material-ui` in
+their generated development shell.
+
+Without Nix, install the CLI and then start the interactive project wizard:
 
 ```sh
 cargo install --path tools/cargo-material-ui

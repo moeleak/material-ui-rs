@@ -111,6 +111,24 @@ mod tests {
     }
 
     #[test]
+    fn shell_includes_cargo_material_ui_from_project_flake() {
+        let config = ProjectConfig::new(
+            "app".into(),
+            "App".into(),
+            "dev.example.app".into(),
+            Backend::Nix,
+            BTreeSet::from([Platform::Macos]),
+        );
+        let flake = render(&config);
+
+        assert!(flake.contains(r#"url = "github:moeleak/material-ui-rs";"#));
+        assert!(
+            flake.contains("materialUiCli = material-ui-rs.packages.${system}.cargo-material-ui;")
+        );
+        assert!(flake.contains("            materialUiCli\n"));
+    }
+
+    #[test]
     fn android_shell_contains_only_android_cross_tools() {
         let config = ProjectConfig::new(
             "app".into(),
