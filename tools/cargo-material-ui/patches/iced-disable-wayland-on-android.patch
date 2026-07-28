@@ -1,0 +1,10 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -499,6 +499,7 @@
+ #[cfg(all(
+     target_family = "unix",
+     not(target_os = "macos"),
++    not(target_os = "android"),
+     not(feature = "wayland"),
+     not(feature = "x11"),
+ ))]

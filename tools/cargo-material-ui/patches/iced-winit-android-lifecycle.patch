@@ -1,0 +1,262 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -26,6 +26,21 @@
+ pub use runtime::futures;
+ pub use winit;
+
++#[cfg(target_os = "android")]
++static ANDROID_APP: std::sync::Mutex<
++    Option<winit::platform::android::activity::AndroidApp>,
++> = std::sync::Mutex::new(None);
++
++#[cfg(target_os = "android")]
++/// Sets the Android application handle before the iced event loop starts.
++pub fn set_android_app(app: winit::platform::android::activity::AndroidApp) {
++    let mut android_app = ANDROID_APP
++        .lock()
++        .expect("Lock iced_winit Android application handle");
++
++    *android_app = Some(app);
++}
++
+ pub mod clipboard;
+ pub mod conversion;
+
+@@ -76,8 +90,21 @@
+     let settings = program.settings();
+     let window_settings = program.window();
+
+-    let event_loop = EventLoop::with_user_event()
+-        .build()
++    let mut event_loop_builder = EventLoop::with_user_event();
++
++    #[cfg(target_os = "android")]
++    {
++        use winit::platform::android::EventLoopBuilderExtAndroid;
++
++        let android_app = ANDROID_APP
++            .lock()
++            .expect("Lock iced_winit Android application handle")
++            .clone()
++            .expect("AndroidApp must be set before running iced on Android");
++        let _ = event_loop_builder.with_android_app(android_app);
++    }
++
++    let event_loop = event_loop_builder.build()
+         .expect("Create event loop");
+
+     let graphics_settings = settings.clone().into();
+@@ -151,6 +178,9 @@
+         error: Option<Error>,
+         system_theme: Option<oneshot::Sender<theme::Mode>>,
+
++        #[cfg(target_os = "android")]
++        is_resumed: bool,
++
+         #[cfg(target_arch = "wasm32")]
+         canvas: Option<web_sys::HtmlCanvasElement>,
+     }
+@@ -164,6 +194,9 @@
+         error: None,
+         system_theme: Some(system_theme_sender),
+
++        #[cfg(target_os = "android")]
++        is_resumed: false,
++
+         #[cfg(target_arch = "wasm32")]
+         canvas: None,
+     };
+@@ -184,6 +217,15 @@
+                         .unwrap_or_default(),
+                 );
+             }
++
++            #[cfg(target_os = "android")]
++            {
++                self.is_resumed = true;
++                self.process_event(
++                    event_loop,
++                    Event::EventLoopAwakened(winit::event::Event::Resumed),
++                );
++            }
+         }
+
+         fn new_events(
+@@ -235,6 +277,17 @@
+             }
+         }
+
++        fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
++            #[cfg(target_os = "android")]
++            {
++                self.is_resumed = false;
++                self.process_event(
++                    _event_loop,
++                    Event::EventLoopAwakened(winit::event::Event::Suspended),
++                );
++            }
++        }
++
+         fn user_event(
+             &mut self,
+             event_loop: &winit::event_loop::ActiveEventLoop,
+@@ -274,6 +327,11 @@
+
+             self.sender.start_send(event).expect("Send event");
+
++            #[cfg(target_os = "android")]
++            if !self.is_resumed {
++                return;
++            }
++
+             loop {
+                 let poll = self.instance.as_mut().poll(&mut self.context);
+
+@@ -697,6 +755,9 @@
+                     window.raw.set_visible(true);
+                 }
+
++                #[cfg(target_os = "android")]
++                window.raw.request_redraw();
++
+                 events.push((
+                     id,
+                     core::Event::Window(window::Event::Opened {
+@@ -714,6 +775,33 @@
+             }
+             Event::EventLoopAwakened(event) => {
+                 match event {
++                    #[cfg(target_os = "android")]
++                    event::Event::Suspended => {
++                        for (_id, window) in window_manager.iter_mut() {
++                            window.surface = None;
++                        }
++                    }
++                    #[cfg(target_os = "android")]
++                    event::Event::Resumed => {
++                        if let Some(current_compositor) = compositor.as_mut() {
++                            for (_id, window) in window_manager.iter_mut() {
++                                let physical_size = window.state.physical_size();
++
++                                if physical_size.width == 0 || physical_size.height == 0 {
++                                    window.surface = None;
++                                    continue;
++                                }
++
++                                window.surface = Some(current_compositor.create_surface(
++                                    window.raw.clone(),
++                                    physical_size.width,
++                                    physical_size.height,
++                                ));
++                                window.surface_version = window.state.surface_version();
++                                window.raw.request_redraw();
++                            }
++                        }
++                    }
+                     event::Event::NewEvents(event::StartCause::Init) => {
+                         for (_id, window) in window_manager.iter_mut() {
+                             window.raw.request_redraw();
+@@ -802,7 +890,10 @@
+                             layout_span.finish();
+
++                            let Some(surface) = window.surface.as_mut() else {
++                                continue;
++                            };
+                             current_compositor.configure_surface(
+-                                &mut window.surface,
++                                surface,
+                                 physical_size.width,
+                                 physical_size.height,
+                             );
+@@ -980,7 +1072,11 @@
+                         let present_span = debug::present(id);
++                        let raw_window = window.raw.clone();
++                        let Some(surface) = window.surface.as_mut() else {
++                            continue;
++                        };
+                         match current_compositor.present(
+                             &mut window.renderer,
+-                            &mut window.surface,
++                            surface,
+                             window.state.viewport(),
+                             window.state.background_color(),
+-                            || window.raw.pre_present_notify(),
++                            || raw_window.pre_present_notify(),
+@@ -1002,15 +1098,16 @@
+                                         window.state.physical_size();
+
+                                     if error == compositor::SurfaceError::Lost {
+-                                        window.surface = current_compositor
+-                                            .create_surface(
++                                        window.surface = Some(
++                                            current_compositor.create_surface(
+                                                 window.raw.clone(),
+                                                 physical_size.width,
+                                                 physical_size.height,
+-                                            );
++                                            ),
++                                        );
+-                                    } else {
++                                    } else if let Some(surface) = window.surface.as_mut() {
+                                         current_compositor.configure_surface(
+-                                            &mut window.surface,
++                                            surface,
+                                             physical_size.width,
+                                             physical_size.height,
+                                         );
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -75,7 +75,7 @@
+                 raw: window,
+                 state,
+                 exit_on_close_request,
+-                surface,
++                surface: Some(surface),
+                 surface_version,
+                 renderer,
+                 mouse_interaction: mouse::Interaction::None,
+@@ -167,7 +167,7 @@
+     pub state: State<P>,
+     pub exit_on_close_request: bool,
+     pub mouse_interaction: mouse::Interaction,
+-    pub surface: C::Surface,
++    pub surface: Option<C::Surface>,
+     pub surface_version: u64,
+     pub renderer: P::Renderer,
+     pub redraw_at: Option<Instant>,
+--- a/src/conversion.rs
++++ b/src/conversion.rs
+@@ -233,13 +233,13 @@
+         WindowEvent::KeyboardInput { is_synthetic, .. } if is_synthetic => None,
+         WindowEvent::KeyboardInput { event, .. } => Some(Event::Keyboard({
+             let key = {
+-                #[cfg(not(target_arch = "wasm32"))]
++                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                 {
+                     use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+                     event.key_without_modifiers()
+                 }
+
+-                #[cfg(target_arch = "wasm32")]
++                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                 {
+                     // TODO: Fix inconsistent API on Wasm
+                     event.logical_key.clone()
+@@ -247,7 +247,7 @@
+             };
+
+             let text = {
+-                #[cfg(not(target_arch = "wasm32"))]
++                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                 {
+                     use crate::core::SmolStr;
+                     use winit::platform::modifier_supplement::KeyEventExtModifierSupplement;
+@@ -255,7 +255,7 @@
+                     event.text_with_all_modifiers().map(SmolStr::new)
+                 }
+
+-                #[cfg(target_arch = "wasm32")]
++                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                 {
+                     // TODO: Fix inconsistent API on Wasm
+                     event.text

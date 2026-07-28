@@ -1,3 +1,5 @@
+#[cfg(target_os = "android")]
+pub mod android;
 pub mod animation;
 pub mod application;
 #[path = "design/fonts.rs"]

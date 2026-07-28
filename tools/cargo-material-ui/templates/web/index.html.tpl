@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark light" />
     <base data-trunk-public-url />
-    <title>{{label}}</title>
+    <title>{{label_html}}</title>
     <style>
       html,
       body {

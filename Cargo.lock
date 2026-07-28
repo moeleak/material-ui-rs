@@ -2014,6 +2014,7 @@ dependencies = [
  "iced_selection",
  "iced_widget",
  "iced_winit",
+ "jni",
  "js-sys",
  "num-traits",
  "serde",

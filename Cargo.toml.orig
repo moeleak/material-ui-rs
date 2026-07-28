@@ -50,13 +50,34 @@ qr_code = ["iced_widget/qr_code"]
 __showcase_web = []
 
 [dependencies]
-iced = "0.14"
+iced = { version = "0.14", default-features = false, features = [
+  "wgpu",
+  "tiny-skia",
+  "crisp",
+  "web-colors",
+  "thread-pool",
+] }
 iced_widget = { version = "0.14", features = ["canvas"] }
-iced_winit = "0.14"
+iced_winit = { version = "0.14", default-features = false }
 iced_anim = { version = "0.3", optional = true, features = ["derive"] }
 iced_dialog = { version = "0.14", optional = true }
 iced_selection = { version = "0.5", optional = true }
 serde = { version = "1.0", optional = true }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+iced = { version = "0.14", default-features = false, features = [
+  "linux-theme-detection",
+  "x11",
+  "wayland",
+] }
+iced_winit = { version = "0.14", features = [
+  "linux-theme-detection",
+  "x11",
+  "wayland",
+] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"

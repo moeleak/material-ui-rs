@@ -1,0 +1,226 @@
+--- a/src/platform_impl/android/mod.rs
++++ b/src/platform_impl/android/mod.rs
+@@ -6,7 +6,10 @@
+ use std::sync::{mpsc, Arc, Mutex};
+ use std::time::{Duration, Instant};
+
+-use android_activity::input::{InputEvent, KeyAction, Keycode, MotionAction};
++use android_activity::input::{
++    ImeOptions, InputEvent, InputType, KeyAction, Keycode, MotionAction, TextInputAction,
++    TextInputState, TextSpan,
++};
+ use android_activity::{
+     AndroidApp, AndroidAppWaker, ConfigurationRef, InputStatus, MainEvent, Rect,
+ };
+@@ -143,6 +146,7 @@
+     cause: StartCause,
+     ignore_volume_keys: bool,
+     combining_accent: Option<char>,
++    ime_text: String,
+ }
+
+ #[derive(Debug, Clone, PartialEq)]
+@@ -192,6 +196,7 @@
+             cause: StartCause::Init,
+             ignore_volume_keys: attributes.ignore_volume_keys,
+             combining_accent: None,
++            ime_text: String::new(),
+         })
+     }
+
+@@ -473,6 +478,12 @@
+                     },
+                 }
+             },
++            InputEvent::TextEvent(state) => {
++                self.handle_text_input_event(android_app, state, callback);
++            },
++            InputEvent::TextAction(action) => {
++                self.handle_text_input_action(*action, callback);
++            },
+             _ => {
+                 warn!("Unknown android_activity input event {event:?}")
+             },
+@@ -481,6 +492,114 @@
+         input_status
+     }
+
++    fn handle_text_input_event<F>(
++        &mut self,
++        android_app: &AndroidApp,
++        state: &TextInputState,
++        callback: &mut F,
++    ) where
++        F: FnMut(event::Event<T>, &RootAEL),
++    {
++        if let Some(compose_region) = valid_text_span(&state.text, state.compose_region) {
++            let mut committed = String::new();
++            committed.push_str(&state.text[..compose_region.start]);
++            committed.push_str(&state.text[compose_region.end..]);
++
++            self.commit_android_ime_text(&committed, callback);
++
++            let preedit = state.text[compose_region.clone()].to_owned();
++            let selection =
++                preedit_selection(&state.text, state.selection, &compose_region);
++
++            self.dispatch_ime_event(event::Ime::Preedit(preedit, selection), callback);
++        } else {
++            self.dispatch_ime_event(event::Ime::Preedit(String::new(), None), callback);
++            self.commit_android_ime_text(&state.text, callback);
++
++            self.ime_text.clear();
++            android_app.set_text_input_state(TextInputState::default());
++        }
++    }
++
++    fn commit_android_ime_text<F>(&mut self, text: &str, callback: &mut F)
++    where
++        F: FnMut(event::Event<T>, &RootAEL),
++    {
++        if text == self.ime_text {
++            return;
++        }
++
++        let commit = text
++            .strip_prefix(&self.ime_text)
++            .filter(|suffix| !suffix.is_empty())
++            .unwrap_or(text);
++
++        if !commit.is_empty() {
++            self.dispatch_ime_event(event::Ime::Commit(commit.to_owned()), callback);
++        }
++
++        self.ime_text.clear();
++        self.ime_text.push_str(text);
++    }
++
++    fn dispatch_ime_event<F>(&self, ime: event::Ime, callback: &mut F)
++    where
++        F: FnMut(event::Event<T>, &RootAEL),
++    {
++        callback(
++            event::Event::WindowEvent {
++                window_id: window::WindowId(WindowId),
++                event: event::WindowEvent::Ime(ime),
++            },
++            self.window_target(),
++        );
++    }
++
++    fn handle_text_input_action<F>(&self, action: TextInputAction, callback: &mut F)
++    where
++        F: FnMut(event::Event<T>, &RootAEL),
++    {
++        if matches!(
++            action,
++            TextInputAction::Go
++                | TextInputAction::Search
++                | TextInputAction::Send
++                | TextInputAction::Done
++        ) {
++            self.dispatch_enter_key_action(event::ElementState::Pressed, callback);
++            self.dispatch_enter_key_action(event::ElementState::Released, callback);
++        }
++    }
++
++    fn dispatch_enter_key_action<F>(&self, state: event::ElementState, callback: &mut F)
++    where
++        F: FnMut(event::Event<T>, &RootAEL),
++    {
++        callback(
++            event::Event::WindowEvent {
++                window_id: window::WindowId(WindowId),
++                event: event::WindowEvent::KeyboardInput {
++                    device_id: event::DeviceId(DeviceId(0)),
++                    event: event::KeyEvent {
++                        state,
++                        physical_key: crate::keyboard::PhysicalKey::Code(
++                            crate::keyboard::KeyCode::Enter,
++                        ),
++                        logical_key: crate::keyboard::Key::Named(
++                            crate::keyboard::NamedKey::Enter,
++                        ),
++                        location: crate::keyboard::KeyLocation::Standard,
++                        repeat: false,
++                        text: None,
++                        platform_specific: KeyEventExtra {},
++                    },
++                    is_synthetic: true,
++                },
++            },
++            self.window_target(),
++        );
++    }
++
+     pub fn run<F>(mut self, event_handler: F) -> Result<(), EventLoopError>
+     where
+         F: FnMut(event::Event<T>, &event_loop::ActiveEventLoop),
+@@ -917,9 +1036,19 @@
+
+     pub fn set_ime_allowed(&self, allowed: bool) {
+         if allowed {
++            let mut options = ImeOptions::IME_FLAG_NO_FULLSCREEN;
++            options.set_action(TextInputAction::Done);
++
++            self.app.set_ime_editor_info(
++                InputType::TYPE_CLASS_TEXT | InputType::TYPE_TEXT_VARIATION_NORMAL,
++                TextInputAction::Done,
++                options,
++            );
++            self.app.set_text_input_state(TextInputState::default());
+             self.app.show_soft_input(true);
+         } else {
+             self.app.hide_soft_input(true);
++            self.app.set_text_input_state(TextInputState::default());
+         }
+     }
+
+@@ -1139,3 +1268,47 @@
+         self.monitor.clone()
+     }
+ }
++
++fn valid_text_span(text: &str, span: Option<TextSpan>) -> Option<std::ops::Range<usize>> {
++    let span = span?;
++    let start = utf16_index_to_byte_index(text, span.start);
++    let end = utf16_index_to_byte_index(text, span.end);
++
++    (start < end).then_some(start..end)
++}
++
++fn utf16_index_to_byte_index(text: &str, index: usize) -> usize {
++    let mut utf16_offset = 0;
++
++    for (byte_offset, character) in text.char_indices() {
++        if utf16_offset >= index {
++            return byte_offset;
++        }
++
++        let next = utf16_offset + character.len_utf16();
++        if index < next {
++            return byte_offset;
++        }
++        utf16_offset = next;
++    }
++
++    text.len()
++}
++
++fn preedit_selection(
++    text: &str,
++    selection: TextSpan,
++    compose_region: &std::ops::Range<usize>,
++) -> Option<(usize, usize)> {
++    let start = utf16_index_to_byte_index(text, selection.start);
++    let end = utf16_index_to_byte_index(text, selection.end);
++
++    if start < compose_region.start || end > compose_region.end {
++        return None;
++    }
++
++    Some((
++        text[compose_region.start..start].chars().count(),
++        text[compose_region.start..end].chars().count(),
++    ))
++}

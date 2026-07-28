@@ -11,6 +11,8 @@ path = "src/lib.rs"
 [dependencies]
 {{crate_name}} = { package = "{{package_name}}", path = ".." }
 material-ui-rs = { git = "https://github.com/moeleak/material-ui-rs", branch = "main" }
+iced_winit = { version = "=0.14.0", default-features = false }
+winit = { version = "=0.30.13", default-features = false, features = ["android-native-activity"] }
 
 [package.metadata.android]
 package = "{{app_id}}"
@@ -24,7 +26,7 @@ min_sdk_version = {{min_sdk}}
 target_sdk_version = {{target_sdk}}
 
 [package.metadata.android.application]
-label = "{{label}}"
+label = {{label_toml}}
 theme = "@style/MaterialUiTheme"
 has_code = false
 

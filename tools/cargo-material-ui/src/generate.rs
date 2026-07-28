@@ -390,6 +390,7 @@ fn apply_project(root: &Path, config: &ProjectConfig, options: ApplyOptions) -> 
 fn render_files(config: &ProjectConfig) -> Result<BTreeMap<String, String>> {
     let mut files = BTreeMap::new();
     let crate_name = crate_name(&config.project.name);
+    let label_rust = format!("{:?}", config.project.label);
     let workspace_members = if config.build.platforms.contains(&Platform::Android) {
         r#""android""#
     } else {
@@ -410,7 +411,7 @@ fn render_files(config: &ProjectConfig) -> Result<BTreeMap<String, String>> {
     );
     let _ = files.insert(
         "src/lib.rs".to_owned(),
-        render_template(APP_TEMPLATE, &[("label", &config.project.label)]),
+        render_template(APP_TEMPLATE, &[("label_rust", &label_rust)]),
     );
     let _ = files.insert(
         ".gitignore".to_owned(),
@@ -425,7 +426,7 @@ fn render_files(config: &ProjectConfig) -> Result<BTreeMap<String, String>> {
             render_template(
                 WEB_TEMPLATE,
                 &[
-                    ("label", &config.project.label),
+                    ("label_html", &escape_html(&config.project.label)),
                     ("package_name", &config.project.name),
                 ],
             ),
@@ -454,6 +455,7 @@ fn render_android(config: &ProjectConfig, crate_name: &str) -> BTreeMap<String, 
         .join(", ");
     let min_sdk = config.android.min_sdk.to_string();
     let target_sdk = config.android.target_sdk.to_string();
+    let label_toml = toml::Value::String(config.project.label.clone()).to_string();
     let cargo = render_template(
         ANDROID_CARGO_TEMPLATE,
         &[
@@ -463,7 +465,7 @@ fn render_android(config: &ProjectConfig, crate_name: &str) -> BTreeMap<String, 
             ("android_targets", &targets),
             ("min_sdk", &min_sdk),
             ("target_sdk", &target_sdk),
-            ("label", &config.project.label),
+            ("label_toml", &label_toml),
         ],
     );
     let _ = files.insert("android/Cargo.toml".to_owned(), cargo);
@@ -484,6 +486,15 @@ fn render_template(template: &str, replacements: &[(&str, &str)]) -> String {
         .fold(template.to_owned(), |rendered, (key, value)| {
             rendered.replace(&format!("{{{{{key}}}}}"), value)
         })
+}
+
+fn escape_html(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 fn load_state(root: &Path) -> Result<GeneratedState> {
@@ -640,7 +651,7 @@ mod tests {
 
     use crate::config::{Backend, Platform, ProjectConfig, state_path};
 
-    use super::{ApplyOptions, apply_project};
+    use super::{ApplyOptions, apply_project, render_files};
 
     fn config(platforms: BTreeSet<Platform>) -> ProjectConfig {
         ProjectConfig::new(
@@ -711,6 +722,73 @@ mod tests {
         assert_eq!(
             fs::read_to_string(directory.path().join("web/index.html")).unwrap(),
             "custom"
+        );
+    }
+
+    #[test]
+    fn existing_flake_requires_explicit_overwrite() {
+        let directory = tempdir().unwrap();
+        fs::write(directory.path().join("flake.nix"), "custom flake").unwrap();
+        let mut nix_config = config(BTreeSet::from([Platform::Web]));
+        nix_config.build.backend = Backend::Nix;
+
+        let result = apply_project(
+            directory.path(),
+            &nix_config,
+            ApplyOptions {
+                interactive: false,
+                force: false,
+                force_flake: false,
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read_to_string(directory.path().join("flake.nix")).unwrap(),
+            "custom flake"
+        );
+
+        apply_project(
+            directory.path(),
+            &nix_config,
+            ApplyOptions {
+                interactive: false,
+                force: false,
+                force_flake: true,
+            },
+        )
+        .unwrap();
+        assert!(
+            fs::read_to_string(directory.path().join("flake.nix"))
+                .unwrap()
+                .contains("rust-overlay")
+        );
+        assert!(
+            fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("flake.material-ui-backup-"))
+        );
+    }
+
+    #[test]
+    fn escapes_labels_for_each_generated_language() {
+        let mut config = config(BTreeSet::from([Platform::Web, Platform::Android]));
+        config.project.label = "A \"quoted\" <app>".into();
+        let files = render_files(&config).unwrap();
+
+        assert!(
+            files["src/lib.rs"].contains(r#""A \"quoted\" <app>""#),
+            "{}",
+            files["src/lib.rs"]
+        );
+        assert!(files["web/index.html"].contains("A &quot;quoted&quot; &lt;app&gt;"));
+        let android_manifest: toml::Value = toml::from_str(&files["android/Cargo.toml"]).unwrap();
+        assert_eq!(
+            android_manifest["package"]["metadata"]["android"]["application"]["label"].as_str(),
+            Some("A \"quoted\" <app>")
         );
     }
 }

@@ -16,8 +16,21 @@ name = "{{package_name}}"
 path = "src/main.rs"
 
 [dependencies]
-iced = "0.14"
+iced = { version = "=0.14.0", default-features = false, features = [
+  "wgpu",
+  "tiny-skia",
+  "crisp",
+  "web-colors",
+  "thread-pool",
+] }
 material-ui-rs = { git = "https://github.com/moeleak/material-ui-rs", branch = "main" }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+iced = { version = "=0.14.0", default-features = false, features = [
+  "linux-theme-detection",
+  "x11",
+  "wayland",
+] }
 
 [profile.release]
 lto = "fat"
