@@ -18,7 +18,9 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Create a new material-ui-rs application.
+    /// Create a material-ui-rs application in a new directory.
+    New(NewArgs),
+    /// Initialize the current directory as a material-ui-rs application.
     Init(InitArgs),
     /// Change the platforms and toolchain of an existing project.
     Configure(ConfigureArgs),
@@ -30,8 +32,20 @@ pub enum Command {
 
 #[derive(Debug, Clone, Args)]
 pub struct InitArgs {
+    #[command(flatten)]
+    pub project: ProjectArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct NewArgs {
     /// Directory to create. Defaults to a prompt in interactive terminals.
     pub path: Option<PathBuf>,
+    #[command(flatten)]
+    pub project: ProjectArgs,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ProjectArgs {
     /// Disable prompts. All required values must be supplied as flags.
     #[arg(long)]
     pub non_interactive: bool,
@@ -108,4 +122,27 @@ pub struct DoctorArgs {
     /// Project directory.
     #[arg(default_value = ".")]
     pub path: PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Cli, Command};
+    use clap::Parser;
+    use std::path::PathBuf;
+
+    #[test]
+    fn new_accepts_a_project_directory() {
+        let cli = Cli::try_parse_from(["cargo-material-ui", "new", "material-app"]).unwrap();
+
+        let Command::New(args) = cli.command else {
+            panic!("expected the new command");
+        };
+        assert_eq!(args.path, Some(PathBuf::from("material-app")));
+    }
+
+    #[test]
+    fn init_does_not_accept_a_project_directory() {
+        assert!(Cli::try_parse_from(["cargo-material-ui", "init"]).is_ok());
+        assert!(Cli::try_parse_from(["cargo-material-ui", "init", "material-app"]).is_err());
+    }
 }

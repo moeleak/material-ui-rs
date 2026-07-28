@@ -29,6 +29,7 @@ fn run() -> Result<()> {
     ));
 
     match cli.command {
+        Command::New(args) => generate::new(args),
         Command::Init(args) => generate::init(args),
         Command::Configure(args) => generate::configure(args),
         Command::Build(args) => build::run(&args),

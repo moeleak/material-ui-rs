@@ -39,7 +39,7 @@ The default Nix development shell includes the workspace CLI:
 
 ```sh
 nix develop
-cargo material-ui init
+cargo material-ui new material-app
 ```
 
 Projects initialized with the Nix backend also include `cargo-material-ui` in
@@ -49,10 +49,12 @@ Without Nix, install the CLI and then start the interactive project wizard:
 
 ```sh
 cargo install --path tools/cargo-material-ui
-cargo material-ui init
+cargo material-ui new material-app
 ```
 
-The wizard lets you select macOS, Linux, Windows, Web, or Android. When Nix is
+Use `cargo material-ui new [PATH]` to create a new project directory, or run
+`cargo material-ui init` inside an existing directory to initialize it. The
+wizard lets you select macOS, Linux, Windows, Web, or Android. When Nix is
 available it also offers Native Rust or Nix Flake; the generated `flake.nix`
 contains only the toolchains and SDKs required by the selected platforms.
 Platforms and the build backend can be changed later:

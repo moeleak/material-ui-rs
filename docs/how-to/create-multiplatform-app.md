@@ -9,19 +9,28 @@ The default Nix development shell already contains the Cargo subcommand:
 
 ```sh
 nix develop
-cargo material-ui init
+cargo material-ui new material-app
 ```
 
 Without Nix, install the Cargo subcommand from this repository:
 
 ```sh
 cargo install --path tools/cargo-material-ui
+cargo material-ui new material-app
+```
+
+`cargo material-ui new [PATH]` creates a new directory. If `PATH` is omitted,
+the interactive wizard asks for it. To initialize the current directory
+instead, run:
+
+```sh
 cargo material-ui init
 ```
 
 The interactive wizard uses `cliclack` prompts and progress animations. It asks
-for the project directory, Cargo package name, display name, application ID,
-platforms, and build environment.
+for the Cargo package name, display name, application ID, platforms, and build
+environment. Only the current desktop platform is selected by default; Web,
+Android, and other desktop targets are opt-in.
 
 If `nix` is available, the environment prompt offers Nix Flake and Native Rust.
 Without Nix, Native Rust is selected automatically. Disable animation with
@@ -30,7 +39,7 @@ Without Nix, Native Rust is selected automatically. Disable animation with
 For scripts or CI, provide all values explicitly:
 
 ```sh
-cargo material-ui init my-app \
+cargo material-ui new my-app \
   --non-interactive \
   --name my-app \
   --label "My App" \

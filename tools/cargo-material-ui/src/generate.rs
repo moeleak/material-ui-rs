@@ -11,7 +11,7 @@ use cliclack::{confirm, input, multiselect, select};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::cli::{ConfigureArgs, InitArgs};
+use crate::cli::{ConfigureArgs, InitArgs, NewArgs, ProjectArgs};
 use crate::config::{
     Backend, CONFIG_DIR, Platform, ProjectConfig, state_path, validate_app_id,
     validate_package_name,
@@ -41,16 +41,34 @@ struct ApplyOptions {
 }
 
 pub fn init(args: InitArgs) -> Result<()> {
+    let root = std::env::current_dir().context("resolve the current directory")?;
+    let args = args.project;
     let ui = Ui::new(args.no_animations);
+    ui.intro("Initialize a material-ui-rs application");
+
+    let interactive = interaction_mode(args.non_interactive, "init")?;
+    generate_project(&root, args, interactive, &ui, "Initialize this project?")
+}
+
+pub fn new(args: NewArgs) -> Result<()> {
+    let project = args.project;
+    let ui = Ui::new(project.no_animations);
     ui.intro("Create a material-ui-rs application");
 
-    let interactive = !args.non_interactive && Ui::is_interactive();
-    if !interactive && !args.non_interactive {
-        bail!("init requires a terminal; pass --non-interactive with all required values");
-    }
+    let interactive = interaction_mode(project.non_interactive, "new")?;
+    let root = resolve_new_path(args.path, interactive)?;
+    ensure_new_project_root(&root)?;
+    generate_project(&root, project, interactive, &ui, "Create this project?")
+}
 
-    let root = resolve_init_path(args.path, interactive)?;
-    let name = resolve_name(args.name, &root, interactive)?;
+fn generate_project(
+    root: &Path,
+    args: ProjectArgs,
+    interactive: bool,
+    ui: &Ui,
+    confirmation: &str,
+) -> Result<()> {
+    let name = resolve_name(args.name, root, interactive)?;
     let label = resolve_label(args.label, &name, interactive)?;
     let app_id = resolve_app_id(args.app_id, &name, interactive)?;
     let platforms = resolve_platforms(args.platform, interactive)?;
@@ -60,18 +78,15 @@ pub fn init(args: InitArgs) -> Result<()> {
     config.validate()?;
 
     if interactive {
-        print_summary(&root, &config);
-        if !confirm("Create this project?")
-            .initial_value(true)
-            .interact()?
-        {
+        print_summary(root, &config);
+        if !confirm(confirmation).initial_value(true).interact()? {
             bail!("initialization cancelled");
         }
     }
 
     let spinner = ui.spinner("Generating project files");
     apply_project(
-        &root,
+        root,
         &config,
         ApplyOptions {
             interactive,
@@ -82,12 +97,10 @@ pub fn init(args: InitArgs) -> Result<()> {
     spinner.finish("Project files generated");
 
     if backend == Backend::Nix {
-        refresh_flake_lock(&root, &ui)?;
+        refresh_flake_lock(root, ui)?;
     }
 
     ui.success("Project ready");
-    eprintln!("\n  cd {}", root.display());
-    eprintln!("  cargo material-ui build\n");
     Ok(())
 }
 
@@ -171,7 +184,15 @@ pub fn configure(args: ConfigureArgs) -> Result<()> {
     Ok(())
 }
 
-fn resolve_init_path(path: Option<PathBuf>, interactive: bool) -> Result<PathBuf> {
+fn interaction_mode(non_interactive: bool, command: &str) -> Result<bool> {
+    let interactive = !non_interactive && Ui::is_interactive();
+    if !interactive && !non_interactive {
+        bail!("{command} requires a terminal; pass --non-interactive with all required values");
+    }
+    Ok(interactive)
+}
+
+fn resolve_new_path(path: Option<PathBuf>, interactive: bool) -> Result<PathBuf> {
     let path = if let Some(path) = path {
         path
     } else if interactive {
@@ -183,6 +204,16 @@ fn resolve_init_path(path: Option<PathBuf>, interactive: bool) -> Result<PathBuf
         bail!("--non-interactive requires a project path");
     };
     absolute_path(&path)
+}
+
+fn ensure_new_project_root(root: &Path) -> Result<()> {
+    if root.exists() {
+        bail!(
+            "project directory {} already exists; run `cargo material-ui init` from that directory",
+            root.display()
+        );
+    }
+    Ok(())
 }
 
 fn resolve_name(name: Option<String>, root: &Path, interactive: bool) -> Result<String> {
@@ -242,16 +273,7 @@ fn resolve_platforms(platforms: Vec<Platform>, interactive: bool) -> Result<BTre
     if !interactive {
         bail!("--non-interactive requires at least one --platform");
     }
-    let defaults = Platform::ALL
-        .iter()
-        .map(|platform| *platform == host_platform() || *platform == Platform::Web)
-        .collect::<Vec<_>>();
-    let initial = Platform::ALL
-        .iter()
-        .copied()
-        .zip(defaults)
-        .filter_map(|(platform, enabled)| enabled.then_some(platform))
-        .collect::<Vec<_>>();
+    let initial = default_init_platforms(host_platform());
     let mut prompt = multiselect("Build platforms");
     for platform in Platform::ALL {
         prompt = prompt.item(platform, platform.display_name(), "");
@@ -642,6 +664,10 @@ const fn host_platform() -> Platform {
     }
 }
 
+fn default_init_platforms(host: Platform) -> Vec<Platform> {
+    vec![host]
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -651,7 +677,10 @@ mod tests {
 
     use crate::config::{Backend, Platform, ProjectConfig, state_path};
 
-    use super::{ApplyOptions, apply_project, render_files};
+    use super::{
+        ApplyOptions, apply_project, default_init_platforms, ensure_new_project_root,
+        host_platform, render_files,
+    };
 
     fn config(platforms: BTreeSet<Platform>) -> ProjectConfig {
         ProjectConfig::new(
@@ -661,6 +690,33 @@ mod tests {
             Backend::Native,
             platforms,
         )
+    }
+
+    #[test]
+    fn init_defaults_to_the_current_platform_only() {
+        assert_eq!(
+            default_init_platforms(host_platform()),
+            vec![host_platform()]
+        );
+        assert_eq!(
+            default_init_platforms(Platform::Macos),
+            vec![Platform::Macos]
+        );
+        assert_eq!(
+            default_init_platforms(Platform::Linux),
+            vec![Platform::Linux]
+        );
+        assert_eq!(
+            default_init_platforms(Platform::Windows),
+            vec![Platform::Windows]
+        );
+    }
+
+    #[test]
+    fn new_requires_a_path_that_does_not_exist() {
+        let parent = tempdir().unwrap();
+        assert!(ensure_new_project_root(parent.path()).is_err());
+        assert!(ensure_new_project_root(&parent.path().join("material-app")).is_ok());
     }
 
     #[test]
