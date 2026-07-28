@@ -84,3 +84,14 @@ fn view(app: &App) -> material::Element<'_, Message> {
 
 The suite uses Material adaptive navigation tokens. Compact width or compact
 height uses the bottom navigation bar; larger viewports use the rail.
+
+To use an AndroidX Compose-style modal drawer instead of the compact navigation
+bar, opt in explicitly:
+
+```rust
+navigation::suite(&DESTINATIONS, &app.navigation)
+    .window_size(app.window_size)
+    .with_menu("Menu", Message::MenuPressed)
+    .compact_navigation(navigation::CompactNavigation::ModalDrawer)
+    .view(Message::Navigate, content)
+```

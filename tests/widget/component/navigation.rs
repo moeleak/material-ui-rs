@@ -56,6 +56,18 @@ fn adaptive_layout_matches_navigation_suite_default() {
 }
 
 #[test]
+fn menu_builder_defaults_to_the_compatible_compact_navigation_bar() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let state = NavigationState::new(Page::One);
+    let menu = suite(&destinations, &state).with_menu("Navigation", Message::Frame);
+
+    assert_eq!(menu.compact_navigation, CompactNavigation::NavigationBar);
+
+    let menu = menu.compact_navigation(CompactNavigation::ModalDrawer);
+    assert_eq!(menu.compact_navigation, CompactNavigation::ModalDrawer);
+}
+
+#[test]
 fn selection_interpolates_previous_and_selected_destination() {
     let selection = Selection::transitioning(Page::Two, Page::One, 0.25);
 

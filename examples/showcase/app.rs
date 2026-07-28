@@ -606,10 +606,13 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
         Message::SnackbarUndo,
     );
 
-    let content = navigation::suite(&NAV_DESTINATIONS, &state.navigation)
+    let navigation_suite = navigation::suite(&NAV_DESTINATIONS, &state.navigation)
         .layout(state.adaptive_navigation_layout())
-        .with_menu("Showcase", Message::MenuPressed)
-        .view(Message::Navigate, page_content);
+        .with_menu("Showcase", Message::MenuPressed);
+    #[cfg(target_os = "android")]
+    let navigation_suite =
+        navigation_suite.compact_navigation(navigation::CompactNavigation::ModalDrawer);
+    let content = navigation_suite.view(Message::Navigate, page_content);
     let content = state.theme_controller.controls_over(
         content,
         theme_picker::bottom_margin(state.adaptive_navigation_layout()),

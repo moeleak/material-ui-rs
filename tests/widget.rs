@@ -1183,6 +1183,7 @@ fn material_navigation_constructors_compile_to_elements() {
     let _: TestElement<'_> = navigation::suite(&destinations, &state)
         .window_size(Size::new(1080.0, 980.0))
         .with_menu("Navigation", Message::Pressed)
+        .compact_navigation(navigation::CompactNavigation::ModalDrawer)
         .view(|_| Message::Pressed, content);
 }
 

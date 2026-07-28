@@ -99,14 +99,16 @@ fn update(app: &mut App, message: Message) {
 }
 
 fn subscription(app: &App) -> Subscription<Message> {
-    let mut subscriptions = vec![
+    let subscriptions = vec![
         app.navigation.subscription(Message::NavigationFrame),
         iced::window::resize_events().map(|(_id, size)| Message::WindowResized(size)),
     ];
     #[cfg(target_os = "android")]
-    {
+    let subscriptions = {
+        let mut subscriptions = subscriptions;
         subscriptions.push(material::android::events().map(Message::Android));
-    }
+        subscriptions
+    };
     Subscription::batch(subscriptions)
 }
 
@@ -136,10 +138,13 @@ fn view(app: &App) -> material::Element<'_, Message> {
         ]
         .spacing(12),
     );
-    let content = navigation::suite(&DESTINATIONS, &app.navigation)
+    let navigation_suite = navigation::suite(&DESTINATIONS, &app.navigation)
         .window_size(app.window_size)
-        .with_menu({{label_rust}}, Message::ToggleMenu)
-        .view(Message::Navigate, page);
+        .with_menu({{label_rust}}, Message::ToggleMenu);
+    #[cfg(target_os = "android")]
+    let navigation_suite = navigation_suite
+        .compact_navigation(navigation::CompactNavigation::ModalDrawer);
+    let content = navigation_suite.view(Message::Navigate, page);
 
     #[cfg(target_os = "android")]
     {

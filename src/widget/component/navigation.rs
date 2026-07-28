@@ -46,6 +46,16 @@ pub enum AdaptiveLayout {
     NavigationRail,
 }
 
+/// Navigation presentation used for compact windows when menu behavior is enabled.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum CompactNavigation {
+    /// Keeps the standard Material navigation bar at the bottom.
+    #[default]
+    NavigationBar,
+    /// Replaces the navigation bar with a top app bar and modal navigation drawer.
+    ModalDrawer,
+}
+
 impl AdaptiveLayout {
     pub fn from_size(width: f32, height: f32) -> Self {
         adaptive_layout(width, height)
@@ -590,7 +600,10 @@ impl<'a, Id> Suite<'a, Id> {
         self
     }
 
-    /// Adds a modal drawer on compact windows and an expandable rail otherwise.
+    /// Adds menu behavior while preserving the compact navigation bar.
+    ///
+    /// Call [`SuiteWithMenu::compact_navigation`] to opt into a modal drawer
+    /// for compact windows.
     pub fn with_menu<Message>(
         self,
         headline: &'static str,
@@ -600,6 +613,7 @@ impl<'a, Id> Suite<'a, Id> {
             suite: self,
             headline,
             on_menu,
+            compact_navigation: CompactNavigation::default(),
         }
     }
 
@@ -632,6 +646,7 @@ pub struct SuiteWithMenu<'a, Id, Message> {
     suite: Suite<'a, Id>,
     headline: &'static str,
     on_menu: Message,
+    compact_navigation: CompactNavigation,
 }
 
 impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
@@ -650,6 +665,12 @@ impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
     /// Chooses the adaptive layout for the provided dimensions.
     pub fn dimensions(mut self, width: f32, height: f32) -> Self {
         self.suite = self.suite.dimensions(width, height);
+        self
+    }
+
+    /// Selects the navigation presentation used for compact windows.
+    pub fn compact_navigation(mut self, compact_navigation: CompactNavigation) -> Self {
+        self.compact_navigation = compact_navigation;
         self
     }
 
@@ -673,6 +694,7 @@ impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
             self.suite.state,
             on_select,
             self.on_menu,
+            self.compact_navigation,
             self.suite.window_size.map(|size| size.width),
             content,
         )
@@ -758,6 +780,7 @@ where
         state,
         on_select,
         on_menu,
+        CompactNavigation::default(),
         Some(window_size.width),
         content,
     )
@@ -770,6 +793,7 @@ fn view_menu_for_layout<'a, Id, Message, Renderer, F>(
     state: &NavigationState<Id>,
     on_select: F,
     on_menu: Message,
+    compact_navigation: CompactNavigation,
     window_width: Option<f32>,
     content: impl Into<Element<'a, Message, Theme, Renderer>>,
 ) -> Element<'a, Message, Theme, Renderer>
@@ -783,6 +807,17 @@ where
     let menu_progress = state.menu_progress();
     let content = content.into();
     let selection = state.selection();
+
+    if layout == AdaptiveLayout::NavigationBar
+        && compact_navigation == CompactNavigation::NavigationBar
+    {
+        return Column::new()
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .push(content)
+            .push(bar(destinations, selection, on_select))
+            .into();
+    }
 
     match layout {
         AdaptiveLayout::NavigationBar => {

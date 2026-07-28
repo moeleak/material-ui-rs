@@ -866,6 +866,8 @@ mod tests {
         assert!(app.contains(".toggle_menu_for_size("));
         assert!(!app.contains(".layout(navigation::AdaptiveLayout::NavigationRail)"));
         assert!(app.contains(".with_menu("));
+        assert!(app.contains(".compact_navigation(navigation::CompactNavigation::ModalDrawer)"));
+        assert!(app.contains("#[cfg(target_os = \"android\")]"));
         assert!(app.contains(".badge(\"3\")"));
     }
 }
