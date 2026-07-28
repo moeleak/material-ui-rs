@@ -43,6 +43,11 @@ pub fn run() -> iced::Result {
         .run()
 }
 
+#[cfg(target_os = "android")]
+pub fn run_android(app: material::android::AndroidApp) {
+    material::android::run(app, run);
+}
+
 struct App {
     navigation: navigation::NavigationState<DemoPage>,
     window_size: Size,

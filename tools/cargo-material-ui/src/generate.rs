@@ -856,6 +856,18 @@ mod tests {
     }
 
     #[test]
+    fn android_wrapper_uses_the_application_material_runtime() {
+        let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
+        let app = &files["src/lib.rs"];
+        let wrapper = &files["android/src/lib.rs"];
+        let manifest = &files["android/Cargo.toml"];
+
+        assert!(app.contains("pub fn run_android(app: material::android::AndroidApp)"));
+        assert!(wrapper.contains("::run_android(app)"));
+        assert!(!manifest.contains("material-ui-rs ="));
+    }
+
+    #[test]
     fn generates_navigation_menu_demo() {
         let files = render_files(&config(BTreeSet::from([Platform::Linux]))).unwrap();
         let app = &files["src/lib.rs"];
