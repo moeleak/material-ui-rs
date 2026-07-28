@@ -495,6 +495,7 @@ fn m3_component_sizing_tokens_match_google_values() {
     assert_eq!(component::fab::EXTENDED_ELEVATION.hovered, 4);
     assert_eq!(component::icon_button::CONTAINER_WIDTH, 40.0);
     assert_eq!(component::icon_button::CONTAINER_HEIGHT, 40.0);
+    assert_eq!(component::icon_button::MINIMUM_INTERACTIVE_SIZE, 48.0);
     assert_eq!(component::icon_button::CONTAINER_SHAPE, 9999.0);
     assert_eq!(component::icon_button::ICON_SIZE, 24.0);
     assert_eq!(component::icon_button::DISABLED_CONTAINER_OPACITY, 0.12);
@@ -600,6 +601,7 @@ fn m3_component_sizing_tokens_match_google_values() {
     assert_eq!(component::app_bar::ICON_SIZE, 24.0);
     assert_eq!(component::app_bar::LEADING_SPACE, 4.0);
     assert_eq!(component::app_bar::TRAILING_SPACE, 4.0);
+    assert_eq!(component::app_bar::TITLE_LEADING_SPACE, 16.0);
     assert_eq!(component::app_bar::CONTAINER_ELEVATION_LEVEL, 0);
     assert_eq!(component::app_bar::ON_SCROLL_CONTAINER_ELEVATION_LEVEL, 2);
     assert_eq!(component::app_bar::SMALL_CONTAINER_HEIGHT, 64.0);

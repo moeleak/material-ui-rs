@@ -64,6 +64,13 @@ supports `--force-flake-overwrite`.
 The source templates live under `tools/cargo-material-ui/templates/`, separate
 from the Rust generator.
 
+The starter UI tracks the actual window size. Its navigation menu uses a modal
+drawer on compact windows and an expandable navigation rail on wider windows,
+so the same generated source remains usable on phones and desktop platforms.
+The compact drawer follows AndroidX Compose's fixed-width, translated-surface
+model with a 256 ms FastOutSlowIn tween; its text and item geometry are not
+remeasured while the drawer moves.
+
 ## Build
 
 Build every configured platform:

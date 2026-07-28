@@ -237,6 +237,7 @@ impl AnimatedScalar {
             return;
         }
 
+        let _ = self.advance(now);
         self.from = self.value;
         self.initial_velocity = 0.0;
         self.velocity = 0.0;

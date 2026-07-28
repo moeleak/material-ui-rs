@@ -349,7 +349,7 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
         }
         Message::LogViewer(action) => state.log_viewer.update(action, &state.log_entries),
         Message::MenuPressed => {
-            state.navigation.toggle_menu_now();
+            state.navigation.toggle_menu_now_for_size(state.window_size);
             Task::none()
         }
         Message::DialogOpened => {

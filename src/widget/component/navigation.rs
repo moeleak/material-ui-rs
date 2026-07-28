@@ -1,8 +1,6 @@
 //! Material 3 navigation bar, rail, drawer, and adaptive layout helpers.
 
-use std::f32::consts::PI;
-
-use iced_widget::canvas::{self, Canvas, LineCap, Path, Stroke};
+use iced_widget::canvas::{self, Canvas, Path};
 use iced_widget::core::layout;
 use iced_widget::core::mouse;
 use iced_widget::core::overlay;
@@ -19,13 +17,12 @@ use iced_widget::core::{
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
 use iced_widget::text::{self, LineHeight};
-use iced_widget::{Column, Container, Row, Space, Stack, Text};
+use iced_widget::{Column, Container, Float, MouseArea, Row, Space, Stack, Text, opaque};
 
+use super::app_bar;
 use super::badge as badge_widget;
-use super::button::Button;
 use super::ripple::{PressRippleState, RippleConfig, RippleStart, RippleStyle, draw_ripples};
 use super::support::{AnimatedScalar, alpha_color, duration_ms, lerp};
-use crate::style::button as button_style;
 use crate::utils::{HOVERED_LAYER_OPACITY, mix, shadow_from_level, state_layer};
 use crate::{Theme, fonts, tokens};
 
@@ -33,15 +30,15 @@ use crate::{Theme, fonts, tokens};
 use super::ripple::{ripple_target_radius, rounded_rect_span_at_y};
 
 const NAVIGATION_MENU_ICON_VIEWPORT_SIZE: f32 = 24.0;
-const NAVIGATION_MENU_ICON_START_X: f32 = 5.0;
-const NAVIGATION_MENU_ICON_END_X: f32 = 19.0;
-const NAVIGATION_MENU_ICON_CENTER_X: f32 = 12.0;
-const NAVIGATION_MENU_ICON_TOP_Y: f32 = 7.0;
-const NAVIGATION_MENU_ICON_CENTER_Y: f32 = 12.0;
-const NAVIGATION_MENU_ICON_BOTTOM_Y: f32 = 17.0;
-const NAVIGATION_MENU_ICON_ARROW_TOP_Y: f32 = 5.0;
-const NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y: f32 = 19.0;
-const NAVIGATION_MENU_ICON_STROKE_WIDTH: f32 = 2.4;
+const NAVIGATION_MENU_ICON_START_X: f32 = 3.0;
+const NAVIGATION_MENU_ICON_END_X: f32 = 21.0;
+const NAVIGATION_MENU_ICON_TOP_Y: f32 = 6.0;
+const NAVIGATION_MENU_ICON_MIDDLE_Y: f32 = 11.0;
+const NAVIGATION_MENU_ICON_BOTTOM_Y: f32 = 16.0;
+const NAVIGATION_MENU_ICON_BAR_HEIGHT: f32 = 2.0;
+const NAVIGATION_MENU_OPEN_BAR_END_X: f32 = 16.0;
+const NAVIGATION_MENU_OPEN_MIDDLE_END_X: f32 = 13.0;
+const NAVIGATION_INITIAL_HOVER_ENABLED: bool = !cfg!(target_os = "android");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdaptiveLayout {
@@ -247,6 +244,10 @@ impl<Id: Copy + Eq> NavigationState<Id> {
     }
 
     pub fn select(&mut self, selected: Id, now: Instant, layout: AdaptiveLayout) {
+        if layout == AdaptiveLayout::NavigationBar && self.rail_expansion.is_open() {
+            self.rail_expansion.close_modal(now);
+        }
+
         if selected == self.selected {
             return;
         }
@@ -285,8 +286,26 @@ impl<Id: Copy + Eq> NavigationState<Id> {
         self.rail_expansion.toggle(now);
     }
 
+    /// Toggles the compact modal drawer or wider expandable rail.
+    pub fn toggle_menu_for_layout(&mut self, now: Instant, layout: AdaptiveLayout) {
+        match layout {
+            AdaptiveLayout::NavigationBar => self.rail_expansion.toggle_modal(now),
+            AdaptiveLayout::NavigationRail => self.rail_expansion.toggle(now),
+        }
+    }
+
+    /// Toggles the menu using the adaptive layout for the provided window size.
+    pub fn toggle_menu_for_size(&mut self, now: Instant, size: Size) {
+        self.toggle_menu_for_layout(now, adaptive_layout(size.width, size.height));
+    }
+
     pub fn toggle_menu_now(&mut self) {
         self.toggle_menu(Instant::now());
+    }
+
+    /// Toggles the adaptive menu immediately for the provided window size.
+    pub fn toggle_menu_now_for_size(&mut self, size: Size) {
+        self.toggle_menu_for_size(Instant::now(), size);
     }
 
     pub fn is_menu_open(&self) -> bool {
@@ -382,11 +401,39 @@ impl NavigationRailExpansionState {
             .set_spring_target(0.0, now, rail_expansion_spring());
     }
 
+    fn open_modal(&mut self, now: Instant) {
+        self.open = true;
+        self.progress.set_target(
+            1.0,
+            now,
+            duration_ms(tokens::component::navigation_drawer::ANIMATION_DURATION_MS),
+            tokens::motion::EASING_LEGACY,
+        );
+    }
+
+    fn close_modal(&mut self, now: Instant) {
+        self.open = false;
+        self.progress.set_target(
+            0.0,
+            now,
+            duration_ms(tokens::component::navigation_drawer::ANIMATION_DURATION_MS),
+            tokens::motion::EASING_LEGACY,
+        );
+    }
+
     pub fn toggle(&mut self, now: Instant) {
         if self.open {
             self.close(now);
         } else {
             self.open(now);
+        }
+    }
+
+    fn toggle_modal(&mut self, now: Instant) {
+        if self.open {
+            self.close_modal(now);
+        } else {
+            self.open_modal(now);
         }
     }
 
@@ -505,6 +552,7 @@ pub struct Suite<'a, Id> {
     destinations: &'a [Destination<Id>],
     state: &'a NavigationState<Id>,
     layout: AdaptiveLayout,
+    window_size: Option<Size>,
 }
 
 impl<'a, Id> Suite<'a, Id> {
@@ -518,6 +566,7 @@ impl<'a, Id> Suite<'a, Id> {
             destinations,
             state,
             layout: AdaptiveLayout::NavigationRail,
+            window_size: None,
         }
     }
 
@@ -530,16 +579,18 @@ impl<'a, Id> Suite<'a, Id> {
     /// Chooses the adaptive layout for the provided window size.
     pub fn window_size(mut self, size: Size) -> Self {
         self.layout = adaptive_layout(size.width, size.height);
+        self.window_size = Some(size);
         self
     }
 
     /// Chooses the adaptive layout for the provided dimensions.
     pub fn dimensions(mut self, width: f32, height: f32) -> Self {
         self.layout = adaptive_layout(width, height);
+        self.window_size = Some(Size::new(width, height));
         self
     }
 
-    /// Adds a menu button and expandable rail behavior.
+    /// Adds a modal drawer on compact windows and an expandable rail otherwise.
     pub fn with_menu<Message>(
         self,
         headline: &'static str,
@@ -622,6 +673,7 @@ impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
             self.suite.state,
             on_select,
             self.on_menu,
+            self.suite.window_size.map(|size| size.width),
             content,
         )
     }
@@ -706,6 +758,7 @@ where
         state,
         on_select,
         on_menu,
+        Some(window_size.width),
         content,
     )
 }
@@ -717,6 +770,7 @@ fn view_menu_for_layout<'a, Id, Message, Renderer, F>(
     state: &NavigationState<Id>,
     on_select: F,
     on_menu: Message,
+    window_width: Option<f32>,
     content: impl Into<Element<'a, Message, Theme, Renderer>>,
 ) -> Element<'a, Message, Theme, Renderer>
 where
@@ -731,31 +785,73 @@ where
     let selection = state.selection();
 
     match layout {
-        AdaptiveLayout::NavigationBar => Column::new()
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(content)
-            .push(bar(destinations, selection, on_select))
-            .into(),
+        AdaptiveLayout::NavigationBar => {
+            let top_bar = app_bar::small(
+                headline,
+                Some(navigation_menu_button(
+                    on_menu.clone(),
+                    NavigationMenuIconKind::Menu,
+                )),
+                std::iter::empty(),
+            );
+            let page: Element<'a, Message, Theme, Renderer> = Column::new()
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(top_bar)
+                .push(content)
+                .into();
+
+            if !state.is_menu_visible() {
+                return page;
+            }
+
+            let scrim_surface = Container::new(Space::new())
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .style(move |theme| modal_drawer_scrim_style(theme, menu_progress));
+            let scrim = if state.is_menu_open() {
+                opaque(MouseArea::new(scrim_surface).on_press(on_menu.clone()))
+            } else {
+                opaque(scrim_surface)
+            };
+            let drawer_width = modal_drawer_width(window_width);
+            let drawer_offset = modal_drawer_offset(drawer_width, menu_progress);
+            let drawer = Float::new(opaque(drawer_with_optional_header(
+                headline,
+                destinations,
+                selection,
+                on_select,
+                drawer_width,
+                None,
+                false,
+            )))
+            .translate(move |_bounds, _viewport| Vector::new(drawer_offset, 0.0));
+
+            Stack::with_children([page, scrim, drawer.into()])
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        }
         AdaptiveLayout::NavigationRail => Row::new()
             .width(Length::Fill)
             .height(Length::Fill)
             .push(if state.is_menu_visible() {
-                expanded_rail_with(
+                expanded_rail_with_target(
                     headline,
                     destinations,
                     selection,
                     on_select,
                     on_menu,
+                    state.is_menu_open(),
                     ExpandedRailOptions::default().width(expanded_rail_width(menu_progress)),
                 )
             } else {
-                rail_with_menu_at_progress(
+                rail_with_menu_for_target(
                     destinations,
                     selection,
                     on_select,
                     on_menu,
-                    menu_progress,
+                    state.is_menu_open(),
                 )
             })
             .push(content)
@@ -847,16 +943,21 @@ impl<'a, Message, Renderer> NavigationRailOptions<'a, Message, Renderer> {
         Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
         Font: Into<Renderer::Font>,
     {
-        self.menu_progress(on_menu, 0.0)
+        self.menu_target(on_menu, false)
     }
 
-    fn menu_progress(mut self, on_menu: Message, progress: f32) -> Self
+    fn menu_target(mut self, on_menu: Message, expanded: bool) -> Self
     where
         Message: Clone + 'a,
         Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
         Font: Into<Renderer::Font>,
     {
-        self.header = Some(navigation_menu_button(on_menu, progress).into());
+        let kind = if expanded {
+            NavigationMenuIconKind::MenuOpen
+        } else {
+            NavigationMenuIconKind::Menu
+        };
+        self.header = Some(navigation_menu_button(on_menu, kind));
         self
     }
 }
@@ -949,12 +1050,12 @@ where
     )
 }
 
-fn rail_with_menu_at_progress<'a, Id, Message, Renderer, F>(
+fn rail_with_menu_for_target<'a, Id, Message, Renderer, F>(
     destinations: &'a [Destination<Id>],
     selection: Selection<Id>,
     on_select: F,
     on_menu: Message,
-    menu_progress: f32,
+    menu_expanded: bool,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Id: Copy + Eq + 'a,
@@ -967,7 +1068,7 @@ where
         destinations,
         selection,
         on_select,
-        NavigationRailOptions::default().menu_progress(on_menu, menu_progress),
+        NavigationRailOptions::default().menu_target(on_menu, menu_expanded),
     )
 }
 
@@ -1037,13 +1138,45 @@ where
     Font: Into<Renderer::Font>,
     F: Fn(Id) -> Message + Clone + 'a,
 {
+    expanded_rail_with_target(
+        headline,
+        destinations,
+        selection,
+        on_select,
+        on_menu,
+        true,
+        options,
+    )
+}
+
+fn expanded_rail_with_target<'a, Id, Message, Renderer, F>(
+    headline: &'static str,
+    destinations: &'a [Destination<Id>],
+    selection: Selection<Id>,
+    on_select: F,
+    on_menu: Message,
+    menu_expanded: bool,
+    options: ExpandedRailOptions,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Id: Copy + Eq + 'a,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+    F: Fn(Id) -> Message + Clone + 'a,
+{
     let metrics = ExpandedRailMetrics::new(options.width);
     let mut items = Column::new()
         .width(Length::Fixed(metrics.width()))
         .height(Length::Fill)
         .spacing(tokens::component::navigation_rail::VERTICAL_PADDING)
         .align_x(alignment::Horizontal::Center)
-        .push(expanded_rail_header(headline, on_menu, metrics));
+        .push(expanded_rail_header(
+            headline,
+            on_menu,
+            menu_expanded,
+            metrics,
+        ));
 
     for destination in destinations {
         items = items.push(expanded_rail_item(
@@ -1182,6 +1315,7 @@ where
         on_select,
         options.width,
         None,
+        true,
     )
 }
 
@@ -1231,6 +1365,7 @@ where
         on_select,
         options.width,
         Some(drawer_menu_header(headline, on_menu).into()),
+        false,
     )
 }
 
@@ -1241,6 +1376,7 @@ fn drawer_with_optional_header<'a, Id, Message, Renderer, F>(
     on_select: F,
     width: f32,
     header: Option<Element<'a, Message, Theme, Renderer>>,
+    show_headline: bool,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Id: Copy + Eq + 'a,
@@ -1258,7 +1394,7 @@ where
 
     if let Some(header) = header {
         items = items.push(header);
-    } else {
+    } else if show_headline {
         items = items.push(
             Container::new(type_text(headline, headline_scale).style(headline_text_style))
                 .height(Length::Fixed(
@@ -1309,6 +1445,23 @@ pub fn drawer_width(progress: f32) -> f32 {
             progress,
         )
     }
+}
+
+fn modal_drawer_width(window_width: Option<f32>) -> f32 {
+    const TRAILING_SPACE: f32 = 56.0;
+
+    window_width
+        .map(|width| {
+            (width - TRAILING_SPACE).clamp(
+                tokens::component::navigation_drawer::MINIMUM_CONTAINER_WIDTH,
+                tokens::component::navigation_drawer::CONTAINER_WIDTH,
+            )
+        })
+        .unwrap_or(tokens::component::navigation_drawer::CONTAINER_WIDTH)
+}
+
+fn modal_drawer_offset(width: f32, progress: f32) -> f32 {
+    (-width.max(0.0) * (1.0 - progress.clamp(0.0, 1.0))).round()
 }
 
 fn navigation_bar_item<'a, Id, Message, Renderer, F>(
@@ -1460,40 +1613,49 @@ where
 
 fn navigation_menu_button<'a, Message, Renderer>(
     on_press: Message,
-    progress: f32,
-) -> Button<'a, Message, Renderer>
+    kind: NavigationMenuIconKind,
+) -> Element<'a, Message, Theme, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
-    Font: Into<Renderer::Font>,
+    Renderer: geometry::Renderer + primitive::Renderer + 'a,
 {
-    let icon = Canvas::new(NavigationMenuIcon { progress })
+    let icon = Canvas::new(NavigationMenuIcon { kind })
         .width(Length::Fixed(tokens::component::icon_button::ICON_SIZE))
         .height(Length::Fixed(tokens::component::icon_button::ICON_SIZE));
+    let touch_target = tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE;
+    let state_layer_width = tokens::component::icon_button::STATE_LAYER_WIDTH;
+    let state_layer_height = tokens::component::icon_button::STATE_LAYER_HEIGHT;
+    let state_layer_x = (touch_target - state_layer_width) / 2.0;
+    let state_layer_y = (touch_target - state_layer_height) / 2.0;
+    let content = Container::new(icon)
+        .width(Length::Fixed(touch_target))
+        .height(Length::Fixed(touch_target))
+        .align_x(alignment::Horizontal::Center)
+        .align_y(alignment::Vertical::Center);
 
-    Button::new(
-        Container::new(icon)
-            .center_x(Length::Fixed(
-                tokens::component::icon_button::CONTAINER_WIDTH,
-            ))
-            .center_y(Length::Fixed(
-                tokens::component::icon_button::CONTAINER_HEIGHT,
-            )),
+    press_surface(
+        content,
+        on_press,
+        NavigationStateLayer::IconButton,
+        NavigationIndicatorPlacement::Inset {
+            x: state_layer_x,
+            y: state_layer_y,
+            width: state_layer_width,
+            height: state_layer_height,
+        },
     )
-    .width(Length::Fixed(
-        tokens::component::icon_button::CONTAINER_WIDTH,
-    ))
-    .height(Length::Fixed(
-        tokens::component::icon_button::CONTAINER_HEIGHT,
-    ))
-    .padding(Padding::ZERO)
-    .style(button_style::icon)
-    .on_press(on_press)
+    .into()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NavigationMenuIconKind {
+    Menu,
+    MenuOpen,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct NavigationMenuIcon {
-    progress: f32,
+    kind: NavigationMenuIconKind,
 }
 
 impl<Message, Renderer> canvas::Program<Message, Theme, Renderer> for NavigationMenuIcon
@@ -1518,119 +1680,89 @@ where
 
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let offset = Vector::new((bounds.width - size) / 2.0, (bounds.height - size) / 2.0);
-        let center = Point::new(bounds.width / 2.0, bounds.height / 2.0);
-        let stroke = Stroke::default()
-            .with_width(NavigationMenuIcon::stroke_width(size))
-            .with_color(theme.colors().surface.text_variant)
-            .with_line_cap(LineCap::Round);
+        let color = theme.colors().surface.text_variant;
 
-        frame.with_save(|frame| {
-            frame.translate(Vector::new(center.x, center.y));
-            frame.rotate(self.rotation_radians());
-            frame.translate(Vector::new(-center.x, -center.y));
+        for rect in navigation_menu_icon_rectangles(self.kind) {
+            let rect = Rectangle {
+                x: offset.x + navigation_menu_icon_scale(rect.x, size),
+                y: offset.y + navigation_menu_icon_scale(rect.y, size),
+                width: navigation_menu_icon_scale(rect.width, size),
+                height: navigation_menu_icon_scale(rect.height, size),
+            };
+            frame.fill(
+                &Path::rectangle(Point::new(rect.x, rect.y), rect.size()),
+                color,
+            );
+        }
 
-            for (from, to) in navigation_menu_icon_segments(self.progress, size) {
-                frame.stroke(
-                    &Path::line(
-                        Point::new(from.x + offset.x, from.y + offset.y),
-                        Point::new(to.x + offset.x, to.y + offset.y),
-                    ),
-                    stroke,
-                );
-            }
-        });
+        if self.kind == NavigationMenuIconKind::MenuOpen {
+            let points = navigation_menu_open_arrow_points(size, offset);
+            frame.fill(
+                &Path::new(|path| {
+                    path.move_to(points[0]);
+                    for point in &points[1..] {
+                        path.line_to(*point);
+                    }
+                    path.close();
+                }),
+                color,
+            );
+        }
 
         vec![frame.into_geometry()]
     }
 }
 
-impl NavigationMenuIcon {
-    fn rotation_radians(self) -> f32 {
-        PI * self.progress.clamp(0.0, 1.0)
-    }
-
-    fn stroke_width(size: f32) -> f32 {
-        NAVIGATION_MENU_ICON_STROKE_WIDTH / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size
-    }
-}
-
-fn navigation_menu_icon_segments(progress: f32, size: f32) -> [(Point, Point); 3] {
-    let progress = progress.clamp(0.0, 1.0);
+fn navigation_menu_icon_rectangles(kind: NavigationMenuIconKind) -> [Rectangle; 3] {
+    let (top_and_bottom_end, middle_end) = match kind {
+        NavigationMenuIconKind::Menu => (NAVIGATION_MENU_ICON_END_X, NAVIGATION_MENU_ICON_END_X),
+        NavigationMenuIconKind::MenuOpen => (
+            NAVIGATION_MENU_OPEN_BAR_END_X,
+            NAVIGATION_MENU_OPEN_MIDDLE_END_X,
+        ),
+    };
 
     [
-        (
-            navigation_menu_icon_point(
-                lerp(
-                    NAVIGATION_MENU_ICON_START_X,
-                    NAVIGATION_MENU_ICON_CENTER_X,
-                    progress,
-                ),
-                lerp(
-                    NAVIGATION_MENU_ICON_TOP_Y,
-                    NAVIGATION_MENU_ICON_ARROW_TOP_Y,
-                    progress,
-                ),
-                size,
-            ),
-            navigation_menu_icon_point(
-                NAVIGATION_MENU_ICON_END_X,
-                lerp(
-                    NAVIGATION_MENU_ICON_TOP_Y,
-                    NAVIGATION_MENU_ICON_CENTER_Y,
-                    progress,
-                ),
-                size,
-            ),
-        ),
-        (
-            navigation_menu_icon_point(
-                NAVIGATION_MENU_ICON_START_X,
-                NAVIGATION_MENU_ICON_CENTER_Y,
-                size,
-            ),
-            navigation_menu_icon_point(
-                NAVIGATION_MENU_ICON_END_X,
-                NAVIGATION_MENU_ICON_CENTER_Y,
-                size,
-            ),
-        ),
-        (
-            navigation_menu_icon_point(
-                lerp(
-                    NAVIGATION_MENU_ICON_START_X,
-                    NAVIGATION_MENU_ICON_CENTER_X,
-                    progress,
-                ),
-                lerp(
-                    NAVIGATION_MENU_ICON_BOTTOM_Y,
-                    NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y,
-                    progress,
-                ),
-                size,
-            ),
-            navigation_menu_icon_point(
-                NAVIGATION_MENU_ICON_END_X,
-                lerp(
-                    NAVIGATION_MENU_ICON_BOTTOM_Y,
-                    NAVIGATION_MENU_ICON_CENTER_Y,
-                    progress,
-                ),
-                size,
-            ),
-        ),
+        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_TOP_Y, top_and_bottom_end),
+        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_MIDDLE_Y, middle_end),
+        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_BOTTOM_Y, top_and_bottom_end),
     ]
 }
 
-fn navigation_menu_icon_point(x: f32, y: f32, size: f32) -> Point {
-    Point::new(
-        x / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size,
-        y / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size,
-    )
+fn navigation_menu_icon_rectangle(y: f32, end_x: f32) -> Rectangle {
+    Rectangle {
+        x: NAVIGATION_MENU_ICON_START_X,
+        y,
+        width: end_x - NAVIGATION_MENU_ICON_START_X,
+        height: NAVIGATION_MENU_ICON_BAR_HEIGHT,
+    }
+}
+
+fn navigation_menu_open_arrow_points(size: f32, offset: Vector) -> [Point; 6] {
+    [
+        (21.0, 15.59),
+        (17.42, 12.0),
+        (21.0, 8.41),
+        (19.59, 7.0),
+        (14.59, 12.0),
+        (19.59, 17.0),
+    ]
+    .map(|(x, y)| {
+        Point::new(
+            offset.x + navigation_menu_icon_scale(x, size),
+            offset.y + navigation_menu_icon_scale(y, size),
+        )
+    })
+}
+
+fn navigation_menu_icon_scale(value: f32, size: f32) -> f32 {
+    value / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size
 }
 
 fn expanded_rail_header<'a, Message, Renderer>(
     headline: &'static str,
     on_menu: Message,
+    menu_expanded: bool,
     metrics: ExpandedRailMetrics,
 ) -> Container<'a, Message, Theme, Renderer>
 where
@@ -1649,18 +1781,25 @@ where
     let headline = Container::new(headline)
         .width(Length::Fill)
         .height(Length::Fixed(
-            tokens::component::icon_button::CONTAINER_HEIGHT,
+            tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
         ))
         .align_y(alignment::Vertical::Center)
         .clip(true);
     let content = Row::new()
         .width(Length::Fill)
         .height(Length::Fixed(
-            tokens::component::icon_button::CONTAINER_HEIGHT,
+            tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
         ))
         .spacing(metrics.header_title_spacing())
         .align_y(alignment::Vertical::Center)
-        .push(navigation_menu_button(on_menu, metrics.progress()))
+        .push(navigation_menu_button(
+            on_menu,
+            if menu_expanded {
+                NavigationMenuIconKind::MenuOpen
+            } else {
+                NavigationMenuIconKind::Menu
+            },
+        ))
         .push(headline);
 
     Container::new(content)
@@ -1809,7 +1948,10 @@ where
         ))
         .spacing(DrawerMetrics::menu_header_title_spacing())
         .align_y(alignment::Vertical::Center)
-        .push(navigation_menu_button(on_menu, 0.0))
+        .push(navigation_menu_button(
+            on_menu,
+            NavigationMenuIconKind::MenuOpen,
+        ))
         .push(type_text(headline, headline_scale).style(headline_text_style));
 
     Container::new(content)
@@ -2033,6 +2175,7 @@ impl NavigationIndicatorPlacement {
 struct NavigationPressSurfaceState {
     is_hovered: bool,
     is_pressed: bool,
+    hover_enabled: bool,
     state_layer_opacity: AnimatedScalar,
     ripples: PressRippleState,
     now: Option<Instant>,
@@ -2040,17 +2183,32 @@ struct NavigationPressSurfaceState {
 
 impl Default for NavigationPressSurfaceState {
     fn default() -> Self {
+        Self::new(true)
+    }
+}
+
+impl NavigationPressSurfaceState {
+    fn new(hover_enabled: bool) -> Self {
         Self {
             is_hovered: false,
             is_pressed: false,
+            hover_enabled,
             state_layer_opacity: AnimatedScalar::new(0.0),
             ripples: PressRippleState::default(),
             now: None,
         }
     }
-}
 
-impl NavigationPressSurfaceState {
+    fn observe_pointer_kind(&mut self, event: &Event) {
+        match event {
+            Event::Touch(_) => self.hover_enabled = false,
+            Event::Mouse(mouse::Event::CursorEntered | mouse::Event::CursorMoved { .. }) => {
+                self.hover_enabled = true;
+            }
+            _ => {}
+        }
+    }
+
     fn sync_hover(&mut self, is_hovered: bool, now: Instant) -> bool {
         if self.is_hovered == is_hovered {
             return false;
@@ -2157,7 +2315,9 @@ where
     }
 
     fn state(&self) -> tree::State {
-        tree::State::new(NavigationPressSurfaceState::default())
+        tree::State::new(NavigationPressSurfaceState::new(
+            NAVIGATION_INITIAL_HOVER_ENABLED,
+        ))
     }
 
     fn children(&self) -> Vec<Tree> {
@@ -2226,12 +2386,13 @@ where
         }
 
         let state = tree.state.downcast_mut::<NavigationPressSurfaceState>();
+        state.observe_pointer_kind(event);
         let now = match event {
             Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
             _ => None,
         };
         let is_touch_event = matches!(event, Event::Touch(_));
-        let is_hovered = !is_touch_event && cursor.is_over(layout.bounds());
+        let is_hovered = state.hover_enabled && !is_touch_event && cursor.is_over(layout.bounds());
         let interaction = NavigationInteraction {
             event,
             cursor,
@@ -2458,7 +2619,8 @@ struct NavigationDrawState<'a> {
 
 impl NavigationDrawState<'_> {
     fn opacity(self) -> f32 {
-        if self.cursor.is_over(self.bounds) && self.state.now.is_none() {
+        if self.state.hover_enabled && self.cursor.is_over(self.bounds) && self.state.now.is_none()
+        {
             NavigationLayer::opacity(NavigationLayer::target(true, false))
         } else {
             self.state.opacity()
@@ -2537,6 +2699,7 @@ where
 enum NavigationStateLayer {
     BarOrRail,
     Drawer { progress: f32 },
+    IconButton,
 }
 
 fn animated_indicator_width(target_width: f32, progress: f32) -> f32 {
@@ -2587,7 +2750,7 @@ impl RailMetrics {
     }
 
     fn header_slot_height() -> f32 {
-        tokens::component::icon_button::CONTAINER_HEIGHT + Self::header_bottom_padding()
+        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE + Self::header_bottom_padding()
     }
 
     fn item_slot_height() -> f32 {
@@ -2719,7 +2882,7 @@ impl ExpandedRailMetrics {
     fn header_leading_space(self) -> f32 {
         tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_MARGIN_HORIZONTAL
             + tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_PADDING_START
-            - (tokens::component::icon_button::CONTAINER_WIDTH
+            - (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
                 - tokens::component::navigation_rail::ICON_SIZE)
                 / 2.0
     }
@@ -2733,7 +2896,7 @@ impl ExpandedRailMetrics {
 
         (label_start
             - self.header_leading_space()
-            - tokens::component::icon_button::CONTAINER_WIDTH)
+            - tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE)
             .max(0.0)
     }
 
@@ -2796,7 +2959,7 @@ impl DrawerMetrics {
     fn menu_header_leading_space() -> f32 {
         tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
             + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE
-            - (tokens::component::icon_button::CONTAINER_WIDTH
+            - (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
                 - tokens::component::navigation_drawer::ICON_SIZE)
                 / 2.0
     }
@@ -2809,7 +2972,7 @@ impl DrawerMetrics {
 
         (label_start
             - Self::menu_header_leading_space()
-            - tokens::component::icon_button::CONTAINER_WIDTH)
+            - tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE)
             .max(0.0)
     }
 
@@ -3073,6 +3236,19 @@ fn drawer_container(theme: &Theme) -> iced_widget::container::Style {
     }
 }
 
+fn modal_drawer_scrim_style(theme: &Theme, progress: f32) -> iced_widget::container::Style {
+    iced_widget::container::Style {
+        background: Some(Background::Color(alpha_color(
+            Color {
+                a: 1.0,
+                ..theme.colors().scrim
+            },
+            tokens::component::navigation_drawer::SCRIM_OPACITY * progress.clamp(0.0, 1.0),
+        ))),
+        ..iced_widget::container::Style::default()
+    }
+}
+
 fn active_indicator(theme: &Theme, alpha: f32) -> iced_widget::container::Style {
     let mut color = theme.colors().secondary.container;
     color.a *= alpha.clamp(0.0, 1.0);
@@ -3130,6 +3306,7 @@ fn layer_color(theme: &Theme, layer: NavigationStateLayer) -> Color {
             colors.secondary.container_text,
             progress,
         ),
+        NavigationStateLayer::IconButton => colors.surface.text_variant,
     }
 }
 

@@ -791,4 +791,25 @@ mod tests {
             Some("A \"quoted\" <app>")
         );
     }
+
+    #[test]
+    fn loads_android_system_fonts() {
+        let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
+
+        assert!(files["src/lib.rs"].contains("material::android::system_fonts()"));
+    }
+
+    #[test]
+    fn generates_navigation_menu_demo() {
+        let files = render_files(&config(BTreeSet::from([Platform::Linux]))).unwrap();
+        let app = &files["src/lib.rs"];
+
+        assert!(app.contains("navigation::suite"));
+        assert!(app.contains(".window_size(app.window_size)"));
+        assert!(app.contains("iced::window::resize_events()"));
+        assert!(app.contains(".toggle_menu_for_size("));
+        assert!(!app.contains(".layout(navigation::AdaptiveLayout::NavigationRail)"));
+        assert!(app.contains(".with_menu("));
+        assert!(app.contains(".badge(\"3\")"));
+    }
 }

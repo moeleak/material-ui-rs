@@ -108,35 +108,109 @@ fn navigation_state_toggles_menu_expansion() {
 }
 
 #[test]
-fn navigation_menu_icon_morphs_from_hamburger_to_arrow() {
-    assert_eq!(
-        navigation_menu_icon_segments(0.0, NAVIGATION_MENU_ICON_VIEWPORT_SIZE),
-        [
-            (Point::new(5.0, 7.0), Point::new(19.0, 7.0)),
-            (Point::new(5.0, 12.0), Point::new(19.0, 12.0)),
-            (Point::new(5.0, 17.0), Point::new(19.0, 17.0)),
-        ]
+fn compact_navigation_selection_closes_modal_drawer() {
+    let start = Instant::now();
+    let mut state = NavigationState::new(Page::One);
+    state.toggle_menu_for_layout(start, AdaptiveLayout::NavigationBar);
+
+    state.select(
+        Page::Two,
+        start + Duration::from_millis(50),
+        AdaptiveLayout::NavigationBar,
     );
+
+    assert_eq!(state.selected(), Page::Two);
+    assert!(!state.is_menu_open());
+    assert!(state.is_menu_visible());
+}
+
+#[test]
+fn modal_navigation_drawer_matches_compose_tween_timing() {
+    let start = Instant::now();
+    let mut state = NavigationState::new(Page::One);
+    state.toggle_menu_for_layout(start, AdaptiveLayout::NavigationBar);
+
+    let half_duration = u64::from(tokens::component::navigation_drawer::ANIMATION_DURATION_MS) / 2;
+    assert!(state.advance(start + Duration::from_millis(half_duration)));
+    let expected = tokens::motion::EASING_LEGACY.transform(0.5);
+    assert!((state.menu_progress() - expected).abs() < 0.001);
+
+    assert!(!state.advance(
+        start
+            + Duration::from_millis(u64::from(
+                tokens::component::navigation_drawer::ANIMATION_DURATION_MS,
+            )),
+    ));
+    assert_eq!(state.menu_progress(), 1.0);
+}
+
+#[test]
+fn modal_navigation_drawer_reverses_from_current_frame_without_jump() {
+    let start = Instant::now();
+    let mut state = NavigationState::new(Page::One);
+    state.toggle_menu_for_layout(start, AdaptiveLayout::NavigationBar);
+
+    let reversal = start + Duration::from_millis(128);
+    state.toggle_menu_for_layout(reversal, AdaptiveLayout::NavigationBar);
+    let progress_at_reversal = tokens::motion::EASING_LEGACY.transform(0.5);
+
+    assert!((state.menu_progress() - progress_at_reversal).abs() < 0.001);
+    assert!(!state.is_menu_open());
+    assert!(state.advance(reversal + Duration::from_millis(64)));
+    assert!(state.menu_progress() < progress_at_reversal);
+}
+
+#[test]
+fn navigation_menu_icon_matches_compose_filled_menu_path() {
     assert_eq!(
-        navigation_menu_icon_segments(1.0, NAVIGATION_MENU_ICON_VIEWPORT_SIZE),
+        navigation_menu_icon_rectangles(NavigationMenuIconKind::Menu),
         [
-            (Point::new(12.0, 5.0), Point::new(19.0, 12.0)),
-            (Point::new(5.0, 12.0), Point::new(19.0, 12.0)),
-            (Point::new(12.0, 19.0), Point::new(19.0, 12.0)),
+            Rectangle::new(Point::new(3.0, 6.0), Size::new(18.0, 2.0)),
+            Rectangle::new(Point::new(3.0, 11.0), Size::new(18.0, 2.0)),
+            Rectangle::new(Point::new(3.0, 16.0), Size::new(18.0, 2.0)),
         ]
     );
 }
 
 #[test]
-fn navigation_menu_icon_rotation_tracks_expansion_progress() {
-    assert_eq!(NavigationMenuIcon { progress: 0.0 }.rotation_radians(), 0.0);
+fn navigation_menu_open_icon_matches_compose_filled_path() {
     assert_eq!(
-        NavigationMenuIcon { progress: 0.5 }.rotation_radians(),
-        std::f32::consts::FRAC_PI_2
+        navigation_menu_icon_rectangles(NavigationMenuIconKind::MenuOpen),
+        [
+            Rectangle::new(Point::new(3.0, 6.0), Size::new(13.0, 2.0)),
+            Rectangle::new(Point::new(3.0, 11.0), Size::new(10.0, 2.0)),
+            Rectangle::new(Point::new(3.0, 16.0), Size::new(13.0, 2.0)),
+        ]
     );
     assert_eq!(
-        NavigationMenuIcon { progress: 1.0 }.rotation_radians(),
-        std::f32::consts::PI
+        navigation_menu_open_arrow_points(
+            NAVIGATION_MENU_ICON_VIEWPORT_SIZE,
+            Vector::new(0.0, 0.0),
+        ),
+        [
+            Point::new(21.0, 15.59),
+            Point::new(17.42, 12.0),
+            Point::new(21.0, 8.41),
+            Point::new(19.59, 7.0),
+            Point::new(14.59, 12.0),
+            Point::new(19.59, 17.0),
+        ]
+    );
+}
+
+#[test]
+fn navigation_menu_button_matches_compose_interactive_sizes() {
+    assert_eq!(
+        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
+        48.0
+    );
+    assert_eq!(tokens::component::icon_button::STATE_LAYER_WIDTH, 40.0);
+    assert_eq!(tokens::component::icon_button::STATE_LAYER_HEIGHT, 40.0);
+    assert_eq!(
+        (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+            - tokens::component::icon_button::STATE_LAYER_WIDTH)
+            / 2.0,
+        4.0
     );
 }
 
@@ -338,12 +412,17 @@ fn navigation_rail_item_geometry_matches_material_vertical_offsets() {
 #[test]
 fn navigation_rail_header_geometry_matches_material_header_padding() {
     assert_eq!(RailMetrics::header_bottom_padding(), 40.0);
-    assert_eq!(RailMetrics::header_slot_height(), 80.0);
+    assert_eq!(
+        RailMetrics::header_slot_height(),
+        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+            + tokens::component::navigation_rail::HEADER_PADDING
+    );
+    assert_eq!(RailMetrics::header_slot_height(), 88.0);
 }
 
 #[test]
 fn navigation_rail_min_height_fits_all_destinations_and_header() {
-    assert_eq!(rail_min_height(5, true), 468.0);
+    assert_eq!(rail_min_height(5, true), 476.0);
     assert_eq!(rail_min_height(5, false), 384.0);
     assert_eq!(
         rail_min_height(1, true),
@@ -417,7 +496,7 @@ fn navigation_rail_expanded_geometry_matches_material_expressive_attributes() {
         tokens::component::navigation_rail::CONTAINER_WIDTH
     );
     assert_eq!(expanded.indicator_width(), 180.0);
-    assert_eq!(expanded.header_leading_space(), 28.0);
+    assert_eq!(expanded.header_leading_space(), 24.0);
     assert_eq!(expanded.header_title_spacing(), 0.0);
     assert_eq!(
         expanded_rail_width(0.0),
@@ -523,11 +602,11 @@ fn navigation_rail_expanded_keeps_collapsed_vertical_slots() {
     assert_eq!(
         RailMetrics::first_item_y_after_header(),
         tokens::component::navigation_rail::CONTENT_TOP_MARGIN
-            + tokens::component::icon_button::CONTAINER_HEIGHT
+            + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
             + tokens::component::navigation_rail::HEADER_PADDING
             + tokens::component::navigation_rail::VERTICAL_PADDING
     );
-    assert_eq!(RailMetrics::first_item_y_after_header(), 128.0);
+    assert_eq!(RailMetrics::first_item_y_after_header(), 136.0);
     assert_eq!(ExpandedRailMetrics::expanded_item_vertical_inset(), 4.0);
     assert_eq!(
         ExpandedRailMetrics::item_vertical_inset_for(0.0),
@@ -857,6 +936,27 @@ fn navigation_drawer_width_tracks_material_minimum_and_standard_widths() {
 }
 
 #[test]
+fn modal_navigation_drawer_leaves_a_compact_scrim_target() {
+    assert_eq!(modal_drawer_width(Some(360.0)), 304.0);
+    assert_eq!(modal_drawer_width(Some(600.0)), 360.0);
+    assert_eq!(modal_drawer_width(None), 360.0);
+}
+
+#[test]
+fn modal_navigation_drawer_keeps_fixed_layout_while_translating() {
+    let width = modal_drawer_width(Some(360.0));
+    let metrics = DrawerMetrics::new(width);
+
+    assert_eq!(metrics.width(), 304.0);
+    assert_eq!(modal_drawer_offset(width, 0.0), -304.0);
+    assert_eq!(modal_drawer_offset(width, 0.25), -228.0);
+    assert_eq!(modal_drawer_offset(width, 0.333), -203.0);
+    assert_eq!(modal_drawer_offset(width, 0.5), -152.0);
+    assert_eq!(modal_drawer_offset(width, 1.0), 0.0);
+    assert_eq!(metrics.width(), 304.0);
+}
+
+#[test]
 fn navigation_drawer_indicator_width_matches_container_padding() {
     assert_eq!(
         DrawerMetrics::new(0.0).width(),
@@ -876,16 +976,16 @@ fn navigation_drawer_indicator_width_matches_container_padding() {
 
 #[test]
 fn navigation_drawer_menu_header_aligns_to_item_icon_and_label_columns() {
-    assert_eq!(DrawerMetrics::menu_header_leading_space(), 20.0);
-    assert_eq!(DrawerMetrics::menu_header_title_spacing(), 4.0);
+    assert_eq!(DrawerMetrics::menu_header_leading_space(), 16.0);
+    assert_eq!(DrawerMetrics::menu_header_title_spacing(), 0.0);
 
     let menu_icon_center = DrawerMetrics::menu_header_leading_space()
-        + tokens::component::icon_button::CONTAINER_WIDTH / 2.0;
+        + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE / 2.0;
     let drawer_icon_center = tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
         + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE
         + tokens::component::navigation_drawer::ICON_SIZE / 2.0;
     let menu_title_start = DrawerMetrics::menu_header_leading_space()
-        + tokens::component::icon_button::CONTAINER_WIDTH
+        + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
         + DrawerMetrics::menu_header_title_spacing();
     let drawer_label_start = tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
         + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE
@@ -1049,6 +1149,41 @@ fn navigation_draw_uses_hover_layer_target_for_fresh_hovered_state() {
         .opacity(),
         0.0
     );
+}
+
+#[test]
+fn navigation_draw_ignores_stale_cursor_when_initial_hover_is_disabled() {
+    let state = NavigationPressSurfaceState::new(false);
+    let bounds = Rectangle::new(Point::new(0.0, 120.0), Size::new(80.0, 56.0));
+
+    assert_eq!(
+        NavigationDrawState {
+            state: &state,
+            cursor: mouse::Cursor::Available(Point::new(40.0, 148.0)),
+            bounds,
+        }
+        .opacity(),
+        0.0
+    );
+}
+
+#[test]
+fn navigation_touch_disables_hover_until_real_mouse_motion() {
+    let mut state = NavigationPressSurfaceState::default();
+    let touch = Event::Touch(touch::Event::FingerLifted {
+        id: touch::Finger(0),
+        position: Point::new(40.0, 148.0),
+    });
+    state.observe_pointer_kind(&touch);
+
+    assert!(!state.hover_enabled);
+
+    let mouse_move = Event::Mouse(mouse::Event::CursorMoved {
+        position: Point::new(40.0, 148.0),
+    });
+    state.observe_pointer_kind(&mouse_move);
+
+    assert!(state.hover_enabled);
 }
 
 #[test]

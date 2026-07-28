@@ -311,18 +311,21 @@ fn button_hover_state_layer_reverses_smoothly_when_pointer_leaves_mid_enter() {
 fn button_hover_state_layer_retargets_smoothly_when_pointer_reenters_mid_exit() {
     let start = Instant::now();
     let exit = start + duration_ms(8);
-    let reenter = start + duration_ms(24);
+    let reenter = start + duration_ms(15);
     let mut state = ButtonState::default();
 
     assert!(state.sync_hover(true, start));
     assert!(state.advance(start + duration_ms(7)));
 
-    let last_drawn_opacity = state.state_layer_opacity();
     assert!(state.sync_hover(false, exit));
-    assert_close(state.state_layer_opacity(), last_drawn_opacity);
+    let opacity_at_exit = tokens::state::HOVER_STATE_LAYER_OPACITY * (8.0 / 15.0);
+    assert_close(state.state_layer_opacity(), opacity_at_exit);
 
     assert!(state.sync_hover(true, reenter));
-    assert_close(state.state_layer_opacity(), last_drawn_opacity);
+    assert_close(
+        state.state_layer_opacity(),
+        opacity_at_exit * (1.0 - 7.0 / 15.0),
+    );
     assert_eq!(
         state.state_layer_opacity.to,
         tokens::state::HOVER_STATE_LAYER_OPACITY

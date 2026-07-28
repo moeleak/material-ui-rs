@@ -30,11 +30,11 @@ fn animated_scalar_retargets_from_last_advanced_value() {
         tokens::motion::EASING_LINEAR,
     );
 
-    assert_close(scalar.value, 0.5);
+    assert_close(scalar.value, 0.8);
     assert_eq!(scalar.to, 0.0);
 
     assert!(scalar.advance(start + duration_ms(130)));
-    assert_close(scalar.value, 0.25);
+    assert_close(scalar.value, 0.4);
 }
 
 #[test]

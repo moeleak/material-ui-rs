@@ -87,23 +87,48 @@ where
     let title_text = tokens::component::app_bar::SMALL_TITLE_TEXT;
     let mut content = Row::new()
         .spacing(tokens::component::app_bar::ICON_BUTTON_SPACE)
-        .padding(app_bar_padding())
-        .align_y(alignment::Vertical::Center);
+        .align_y(alignment::Vertical::Center)
+        .width(Length::Fill);
 
     if let Some(leading) = leading {
-        content = content.push(leading);
+        content = content.push(Container::new(leading).padding(Padding {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: tokens::component::app_bar::LEADING_SPACE,
+        }));
+    } else {
+        content = content.push(Space::new().width(Length::Fixed(
+            tokens::component::app_bar::TITLE_LEADING_SPACE
+                - tokens::component::app_bar::LEADING_SPACE,
+        )));
     }
 
     content = content.push(
-        Text::new(title)
-            .size(title_text.size)
-            .line_height(absolute_line_height(title_text.line_height))
-            .width(Length::Fill),
+        Container::new(
+            Text::new(title)
+                .size(title_text.size)
+                .line_height(absolute_line_height(title_text.line_height)),
+        )
+        .width(Length::Fill)
+        .padding(Padding {
+            top: 0.0,
+            right: tokens::component::app_bar::LEADING_SPACE,
+            bottom: 0.0,
+            left: tokens::component::app_bar::LEADING_SPACE,
+        }),
     );
 
+    let mut action_content = Row::new();
     for action in actions {
-        content = content.push(action);
+        action_content = action_content.push(action);
     }
+    content = content.push(Container::new(action_content).padding(Padding {
+        top: 0.0,
+        right: tokens::component::app_bar::TRAILING_SPACE,
+        bottom: 0.0,
+        left: 0.0,
+    }));
 
     top_container(
         content,
@@ -125,23 +150,48 @@ where
     let title_text = tokens::component::app_bar::SMALL_TITLE_TEXT;
     let mut content = Row::new()
         .spacing(tokens::component::app_bar::ICON_BUTTON_SPACE)
-        .padding(app_bar_padding())
-        .align_y(alignment::Vertical::Center);
+        .align_y(alignment::Vertical::Center)
+        .width(Length::Fill);
 
     if let Some(leading) = leading {
-        content = content.push(leading);
+        content = content.push(Container::new(leading).padding(Padding {
+            top: 0.0,
+            right: 0.0,
+            bottom: 0.0,
+            left: tokens::component::app_bar::LEADING_SPACE,
+        }));
+    } else {
+        content = content.push(Space::new().width(Length::Fixed(
+            tokens::component::app_bar::TITLE_LEADING_SPACE
+                - tokens::component::app_bar::LEADING_SPACE,
+        )));
     }
 
     content = content.push(
-        Text::new(title)
-            .size(title_text.size)
-            .line_height(absolute_line_height(title_text.line_height))
-            .width(Length::Fill),
+        Container::new(
+            Text::new(title)
+                .size(title_text.size)
+                .line_height(absolute_line_height(title_text.line_height)),
+        )
+        .width(Length::Fill)
+        .padding(Padding {
+            top: 0.0,
+            right: tokens::component::app_bar::LEADING_SPACE,
+            bottom: 0.0,
+            left: tokens::component::app_bar::LEADING_SPACE,
+        }),
     );
 
+    let mut action_content = Row::new();
     for action in actions {
-        content = content.push(action);
+        action_content = action_content.push(action);
     }
+    content = content.push(Container::new(action_content).padding(Padding {
+        top: 0.0,
+        right: tokens::component::app_bar::TRAILING_SPACE,
+        bottom: 0.0,
+        left: 0.0,
+    }));
 
     top_container(
         content,

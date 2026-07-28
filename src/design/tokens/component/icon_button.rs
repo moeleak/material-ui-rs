@@ -1,5 +1,6 @@
 pub const CONTAINER_WIDTH: f32 = 40.0;
 pub const CONTAINER_HEIGHT: f32 = 40.0;
+pub const MINIMUM_INTERACTIVE_SIZE: f32 = 48.0;
 pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_FULL;
 pub const ICON_SIZE: f32 = 24.0;
 pub const STATE_LAYER_WIDTH: f32 = 40.0;

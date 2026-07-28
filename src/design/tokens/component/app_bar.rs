@@ -3,6 +3,7 @@ pub const ICON_BUTTON_SPACE: f32 = 0.0;
 pub const ICON_SIZE: f32 = 24.0;
 pub const LEADING_SPACE: f32 = 4.0;
 pub const TRAILING_SPACE: f32 = 4.0;
+pub const TITLE_LEADING_SPACE: f32 = 16.0;
 pub const CONTAINER_ELEVATION_LEVEL: u8 = 0;
 pub const CONTAINER_SHAPE: f32 = super::super::shape::CORNER_NONE;
 pub const ON_SCROLL_CONTAINER_ELEVATION_LEVEL: u8 = 2;
