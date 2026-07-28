@@ -21,6 +21,11 @@ exclude = [
   "rustfmt.toml",
 ]
 
+[workspace]
+members = ["tools/cargo-material-ui"]
+default-members = ["."]
+resolver = "2"
+
 [features]
 default = ["svg", "animate", "canvas"]
 # Provides `serde` support.

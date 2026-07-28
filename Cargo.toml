@@ -49,6 +49,11 @@ categories = ["gui"]
 license = "MIT"
 repository = "https://github.com/moeleak/material-ui-rs"
 
+[workspace]
+members = ["tools/cargo-material-ui"]
+default-members = ["."]
+resolver = "2"
+
 [features]
 animate = ["dep:iced_anim"]
 canvas = []
