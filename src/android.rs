@@ -2,6 +2,7 @@
 
 #![allow(unsafe_code)]
 
+use std::borrow::Cow;
 use std::sync::Mutex;
 
 use iced::{Color, Subscription};
@@ -13,6 +14,13 @@ pub use iced_winit::winit::platform::android::activity::AndroidApp;
 
 static ANDROID_APP: Mutex<Option<AndroidApp>> = Mutex::new(None);
 static SAFE_AREA: Mutex<SafeAreaInsets> = Mutex::new(SafeAreaInsets::ZERO);
+static SYSTEM_BARS_STYLE: Mutex<SystemBarsStyle> = Mutex::new(SystemBarsStyle {
+    edge_to_edge: true,
+    light_status_icons: false,
+    light_navigation_icons: false,
+    status_bar_color: Color::TRANSPARENT,
+    navigation_bar_color: Color::TRANSPARENT,
+});
 
 /// Insets on each edge, expressed in iced logical pixels.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -125,13 +133,66 @@ pub fn run(app: AndroidApp, launch: impl FnOnce() -> iced::Result) {
         *current = Some(app.clone());
     }
     iced_winit::set_android_app(app);
-    if let Err(error) = set_system_bars(SystemBarsStyle::default()) {
+    if let Err(error) = refresh_system_ui() {
         eprintln!("Could not configure Android system bars: {error:?}");
     }
 
     if let Err(error) = launch() {
         eprintln!("Android application failed: {error:?}");
     }
+}
+
+/// Loads Android system fonts suitable for Unicode fallback.
+///
+/// Pass the returned fonts to [`iced::Application::font`] before starting the
+/// application. Missing files are skipped because font locations differ
+/// between Android vendors and releases.
+#[must_use]
+pub fn system_fonts() -> Vec<Cow<'static, [u8]>> {
+    const PATHS: &[&str] = &[
+        "/system/fonts/NotoSans-Regular.ttf",
+        "/system/fonts/NotoSans-Bold.ttf",
+        "/system/fonts/NotoSansDisplay-Regular.ttf",
+        "/system/fonts/NotoSerif-Regular.ttf",
+        "/system/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+        "/system/fonts/NotoSansSymbols2-Regular.ttf",
+        "/system/fonts/Roboto-Regular.ttf",
+        "/system/fonts/NotoSansCJK-Regular.ttc",
+        "/system/fonts/NotoSansCJK-Bold.ttc",
+        "/system/fonts/NotoSansSC-Regular.otf",
+        "/system/fonts/NotoSansSC-Bold.otf",
+        "/system/fonts/NotoSansJP-Regular.otf",
+        "/system/fonts/NotoSansJP-Bold.otf",
+        "/system/fonts/NotoSansKR-Regular.otf",
+        "/system/fonts/NotoSansKR-Bold.otf",
+        "/product/fonts/NotoSans-Regular.ttf",
+        "/product/fonts/NotoSans-Bold.ttf",
+        "/product/fonts/NotoSansDisplay-Regular.ttf",
+        "/product/fonts/NotoSerif-Regular.ttf",
+        "/product/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+        "/product/fonts/NotoSansSymbols2-Regular.ttf",
+        "/product/fonts/Roboto-Regular.ttf",
+        "/product/fonts/NotoSansCJK-Regular.ttc",
+        "/product/fonts/NotoSansCJK-Bold.ttc",
+        "/system_ext/fonts/NotoSans-Regular.ttf",
+        "/system_ext/fonts/NotoSansDisplay-Regular.ttf",
+        "/system_ext/fonts/NotoSerif-Regular.ttf",
+        "/system_ext/fonts/NotoSansSymbols-Regular-Subsetted.ttf",
+        "/system_ext/fonts/NotoSansSymbols2-Regular.ttf",
+        "/system_ext/fonts/Roboto-Regular.ttf",
+    ];
+
+    PATHS
+        .iter()
+        .filter_map(|path| match std::fs::read(path) {
+            Ok(bytes) => Some(Cow::Owned(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => {
+                eprintln!("Skipping Android system font {path}: {error}");
+                None
+            }
+        })
+        .collect()
 }
 
 /// Returns the most recently observed safe-area insets.
@@ -151,14 +212,31 @@ pub fn events() -> Subscription<Event> {
             | iced::window::Event::Resized(_)
             | iced::window::Event::Rescaled(_)
             | iced::window::Event::Focused,
-        )
-        | iced::Event::InputMethod(_) => refresh_insets().ok().map(Event::InsetsChanged),
+        ) => refresh_system_ui().ok().map(Event::InsetsChanged),
+        iced::Event::InputMethod(_) => refresh_insets().ok().map(Event::InsetsChanged),
         _ => None,
     })
 }
 
 /// Applies edge-to-edge and system-bar icon styling.
 pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
+    if let Ok(mut current) = SYSTEM_BARS_STYLE.lock() {
+        *current = style;
+    }
+    apply_system_ui(style)?;
+    let _ = refresh_insets();
+    Ok(())
+}
+
+fn refresh_system_ui() -> jni::errors::Result<SafeAreaInsets> {
+    let style = SYSTEM_BARS_STYLE
+        .lock()
+        .map_or_else(|_| SystemBarsStyle::default(), |style| *style);
+    apply_system_ui(style)?;
+    refresh_insets()
+}
+
+fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
     let Some(app) = android_app() else {
         return Ok(());
     };
@@ -172,6 +250,9 @@ pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
         const APPEARANCE_LIGHT_STATUS_BARS: i32 = 0x0000_0008;
         const APPEARANCE_LIGHT_NAVIGATION_BARS: i32 = 0x0000_0010;
         const SOFT_INPUT_ADJUST_RESIZE: i32 = 0x0000_0010;
+        const DRAWS_SYSTEM_BAR_BACKGROUNDS: i32 = i32::MIN;
+        const TRANSLUCENT_STATUS: i32 = 0x0400_0000;
+        const TRANSLUCENT_NAVIGATION: i32 = 0x0800_0000;
 
         let window = env
             .call_method(
@@ -183,6 +264,18 @@ pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
             .l()?;
         let sdk = sdk_int(env)?;
 
+        let _ = env.call_method(
+            &window,
+            jni_str!("addFlags"),
+            jni_sig!("(I)V"),
+            &[JValue::Int(DRAWS_SYSTEM_BAR_BACKGROUNDS)],
+        )?;
+        let _ = env.call_method(
+            &window,
+            jni_str!("clearFlags"),
+            jni_sig!("(I)V"),
+            &[JValue::Int(TRANSLUCENT_STATUS | TRANSLUCENT_NAVIGATION)],
+        )?;
         let _ = env.call_method(
             &window,
             jni_str!("setSoftInputMode"),
@@ -201,6 +294,21 @@ pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
             jni_sig!("(I)V"),
             &[JValue::Int(android_color(style.navigation_bar_color))],
         )?;
+
+        if sdk >= 29 {
+            let _ = env.call_method(
+                &window,
+                jni_str!("setStatusBarContrastEnforced"),
+                jni_sig!("(Z)V"),
+                &[JValue::Bool(false.into())],
+            )?;
+            let _ = env.call_method(
+                &window,
+                jni_str!("setNavigationBarContrastEnforced"),
+                jni_sig!("(Z)V"),
+                &[JValue::Bool(false.into())],
+            )?;
+        }
 
         if sdk >= 30 {
             let _ = env.call_method(
@@ -274,13 +382,25 @@ pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
                     jni_sig!("(II)V"),
                     &[JValue::Int(appearance), JValue::Int(mask)],
                 )?;
+
+                let system_bars = env
+                    .call_static_method(
+                        jni_str!("android/view/WindowInsets$Type"),
+                        jni_str!("systemBars"),
+                        jni_sig!("()I"),
+                        &[],
+                    )?
+                    .i()?;
+                let _ = env.call_method(
+                    &controller,
+                    jni_str!("show"),
+                    jni_sig!("(I)V"),
+                    &[JValue::Int(system_bars)],
+                )?;
             }
         }
         Ok(())
-    })?;
-
-    let _ = refresh_insets();
-    Ok(())
+    })
 }
 
 fn refresh_insets() -> jni::errors::Result<SafeAreaInsets> {
@@ -324,17 +444,43 @@ fn query_insets(app: &AndroidApp) -> jni::errors::Result<SafeAreaInsets> {
                 &[],
             )?
             .l()?;
+        let density = display_density(env, activity)?;
+        let (status_fallback, navigation_fallback) =
+            system_bar_resource_insets(env, activity, density)?;
         if root.as_raw().is_null() {
-            return Ok(safe_area_insets());
+            return Ok(SafeAreaInsets {
+                status_bars: status_fallback,
+                navigation_bars: navigation_fallback,
+                display_cutout: Insets::ZERO,
+                ime: Insets::ZERO,
+            });
         }
 
-        let density = display_density(env, activity)?;
         if sdk_int(env)? >= 30 {
+            let stable = legacy_stable_insets(env, &root, density)?;
             Ok(SafeAreaInsets {
-                status_bars: typed_insets(env, &root, jni_str!("statusBars"), density)?,
-                navigation_bars: typed_insets(env, &root, jni_str!("navigationBars"), density)?,
-                display_cutout: typed_insets(env, &root, jni_str!("displayCutout"), density)?,
-                ime: typed_insets(env, &root, jni_str!("ime"), density)?,
+                status_bars: typed_insets(env, &root, jni_str!("statusBars"), density, true)?
+                    .max(Insets {
+                        top: stable.top,
+                        ..Insets::ZERO
+                    })
+                    .max(status_fallback),
+                navigation_bars: typed_insets(
+                    env,
+                    &root,
+                    jni_str!("navigationBars"),
+                    density,
+                    true,
+                )?
+                .max(Insets {
+                    left: stable.left,
+                    right: stable.right,
+                    bottom: stable.bottom,
+                    ..Insets::ZERO
+                })
+                .max(navigation_fallback),
+                display_cutout: typed_insets(env, &root, jni_str!("displayCutout"), density, true)?,
+                ime: typed_insets(env, &root, jni_str!("ime"), density, false)?,
             })
         } else {
             let system = Insets {
@@ -361,11 +507,80 @@ fn query_insets(app: &AndroidApp) -> jni::errors::Result<SafeAreaInsets> {
     })
 }
 
+fn system_bar_resource_insets(
+    env: &mut jni::Env<'_>,
+    activity: &JObject<'_>,
+    density: f32,
+) -> jni::errors::Result<(Insets, Insets)> {
+    let resources = env
+        .call_method(
+            activity,
+            jni_str!("getResources"),
+            jni_sig!("()Landroid/content/res/Resources;"),
+            &[],
+        )?
+        .l()?;
+    let dimension = |env: &mut jni::Env<'_>, name: &str| -> jni::errors::Result<f32> {
+        let name = JObject::from(env.new_string(name)?);
+        let kind = JObject::from(env.new_string("dimen")?);
+        let package = JObject::from(env.new_string("android")?);
+        let identifier = env
+            .call_method(
+                &resources,
+                jni_str!("getIdentifier"),
+                jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"),
+                &[
+                    JValue::Object(&name),
+                    JValue::Object(&kind),
+                    JValue::Object(&package),
+                ],
+            )?
+            .i()?;
+        if identifier == 0 {
+            return Ok(0.0);
+        }
+        Ok(env
+            .call_method(
+                &resources,
+                jni_str!("getDimensionPixelSize"),
+                jni_sig!("(I)I"),
+                &[JValue::Int(identifier)],
+            )?
+            .i()? as f32
+            / density)
+    };
+
+    Ok((
+        Insets {
+            top: dimension(env, "status_bar_height")?,
+            ..Insets::ZERO
+        },
+        Insets {
+            bottom: dimension(env, "navigation_bar_height")?,
+            ..Insets::ZERO
+        },
+    ))
+}
+
+fn legacy_stable_insets(
+    env: &mut jni::Env<'_>,
+    root: &JObject<'_>,
+    density: f32,
+) -> jni::errors::Result<Insets> {
+    Ok(Insets {
+        left: inset_method(env, root, jni_str!("getStableInsetLeft"))? / density,
+        top: inset_method(env, root, jni_str!("getStableInsetTop"))? / density,
+        right: inset_method(env, root, jni_str!("getStableInsetRight"))? / density,
+        bottom: inset_method(env, root, jni_str!("getStableInsetBottom"))? / density,
+    })
+}
+
 fn typed_insets(
     env: &mut jni::Env<'_>,
     root: &JObject<'_>,
     kind: &jni::strings::JNIStr,
     density: f32,
+    ignoring_visibility: bool,
 ) -> jni::errors::Result<Insets> {
     let mask = env
         .call_static_method(
@@ -378,7 +593,11 @@ fn typed_insets(
     let insets = env
         .call_method(
             root,
-            jni_str!("getInsets"),
+            if ignoring_visibility {
+                jni_str!("getInsetsIgnoringVisibility")
+            } else {
+                jni_str!("getInsets")
+            },
             jni_sig!("(I)Landroid/graphics/Insets;"),
             &[JValue::Int(mask)],
         )?

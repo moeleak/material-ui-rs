@@ -102,12 +102,14 @@ the sibling `rdict` application:
 
 - suspend drops the graphics surface, resume recreates it, and the window is
   redrawn instead of continuing with a stale surface;
-- system bars use edge-to-edge layout with independently configurable status
-  and navigation icon appearance;
+- status and navigation bars remain visible but transparent, with edge-to-edge
+  content and Android's automatic contrast scrims disabled;
 - status, navigation, cutout, and IME insets are queried separately and the
   generated page reacts to inset changes;
 - Android text events, composing ranges, commits, and IME actions are forwarded
-  to iced, with UTF-16 indices converted safely for Rust strings.
+  to iced, with UTF-16 indices converted safely for Rust strings;
+- generated applications load available Android system fonts so CJK input and
+  other Unicode scripts render without embedding large font files in the APK.
 
 The generated app applies system and IME-safe content padding. Use
 `material_ui_rs::android::set_system_bars` when the app theme changes so icon

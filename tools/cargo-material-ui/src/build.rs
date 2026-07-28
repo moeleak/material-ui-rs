@@ -103,7 +103,7 @@ fn preflight(config: &ProjectConfig, platforms: &BTreeSet<Platform>) -> Result<(
         problems.push("Web build requires `trunk`".to_owned());
     }
     if platforms.contains(&Platform::Android) {
-        if !command_exists("cargo-apk") && !cargo_subcommand_exists("apk") {
+        if !command_help_exists("cargo-apk") && !cargo_subcommand_exists("apk") {
             problems.push("Android build requires `cargo-apk`".to_owned());
         }
         if std::env::var_os("ANDROID_SDK_ROOT").is_none()
@@ -300,15 +300,14 @@ fn build_web(root: &Path, config: &ProjectConfig, release: bool) -> Result<()> {
 
 fn build_android(root: &Path, config: &ProjectConfig, release: bool) -> Result<()> {
     let cargo_home = prepare_android_overrides(root)?;
+    let android_package = android_package_name(&config.project.name);
+    let android_manifest = root.join("android/Cargo.toml");
     let mut command = Command::new("cargo");
     let _ = command
-        .args([
-            "apk",
-            "build",
-            "--lib",
-            "--manifest-path",
-            "android/Cargo.toml",
-        ])
+        .args(["apk", "build", "--lib", "-p"])
+        .arg(android_package)
+        .arg("--manifest-path")
+        .arg(android_manifest)
         .args(["--target-dir", "target/material-ui/android"]);
     let _ = command.env("CARGO_HOME", cargo_home);
     if release {
@@ -328,6 +327,10 @@ fn build_android(root: &Path, config: &ProjectConfig, release: bool) -> Result<(
         profile(release)
     ));
     copy_artifact(&apk, &destination)
+}
+
+fn android_package_name(project_name: &str) -> String {
+    format!("{}-android", project_name.replace('-', "_"))
 }
 
 #[derive(Debug, Deserialize)]
@@ -577,7 +580,17 @@ fn command_exists(command: &str) -> bool {
 fn cargo_subcommand_exists(subcommand: &str) -> bool {
     Command::new("cargo")
         .arg(subcommand)
-        .arg("--version")
+        .arg("--help")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn command_help_exists(command: &str) -> bool {
+    Command::new(command)
+        .arg("--help")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -612,7 +625,7 @@ mod tests {
 
     use crate::config::{Backend, Platform, ProjectConfig};
 
-    use super::{escape_xml, selected_platforms};
+    use super::{android_package_name, escape_xml, selected_platforms};
 
     #[test]
     fn rejects_unconfigured_build_platform() {
@@ -635,6 +648,14 @@ mod tests {
         assert_eq!(
             escape_xml("A & <B> \"C\""),
             "A &amp; &lt;B&gt; &quot;C&quot;"
+        );
+    }
+
+    #[test]
+    fn derives_android_workspace_package_name() {
+        assert_eq!(
+            android_package_name("material-ui-smoke"),
+            "material_ui_smoke-android"
         );
     }
 }
