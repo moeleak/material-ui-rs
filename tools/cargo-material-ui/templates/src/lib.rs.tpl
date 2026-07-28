@@ -94,6 +94,7 @@ fn update(app: &mut App, message: Message) {
         #[cfg(target_os = "android")]
         Message::Android(material::android::Event::InsetsChanged(safe_area)) => {
             app.safe_area = safe_area;
+            app.navigation.advance_frame(Instant::now());
         }
     }
 }

@@ -868,6 +868,7 @@ mod tests {
         assert!(app.contains(".with_menu("));
         assert!(app.contains(".compact_navigation(navigation::CompactNavigation::ModalDrawer)"));
         assert!(app.contains("#[cfg(target_os = \"android\")]"));
+        assert!(app.contains("app.navigation.advance_frame(Instant::now())"));
         assert!(app.contains(".badge(\"3\")"));
     }
 }
