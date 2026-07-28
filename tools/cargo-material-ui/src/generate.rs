@@ -868,6 +868,19 @@ mod tests {
     }
 
     #[test]
+    fn android_page_draws_behind_the_navigation_bar() {
+        let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
+        let app = &files["src/lib.rs"];
+
+        assert!(
+            app.contains("height(iced::Length::Fixed(app.safe_area.system().bottom))"),
+            "{app}"
+        );
+        assert!(app.contains("bottom: app.safe_area.ime.bottom"), "{app}");
+        assert!(!app.contains("bottom: safe_area.bottom"), "{app}");
+    }
+
+    #[test]
     fn generates_navigation_menu_demo() {
         let files = render_files(&config(BTreeSet::from([Platform::Linux]))).unwrap();
         let app = &files["src/lib.rs"];

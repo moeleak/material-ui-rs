@@ -124,25 +124,32 @@ fn theme(_app: &App) -> material::Theme {
 
 fn view(app: &App) -> material::Element<'_, Message> {
     let selected = app.navigation.selected();
+    let page_body = column![
+        material::text::headline_medium(app.count.to_string()),
+        material::widget::button::button(
+            "Increment",
+            material::widget::button::ButtonVariant::Filled,
+        )
+        .on_press(Message::Increment),
+        material::widget::button::button(
+            "Decrement",
+            material::widget::button::ButtonVariant::Outlined,
+        )
+        .on_press(Message::Decrement),
+    ]
+    .spacing(12);
+    #[cfg(target_os = "android")]
+    // Keep page content clear of navigation gestures while its surface draws edge to edge.
+    let page_body = page_body.push(
+        iced::widget::Space::new()
+            .height(iced::Length::Fixed(app.safe_area.system().bottom)),
+    );
     let page = material::widget::page::surface(
         material::widget::page::header(
             selected.label(),
             "A multi-platform Material navigation demo",
         ),
-        column![
-            material::text::headline_medium(app.count.to_string()),
-            material::widget::button::button(
-                "Increment",
-                material::widget::button::ButtonVariant::Filled,
-            )
-            .on_press(Message::Increment),
-            material::widget::button::button(
-                "Decrement",
-                material::widget::button::ButtonVariant::Outlined,
-            )
-            .on_press(Message::Decrement),
-        ]
-        .spacing(12),
+        page_body,
     );
     let navigation_suite = navigation::suite(&DESTINATIONS, &app.navigation)
         .window_size(app.window_size)
@@ -154,13 +161,14 @@ fn view(app: &App) -> material::Element<'_, Message> {
 
     #[cfg(target_os = "android")]
     {
-        let safe_area = app.safe_area.content();
+        let system_safe_area = app.safe_area.system();
+        // Only the IME shortens the root surface; transparent system bars stay edge to edge.
         iced::widget::container(content)
             .padding(Padding {
-                top: safe_area.top,
-                right: safe_area.right,
-                bottom: safe_area.bottom,
-                left: safe_area.left,
+                top: system_safe_area.top,
+                right: system_safe_area.right,
+                bottom: app.safe_area.ime.bottom,
+                left: system_safe_area.left,
             })
             .width(iced::Length::Fill)
             .height(iced::Length::Fill)
