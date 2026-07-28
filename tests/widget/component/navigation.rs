@@ -68,6 +68,42 @@ fn menu_builder_defaults_to_the_compatible_compact_navigation_bar() {
 }
 
 #[test]
+fn closing_modal_drawer_scrim_does_not_block_page_hit_testing() {
+    let mut scrim =
+        modal_drawer_scrim::<Message, SingleLineTestRenderer>(false, Message::Frame, 0.5);
+    let mut tree = Tree::new(scrim.as_widget());
+    let renderer = SingleLineTestRenderer;
+    let limits = layout::Limits::new(Size::ZERO, Size::new(360.0, 640.0));
+    let node = scrim.as_widget_mut().layout(&mut tree, &renderer, &limits);
+    let bounds = Rectangle::new(Point::ORIGIN, node.size());
+    let cursor = mouse::Cursor::Available(Point::new(180.0, 320.0));
+    let interaction =
+        scrim
+            .as_widget()
+            .mouse_interaction(&tree, Layout::new(&node), cursor, &bounds, &renderer);
+
+    assert_eq!(interaction, mouse::Interaction::None);
+}
+
+#[test]
+fn open_modal_drawer_scrim_blocks_page_hit_testing() {
+    let mut scrim =
+        modal_drawer_scrim::<Message, SingleLineTestRenderer>(true, Message::Frame, 1.0);
+    let mut tree = Tree::new(scrim.as_widget());
+    let renderer = SingleLineTestRenderer;
+    let limits = layout::Limits::new(Size::ZERO, Size::new(360.0, 640.0));
+    let node = scrim.as_widget_mut().layout(&mut tree, &renderer, &limits);
+    let bounds = Rectangle::new(Point::ORIGIN, node.size());
+    let cursor = mouse::Cursor::Available(Point::new(180.0, 320.0));
+    let interaction =
+        scrim
+            .as_widget()
+            .mouse_interaction(&tree, Layout::new(&node), cursor, &bounds, &renderer);
+
+    assert_ne!(interaction, mouse::Interaction::None);
+}
+
+#[test]
 fn selection_interpolates_previous_and_selected_destination() {
     let selection = Selection::transitioning(Page::Two, Page::One, 0.25);
 

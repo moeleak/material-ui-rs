@@ -840,15 +840,7 @@ where
                 return page;
             }
 
-            let scrim_surface = Container::new(Space::new())
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .style(move |theme| modal_drawer_scrim_style(theme, menu_progress));
-            let scrim = if state.is_menu_open() {
-                opaque(MouseArea::new(scrim_surface).on_press(on_menu.clone()))
-            } else {
-                opaque(scrim_surface)
-            };
+            let scrim = modal_drawer_scrim(state.is_menu_open(), on_menu.clone(), menu_progress);
             let drawer_width = modal_drawer_width(window_width);
             let drawer_offset = modal_drawer_offset(drawer_width, menu_progress);
             let drawer = Float::new(opaque(drawer_with_optional_header(
@@ -1497,6 +1489,27 @@ fn modal_drawer_width(window_width: Option<f32>) -> f32 {
 
 fn modal_drawer_offset(width: f32, progress: f32) -> f32 {
     (-width.max(0.0) * (1.0 - progress.clamp(0.0, 1.0))).round()
+}
+
+fn modal_drawer_scrim<'a, Message, Renderer>(
+    is_open: bool,
+    on_dismiss: Message,
+    progress: f32,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    let surface = Container::new(Space::new())
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(move |theme| modal_drawer_scrim_style(theme, progress));
+
+    if is_open {
+        opaque(MouseArea::new(surface).on_press(on_dismiss))
+    } else {
+        surface.into()
+    }
 }
 
 fn navigation_bar_item<'a, Id, Message, Renderer, F>(
