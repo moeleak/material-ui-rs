@@ -33,6 +33,29 @@ Open <http://127.0.0.1:4173/>. Serve `dist/` over HTTP instead of opening the
 HTML file directly, so the browser loads the JavaScript module and WASM with the
 correct MIME types.
 
+## Application CLI
+
+Install the workspace CLI, then start the interactive project wizard:
+
+```sh
+cargo install --path tools/cargo-material-ui
+cargo material-ui init
+```
+
+The wizard lets you select macOS, Linux, Windows, Web, or Android. When Nix is
+available it also offers Native Rust or Nix Flake; the generated `flake.nix`
+contains only the toolchains and SDKs required by the selected platforms.
+Platforms and the build backend can be changed later:
+
+```sh
+cargo material-ui configure
+cargo material-ui build --release
+```
+
+See [Create and build a multi-platform app](docs/how-to/create-multiplatform-app.md)
+for generated files, non-interactive use, artifact locations, Android behavior,
+and signing options.
+
 ## Documentation
 
 The documentation is organized with Diátaxis:
