@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "material-ui-rs"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "iced",
  "iced_anim",
