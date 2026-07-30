@@ -209,57 +209,53 @@ fn modal_navigation_drawer_reverses_from_current_frame_without_jump() {
 }
 
 #[test]
-fn navigation_menu_icon_matches_compose_filled_menu_path() {
+fn navigation_menu_icon_morphs_from_hamburger_to_arrow() {
     assert_eq!(
-        navigation_menu_icon_rectangles(NavigationMenuIconKind::Menu),
+        navigation_menu_icon_segments(0.0, NAVIGATION_MENU_ICON_VIEWPORT_SIZE),
         [
-            Rectangle::new(Point::new(3.0, 6.0), Size::new(18.0, 2.0)),
-            Rectangle::new(Point::new(3.0, 11.0), Size::new(18.0, 2.0)),
-            Rectangle::new(Point::new(3.0, 16.0), Size::new(18.0, 2.0)),
+            (Point::new(5.0, 7.0), Point::new(19.0, 7.0)),
+            (Point::new(5.0, 12.0), Point::new(19.0, 12.0)),
+            (Point::new(5.0, 17.0), Point::new(19.0, 17.0)),
+        ]
+    );
+    assert_eq!(
+        navigation_menu_icon_segments(1.0, NAVIGATION_MENU_ICON_VIEWPORT_SIZE),
+        [
+            (Point::new(12.0, 5.0), Point::new(19.0, 12.0)),
+            (Point::new(5.0, 12.0), Point::new(19.0, 12.0)),
+            (Point::new(12.0, 19.0), Point::new(19.0, 12.0)),
         ]
     );
 }
 
 #[test]
-fn navigation_menu_open_icon_matches_compose_filled_path() {
+fn navigation_menu_icon_rotation_tracks_expansion_progress() {
+    assert_eq!(NavigationMenuIcon { progress: 0.0 }.rotation_radians(), 0.0);
     assert_eq!(
-        navigation_menu_icon_rectangles(NavigationMenuIconKind::MenuOpen),
-        [
-            Rectangle::new(Point::new(3.0, 6.0), Size::new(13.0, 2.0)),
-            Rectangle::new(Point::new(3.0, 11.0), Size::new(10.0, 2.0)),
-            Rectangle::new(Point::new(3.0, 16.0), Size::new(13.0, 2.0)),
-        ]
+        NavigationMenuIcon { progress: 0.5 }.rotation_radians(),
+        std::f32::consts::FRAC_PI_2
     );
     assert_eq!(
-        navigation_menu_open_arrow_points(
-            NAVIGATION_MENU_ICON_VIEWPORT_SIZE,
-            Vector::new(0.0, 0.0),
-        ),
-        [
-            Point::new(21.0, 15.59),
-            Point::new(17.42, 12.0),
-            Point::new(21.0, 8.41),
-            Point::new(19.59, 7.0),
-            Point::new(14.59, 12.0),
-            Point::new(19.59, 17.0),
-        ]
+        NavigationMenuIcon { progress: 1.0 }.rotation_radians(),
+        std::f32::consts::PI
     );
 }
 
 #[test]
-fn navigation_menu_button_matches_compose_interactive_sizes() {
+fn navigation_menu_button_matches_0_4_4_interaction_geometry() {
+    let button = navigation_menu_button::<Message, iced_widget::Renderer>(Message::Frame, 0.5);
+
     assert_eq!(
-        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
-        48.0
+        Widget::<Message, Theme, iced_widget::Renderer>::size(&button),
+        Size::new(
+            Length::Fixed(tokens::component::icon_button::CONTAINER_WIDTH),
+            Length::Fixed(tokens::component::icon_button::CONTAINER_HEIGHT),
+        )
     );
+    assert_eq!(tokens::component::icon_button::CONTAINER_WIDTH, 40.0);
+    assert_eq!(tokens::component::icon_button::CONTAINER_HEIGHT, 40.0);
     assert_eq!(tokens::component::icon_button::STATE_LAYER_WIDTH, 40.0);
     assert_eq!(tokens::component::icon_button::STATE_LAYER_HEIGHT, 40.0);
-    assert_eq!(
-        (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
-            - tokens::component::icon_button::STATE_LAYER_WIDTH)
-            / 2.0,
-        4.0
-    );
 }
 
 #[test]

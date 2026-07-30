@@ -1,6 +1,8 @@
 //! Material 3 navigation bar, rail, drawer, and adaptive layout helpers.
 
-use iced_widget::canvas::{self, Canvas, Path};
+use std::f32::consts::PI;
+
+use iced_widget::canvas::{self, Canvas, LineCap, Path, Stroke};
 use iced_widget::core::layout;
 use iced_widget::core::mouse;
 use iced_widget::core::overlay;
@@ -21,8 +23,10 @@ use iced_widget::{Column, Container, Float, MouseArea, Row, Space, Stack, Text, 
 
 use super::app_bar;
 use super::badge as badge_widget;
+use super::button::Button;
 use super::ripple::{PressRippleState, RippleConfig, RippleStart, RippleStyle, draw_ripples};
 use super::support::{AnimatedScalar, alpha_color, duration_ms, lerp};
+use crate::style::button as button_style;
 use crate::utils::{HOVERED_LAYER_OPACITY, mix, shadow_from_level, state_layer};
 use crate::{Theme, fonts, tokens};
 
@@ -30,14 +34,15 @@ use crate::{Theme, fonts, tokens};
 use super::ripple::{ripple_target_radius, rounded_rect_span_at_y};
 
 const NAVIGATION_MENU_ICON_VIEWPORT_SIZE: f32 = 24.0;
-const NAVIGATION_MENU_ICON_START_X: f32 = 3.0;
-const NAVIGATION_MENU_ICON_END_X: f32 = 21.0;
-const NAVIGATION_MENU_ICON_TOP_Y: f32 = 6.0;
-const NAVIGATION_MENU_ICON_MIDDLE_Y: f32 = 11.0;
-const NAVIGATION_MENU_ICON_BOTTOM_Y: f32 = 16.0;
-const NAVIGATION_MENU_ICON_BAR_HEIGHT: f32 = 2.0;
-const NAVIGATION_MENU_OPEN_BAR_END_X: f32 = 16.0;
-const NAVIGATION_MENU_OPEN_MIDDLE_END_X: f32 = 13.0;
+const NAVIGATION_MENU_ICON_START_X: f32 = 5.0;
+const NAVIGATION_MENU_ICON_END_X: f32 = 19.0;
+const NAVIGATION_MENU_ICON_CENTER_X: f32 = 12.0;
+const NAVIGATION_MENU_ICON_TOP_Y: f32 = 7.0;
+const NAVIGATION_MENU_ICON_CENTER_Y: f32 = 12.0;
+const NAVIGATION_MENU_ICON_BOTTOM_Y: f32 = 17.0;
+const NAVIGATION_MENU_ICON_ARROW_TOP_Y: f32 = 5.0;
+const NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y: f32 = 19.0;
+const NAVIGATION_MENU_ICON_STROKE_WIDTH: f32 = 2.4;
 const NAVIGATION_INITIAL_HOVER_ENABLED: bool = !cfg!(target_os = "android");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -823,10 +828,7 @@ where
         AdaptiveLayout::NavigationBar => {
             let top_bar = app_bar::small(
                 headline,
-                Some(navigation_menu_button(
-                    on_menu.clone(),
-                    NavigationMenuIconKind::Menu,
-                )),
+                Some(navigation_menu_button(on_menu.clone(), menu_progress).into()),
                 std::iter::empty(),
             );
             let page: Element<'a, Message, Theme, Renderer> = Column::new()
@@ -869,7 +871,6 @@ where
                     selection,
                     on_select,
                     on_menu,
-                    state.is_menu_open(),
                     ExpandedRailOptions::default().width(expanded_rail_width(menu_progress)),
                 )
             } else {
@@ -878,7 +879,7 @@ where
                     selection,
                     on_select,
                     on_menu,
-                    state.is_menu_open(),
+                    menu_progress,
                 )
             })
             .push(content)
@@ -970,21 +971,16 @@ impl<'a, Message, Renderer> NavigationRailOptions<'a, Message, Renderer> {
         Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
         Font: Into<Renderer::Font>,
     {
-        self.menu_target(on_menu, false)
+        self.menu_progress(on_menu, 0.0)
     }
 
-    fn menu_target(mut self, on_menu: Message, expanded: bool) -> Self
+    fn menu_progress(mut self, on_menu: Message, progress: f32) -> Self
     where
         Message: Clone + 'a,
         Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
         Font: Into<Renderer::Font>,
     {
-        let kind = if expanded {
-            NavigationMenuIconKind::MenuOpen
-        } else {
-            NavigationMenuIconKind::Menu
-        };
-        self.header = Some(navigation_menu_button(on_menu, kind));
+        self.header = Some(navigation_menu_button(on_menu, progress).into());
         self
     }
 }
@@ -1082,7 +1078,7 @@ fn rail_with_menu_for_target<'a, Id, Message, Renderer, F>(
     selection: Selection<Id>,
     on_select: F,
     on_menu: Message,
-    menu_expanded: bool,
+    menu_progress: f32,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Id: Copy + Eq + 'a,
@@ -1095,7 +1091,7 @@ where
         destinations,
         selection,
         on_select,
-        NavigationRailOptions::default().menu_target(on_menu, menu_expanded),
+        NavigationRailOptions::default().menu_progress(on_menu, menu_progress),
     )
 }
 
@@ -1171,7 +1167,6 @@ where
         selection,
         on_select,
         on_menu,
-        true,
         options,
     )
 }
@@ -1182,7 +1177,6 @@ fn expanded_rail_with_target<'a, Id, Message, Renderer, F>(
     selection: Selection<Id>,
     on_select: F,
     on_menu: Message,
-    menu_expanded: bool,
     options: ExpandedRailOptions,
 ) -> Container<'a, Message, Theme, Renderer>
 where
@@ -1198,12 +1192,7 @@ where
         .height(Length::Fill)
         .spacing(tokens::component::navigation_rail::VERTICAL_PADDING)
         .align_x(alignment::Horizontal::Center)
-        .push(expanded_rail_header(
-            headline,
-            on_menu,
-            menu_expanded,
-            metrics,
-        ));
+        .push(expanded_rail_header(headline, on_menu, metrics));
 
     for destination in destinations {
         items = items.push(expanded_rail_item(
@@ -1661,49 +1650,40 @@ where
 
 fn navigation_menu_button<'a, Message, Renderer>(
     on_press: Message,
-    kind: NavigationMenuIconKind,
-) -> Element<'a, Message, Theme, Renderer>
+    progress: f32,
+) -> Button<'a, Message, Renderer>
 where
     Message: Clone + 'a,
-    Renderer: geometry::Renderer + primitive::Renderer + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
 {
-    let icon = Canvas::new(NavigationMenuIcon { kind })
+    let icon = Canvas::new(NavigationMenuIcon { progress })
         .width(Length::Fixed(tokens::component::icon_button::ICON_SIZE))
         .height(Length::Fixed(tokens::component::icon_button::ICON_SIZE));
-    let touch_target = tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE;
-    let state_layer_width = tokens::component::icon_button::STATE_LAYER_WIDTH;
-    let state_layer_height = tokens::component::icon_button::STATE_LAYER_HEIGHT;
-    let state_layer_x = (touch_target - state_layer_width) / 2.0;
-    let state_layer_y = (touch_target - state_layer_height) / 2.0;
-    let content = Container::new(icon)
-        .width(Length::Fixed(touch_target))
-        .height(Length::Fixed(touch_target))
-        .align_x(alignment::Horizontal::Center)
-        .align_y(alignment::Vertical::Center);
 
-    press_surface(
-        content,
-        on_press,
-        NavigationStateLayer::IconButton,
-        NavigationIndicatorPlacement::Inset {
-            x: state_layer_x,
-            y: state_layer_y,
-            width: state_layer_width,
-            height: state_layer_height,
-        },
+    Button::new(
+        Container::new(icon)
+            .center_x(Length::Fixed(
+                tokens::component::icon_button::CONTAINER_WIDTH,
+            ))
+            .center_y(Length::Fixed(
+                tokens::component::icon_button::CONTAINER_HEIGHT,
+            )),
     )
-    .into()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum NavigationMenuIconKind {
-    Menu,
-    MenuOpen,
+    .width(Length::Fixed(
+        tokens::component::icon_button::CONTAINER_WIDTH,
+    ))
+    .height(Length::Fixed(
+        tokens::component::icon_button::CONTAINER_HEIGHT,
+    ))
+    .padding(Padding::ZERO)
+    .style(button_style::icon)
+    .on_press(on_press)
 }
 
 #[derive(Debug, Clone, Copy)]
 struct NavigationMenuIcon {
-    kind: NavigationMenuIconKind,
+    progress: f32,
 }
 
 impl<Message, Renderer> canvas::Program<Message, Theme, Renderer> for NavigationMenuIcon
@@ -1728,89 +1708,120 @@ where
 
         let mut frame = canvas::Frame::new(renderer, bounds.size());
         let offset = Vector::new((bounds.width - size) / 2.0, (bounds.height - size) / 2.0);
+        let center = Point::new(bounds.width / 2.0, bounds.height / 2.0);
         let color = theme.colors().surface.text_variant;
+        let stroke = Stroke::default()
+            .with_width(NavigationMenuIcon::stroke_width(size))
+            .with_color(color)
+            .with_line_cap(LineCap::Round);
 
-        for rect in navigation_menu_icon_rectangles(self.kind) {
-            let rect = Rectangle {
-                x: offset.x + navigation_menu_icon_scale(rect.x, size),
-                y: offset.y + navigation_menu_icon_scale(rect.y, size),
-                width: navigation_menu_icon_scale(rect.width, size),
-                height: navigation_menu_icon_scale(rect.height, size),
-            };
-            frame.fill(
-                &Path::rectangle(Point::new(rect.x, rect.y), rect.size()),
-                color,
-            );
-        }
+        frame.with_save(|frame| {
+            frame.translate(Vector::new(center.x, center.y));
+            frame.rotate(self.rotation_radians());
+            frame.translate(Vector::new(-center.x, -center.y));
 
-        if self.kind == NavigationMenuIconKind::MenuOpen {
-            let points = navigation_menu_open_arrow_points(size, offset);
-            frame.fill(
-                &Path::new(|path| {
-                    path.move_to(points[0]);
-                    for point in &points[1..] {
-                        path.line_to(*point);
-                    }
-                    path.close();
-                }),
-                color,
-            );
-        }
+            for (from, to) in navigation_menu_icon_segments(self.progress, size) {
+                frame.stroke(
+                    &Path::line(
+                        Point::new(from.x + offset.x, from.y + offset.y),
+                        Point::new(to.x + offset.x, to.y + offset.y),
+                    ),
+                    stroke,
+                );
+            }
+        });
 
         vec![frame.into_geometry()]
     }
 }
 
-fn navigation_menu_icon_rectangles(kind: NavigationMenuIconKind) -> [Rectangle; 3] {
-    let (top_and_bottom_end, middle_end) = match kind {
-        NavigationMenuIconKind::Menu => (NAVIGATION_MENU_ICON_END_X, NAVIGATION_MENU_ICON_END_X),
-        NavigationMenuIconKind::MenuOpen => (
-            NAVIGATION_MENU_OPEN_BAR_END_X,
-            NAVIGATION_MENU_OPEN_MIDDLE_END_X,
-        ),
-    };
+impl NavigationMenuIcon {
+    fn rotation_radians(self) -> f32 {
+        PI * self.progress.clamp(0.0, 1.0)
+    }
 
-    [
-        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_TOP_Y, top_and_bottom_end),
-        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_MIDDLE_Y, middle_end),
-        navigation_menu_icon_rectangle(NAVIGATION_MENU_ICON_BOTTOM_Y, top_and_bottom_end),
-    ]
-}
-
-fn navigation_menu_icon_rectangle(y: f32, end_x: f32) -> Rectangle {
-    Rectangle {
-        x: NAVIGATION_MENU_ICON_START_X,
-        y,
-        width: end_x - NAVIGATION_MENU_ICON_START_X,
-        height: NAVIGATION_MENU_ICON_BAR_HEIGHT,
+    fn stroke_width(size: f32) -> f32 {
+        NAVIGATION_MENU_ICON_STROKE_WIDTH / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size
     }
 }
 
-fn navigation_menu_open_arrow_points(size: f32, offset: Vector) -> [Point; 6] {
+fn navigation_menu_icon_segments(progress: f32, size: f32) -> [(Point, Point); 3] {
+    let progress = progress.clamp(0.0, 1.0);
+
     [
-        (21.0, 15.59),
-        (17.42, 12.0),
-        (21.0, 8.41),
-        (19.59, 7.0),
-        (14.59, 12.0),
-        (19.59, 17.0),
+        (
+            navigation_menu_icon_point(
+                lerp(
+                    NAVIGATION_MENU_ICON_START_X,
+                    NAVIGATION_MENU_ICON_CENTER_X,
+                    progress,
+                ),
+                lerp(
+                    NAVIGATION_MENU_ICON_TOP_Y,
+                    NAVIGATION_MENU_ICON_ARROW_TOP_Y,
+                    progress,
+                ),
+                size,
+            ),
+            navigation_menu_icon_point(
+                NAVIGATION_MENU_ICON_END_X,
+                lerp(
+                    NAVIGATION_MENU_ICON_TOP_Y,
+                    NAVIGATION_MENU_ICON_CENTER_Y,
+                    progress,
+                ),
+                size,
+            ),
+        ),
+        (
+            navigation_menu_icon_point(
+                NAVIGATION_MENU_ICON_START_X,
+                NAVIGATION_MENU_ICON_CENTER_Y,
+                size,
+            ),
+            navigation_menu_icon_point(
+                NAVIGATION_MENU_ICON_END_X,
+                NAVIGATION_MENU_ICON_CENTER_Y,
+                size,
+            ),
+        ),
+        (
+            navigation_menu_icon_point(
+                lerp(
+                    NAVIGATION_MENU_ICON_START_X,
+                    NAVIGATION_MENU_ICON_CENTER_X,
+                    progress,
+                ),
+                lerp(
+                    NAVIGATION_MENU_ICON_BOTTOM_Y,
+                    NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y,
+                    progress,
+                ),
+                size,
+            ),
+            navigation_menu_icon_point(
+                NAVIGATION_MENU_ICON_END_X,
+                lerp(
+                    NAVIGATION_MENU_ICON_BOTTOM_Y,
+                    NAVIGATION_MENU_ICON_CENTER_Y,
+                    progress,
+                ),
+                size,
+            ),
+        ),
     ]
-    .map(|(x, y)| {
-        Point::new(
-            offset.x + navigation_menu_icon_scale(x, size),
-            offset.y + navigation_menu_icon_scale(y, size),
-        )
-    })
 }
 
-fn navigation_menu_icon_scale(value: f32, size: f32) -> f32 {
-    value / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size
+fn navigation_menu_icon_point(x: f32, y: f32, size: f32) -> Point {
+    Point::new(
+        x / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size,
+        y / NAVIGATION_MENU_ICON_VIEWPORT_SIZE * size,
+    )
 }
 
 fn expanded_rail_header<'a, Message, Renderer>(
     headline: &'static str,
     on_menu: Message,
-    menu_expanded: bool,
     metrics: ExpandedRailMetrics,
 ) -> Container<'a, Message, Theme, Renderer>
 where
@@ -1840,14 +1851,7 @@ where
         ))
         .spacing(metrics.header_title_spacing())
         .align_y(alignment::Vertical::Center)
-        .push(navigation_menu_button(
-            on_menu,
-            if menu_expanded {
-                NavigationMenuIconKind::MenuOpen
-            } else {
-                NavigationMenuIconKind::Menu
-            },
-        ))
+        .push(navigation_menu_button(on_menu, metrics.progress()))
         .push(headline);
 
     Container::new(content)
@@ -1996,10 +2000,7 @@ where
         ))
         .spacing(DrawerMetrics::menu_header_title_spacing())
         .align_y(alignment::Vertical::Center)
-        .push(navigation_menu_button(
-            on_menu,
-            NavigationMenuIconKind::MenuOpen,
-        ))
+        .push(navigation_menu_button(on_menu, 0.0))
         .push(type_text(headline, headline_scale).style(headline_text_style));
 
     Container::new(content)
@@ -2747,7 +2748,6 @@ where
 enum NavigationStateLayer {
     BarOrRail,
     Drawer { progress: f32 },
-    IconButton,
 }
 
 fn animated_indicator_width(target_width: f32, progress: f32) -> f32 {
@@ -3354,7 +3354,6 @@ fn layer_color(theme: &Theme, layer: NavigationStateLayer) -> Color {
             colors.secondary.container_text,
             progress,
         ),
-        NavigationStateLayer::IconButton => colors.surface.text_variant,
     }
 }
 
