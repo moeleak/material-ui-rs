@@ -7,7 +7,7 @@
   writableTmpDirAsHomeHook,
 }:
 let
-  version = "0.5.1";
+  version = "0.5.2";
   src = lib.cleanSource ./.;
   cargoMaterialUiSrc = lib.cleanSource ./tools/cargo-material-ui;
   executableSuffix = stdenv.hostPlatform.extensions.executable or "";
