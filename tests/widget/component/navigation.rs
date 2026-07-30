@@ -458,15 +458,33 @@ fn navigation_rail_header_geometry_matches_material_header_padding() {
     assert_eq!(RailMetrics::header_bottom_padding(), 40.0);
     assert_eq!(
         RailMetrics::header_slot_height(),
-        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+        tokens::component::icon_button::CONTAINER_HEIGHT
             + tokens::component::navigation_rail::HEADER_PADDING
     );
-    assert_eq!(RailMetrics::header_slot_height(), 88.0);
+    assert_eq!(RailMetrics::header_slot_height(), 80.0);
+}
+
+#[test]
+fn navigation_menu_header_does_not_jump_at_collapsed_endpoint() {
+    let expanded = ExpandedRailMetrics::new(expanded_rail_width(0.0));
+    let collapsed_button_x = (tokens::component::navigation_rail::CONTAINER_WIDTH
+        - tokens::component::icon_button::CONTAINER_WIDTH)
+        / 2.0;
+
+    assert_eq!(expanded.header_leading_space(), collapsed_button_x);
+    assert_eq!(
+        expanded.header_leading_space() + tokens::component::icon_button::CONTAINER_WIDTH / 2.0,
+        RailMetrics::collapsed_icon_center_x()
+    );
+    assert_eq!(
+        RailMetrics::header_slot_height(),
+        tokens::component::icon_button::CONTAINER_HEIGHT + RailMetrics::header_bottom_padding()
+    );
 }
 
 #[test]
 fn navigation_rail_min_height_fits_all_destinations_and_header() {
-    assert_eq!(rail_min_height(5, true), 476.0);
+    assert_eq!(rail_min_height(5, true), 468.0);
     assert_eq!(rail_min_height(5, false), 384.0);
     assert_eq!(
         rail_min_height(1, true),
@@ -540,7 +558,7 @@ fn navigation_rail_expanded_geometry_matches_material_expressive_attributes() {
         tokens::component::navigation_rail::CONTAINER_WIDTH
     );
     assert_eq!(expanded.indicator_width(), 180.0);
-    assert_eq!(expanded.header_leading_space(), 24.0);
+    assert_eq!(expanded.header_leading_space(), 28.0);
     assert_eq!(expanded.header_title_spacing(), 0.0);
     assert_eq!(
         expanded_rail_width(0.0),
@@ -646,11 +664,11 @@ fn navigation_rail_expanded_keeps_collapsed_vertical_slots() {
     assert_eq!(
         RailMetrics::first_item_y_after_header(),
         tokens::component::navigation_rail::CONTENT_TOP_MARGIN
-            + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+            + tokens::component::icon_button::CONTAINER_HEIGHT
             + tokens::component::navigation_rail::HEADER_PADDING
             + tokens::component::navigation_rail::VERTICAL_PADDING
     );
-    assert_eq!(RailMetrics::first_item_y_after_header(), 136.0);
+    assert_eq!(RailMetrics::first_item_y_after_header(), 128.0);
     assert_eq!(ExpandedRailMetrics::expanded_item_vertical_inset(), 4.0);
     assert_eq!(
         ExpandedRailMetrics::item_vertical_inset_for(0.0),
@@ -1020,16 +1038,16 @@ fn navigation_drawer_indicator_width_matches_container_padding() {
 
 #[test]
 fn navigation_drawer_menu_header_aligns_to_item_icon_and_label_columns() {
-    assert_eq!(DrawerMetrics::menu_header_leading_space(), 16.0);
-    assert_eq!(DrawerMetrics::menu_header_title_spacing(), 0.0);
+    assert_eq!(DrawerMetrics::menu_header_leading_space(), 20.0);
+    assert_eq!(DrawerMetrics::menu_header_title_spacing(), 4.0);
 
     let menu_icon_center = DrawerMetrics::menu_header_leading_space()
-        + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE / 2.0;
+        + tokens::component::icon_button::CONTAINER_WIDTH / 2.0;
     let drawer_icon_center = tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
         + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE
         + tokens::component::navigation_drawer::ICON_SIZE / 2.0;
     let menu_title_start = DrawerMetrics::menu_header_leading_space()
-        + tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+        + tokens::component::icon_button::CONTAINER_WIDTH
         + DrawerMetrics::menu_header_title_spacing();
     let drawer_label_start = tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
         + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE

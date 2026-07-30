@@ -1840,14 +1840,14 @@ where
     let headline = Container::new(headline)
         .width(Length::Fill)
         .height(Length::Fixed(
-            tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
+            tokens::component::icon_button::CONTAINER_HEIGHT,
         ))
         .align_y(alignment::Vertical::Center)
         .clip(true);
     let content = Row::new()
         .width(Length::Fill)
         .height(Length::Fixed(
-            tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE,
+            tokens::component::icon_button::CONTAINER_HEIGHT,
         ))
         .spacing(metrics.header_title_spacing())
         .align_y(alignment::Vertical::Center)
@@ -2798,7 +2798,7 @@ impl RailMetrics {
     }
 
     fn header_slot_height() -> f32 {
-        tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE + Self::header_bottom_padding()
+        tokens::component::icon_button::CONTAINER_HEIGHT + Self::header_bottom_padding()
     }
 
     fn item_slot_height() -> f32 {
@@ -2930,7 +2930,7 @@ impl ExpandedRailMetrics {
     fn header_leading_space(self) -> f32 {
         tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_MARGIN_HORIZONTAL
             + tokens::component::navigation_rail::EXPANDED_ACTIVE_INDICATOR_PADDING_START
-            - (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+            - (tokens::component::icon_button::CONTAINER_WIDTH
                 - tokens::component::navigation_rail::ICON_SIZE)
                 / 2.0
     }
@@ -2944,7 +2944,7 @@ impl ExpandedRailMetrics {
 
         (label_start
             - self.header_leading_space()
-            - tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE)
+            - tokens::component::icon_button::CONTAINER_WIDTH)
             .max(0.0)
     }
 
@@ -3007,7 +3007,7 @@ impl DrawerMetrics {
     fn menu_header_leading_space() -> f32 {
         tokens::component::navigation_drawer::ITEM_HORIZONTAL_PADDING
             + tokens::component::navigation_drawer::ITEM_CONTENT_LEADING_SPACE
-            - (tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE
+            - (tokens::component::icon_button::CONTAINER_WIDTH
                 - tokens::component::navigation_drawer::ICON_SIZE)
                 / 2.0
     }
@@ -3020,7 +3020,7 @@ impl DrawerMetrics {
 
         (label_start
             - Self::menu_header_leading_space()
-            - tokens::component::icon_button::MINIMUM_INTERACTIVE_SIZE)
+            - tokens::component::icon_button::CONTAINER_WIDTH)
             .max(0.0)
     }
 
