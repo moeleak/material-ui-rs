@@ -943,6 +943,21 @@ fn material_dialog_constructors_compile_to_elements() {
     let content: TestElement<'_> = Text::new("Custom dialog content").into();
     let _: TestElement<'_> = dialog::basic(content).into();
 
+    let body: TestElement<'_> = iced_widget::Column::new()
+        .push(text_input::outlined("Account", "").on_input(|_| Message::Pressed))
+        .push(
+            text_input::outlined("Password", "")
+                .secure(true)
+                .on_input(|_| Message::Pressed),
+        )
+        .push(checkbox::standard(false, "Remember password", toggled))
+        .into();
+    let actions: [TestElement<'_>; 2] = [
+        dialog::action_button("Cancel", Message::Pressed),
+        dialog::action_button("Log in", Message::Pressed),
+    ];
+    let _: TestElement<'_> = dialog::content("Sign in", body, dialog::actions(actions)).into();
+
     let actions: [TestElement<'_>; 2] = [
         dialog::action("Cancel").on_press(Message::Pressed).into(),
         dialog::action("OK").on_press(Message::Pressed).into(),

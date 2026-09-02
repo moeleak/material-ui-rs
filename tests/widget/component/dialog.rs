@@ -1,4 +1,4 @@
-use iced_widget::core::Widget;
+use iced_widget::core::{Point, Widget, mouse, touch};
 
 use super::*;
 
@@ -170,4 +170,36 @@ fn scaled_dialog_layer_uses_viewport_to_preserve_shadow() {
     };
 
     assert_eq!(scaled_layer_bounds(bounds, &viewport), Some(viewport));
+}
+
+#[test]
+fn scaled_dialog_transforms_mouse_motion_into_child_coordinates() {
+    let transformation = Transformation::translate(100.0, 50.0) * Transformation::scale(0.5);
+    let event = Event::Mouse(mouse::Event::CursorMoved {
+        position: Point::new(150.0, 100.0),
+    });
+
+    assert_eq!(
+        transform_pointer_event(&event, transformation.inverse()),
+        Some(Event::Mouse(mouse::Event::CursorMoved {
+            position: Point::new(100.0, 100.0),
+        }))
+    );
+}
+
+#[test]
+fn scaled_dialog_transforms_touch_positions_into_child_coordinates() {
+    let transformation = Transformation::translate(100.0, 50.0) * Transformation::scale(0.5);
+    let event = Event::Touch(touch::Event::FingerPressed {
+        id: touch::Finger(7),
+        position: Point::new(150.0, 100.0),
+    });
+
+    assert_eq!(
+        transform_pointer_event(&event, transformation.inverse()),
+        Some(Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(7),
+            position: Point::new(100.0, 100.0),
+        }))
+    );
 }

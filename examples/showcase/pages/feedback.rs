@@ -62,7 +62,7 @@ fn dialogs() -> material::Element<'static, Message> {
     use material::widget::button::{self, ButtonVariant};
 
     page::row([button::action(
-        button::button("Open alert dialog", ButtonVariant::Filled),
+        button::button("Open sign-in dialog", ButtonVariant::Filled),
         Message::DialogOpened,
     )])
     .into()

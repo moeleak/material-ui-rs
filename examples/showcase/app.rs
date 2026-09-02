@@ -70,6 +70,9 @@ enum Message {
     DialogOpened,
     DialogDismissed,
     DialogConfirmed,
+    DialogAccountChanged(String),
+    DialogPasswordChanged(String),
+    DialogRememberPasswordChanged(bool),
     ShowSnackbar,
     SnackbarUndo,
     WindowResized(Size),
@@ -188,7 +191,10 @@ struct Showcase {
     log_viewer: material::widget::log_viewer::State<u64>,
     log_entries: Vec<material::widget::log_viewer::LogEntry<u64>>,
     progress_animation: material::widget::progress_bar::IndeterminateState,
-    alert_dialog: material::widget::dialog::Transition,
+    login_dialog: material::widget::dialog::Transition,
+    dialog_account: String,
+    dialog_password: String,
+    dialog_remember_password: bool,
     snackbar: material::widget::snackbar::Transition,
     theme_controller: theme_picker::ThemeController,
 }
@@ -235,7 +241,10 @@ impl Default for Showcase {
             progress_animation: material::widget::progress_bar::IndeterminateState::new(
                 Instant::now(),
             ),
-            alert_dialog: material::widget::dialog::Transition::default(),
+            login_dialog: material::widget::dialog::Transition::default(),
+            dialog_account: String::new(),
+            dialog_password: String::new(),
+            dialog_remember_password: false,
             snackbar: material::widget::snackbar::Transition::default(),
             theme_controller: theme_picker::ThemeController::default(),
         }
@@ -353,16 +362,28 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::DialogOpened => {
-            state.alert_dialog.show(Instant::now());
-            Task::none()
+            state.login_dialog.show(Instant::now());
+            iced::widget::operation::focus(dialog_account_input_id())
         }
         Message::DialogDismissed => {
-            state.alert_dialog.dismiss(Instant::now());
+            state.login_dialog.dismiss(Instant::now());
             Task::none()
         }
         Message::DialogConfirmed => {
-            state.alert_dialog.dismiss(Instant::now());
+            state.login_dialog.dismiss(Instant::now());
             state.count += 1;
+            Task::none()
+        }
+        Message::DialogAccountChanged(account) => {
+            state.dialog_account = account;
+            Task::none()
+        }
+        Message::DialogPasswordChanged(password) => {
+            state.dialog_password = password;
+            Task::none()
+        }
+        Message::DialogRememberPasswordChanged(remember_password) => {
+            state.dialog_remember_password = remember_password;
             Task::none()
         }
         Message::ShowSnackbar => {
@@ -395,7 +416,7 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             let _ = state.secondary_tab_state.advance(now);
             let _ = state.log_viewer.advance(now);
             state.progress_animation.advance(now);
-            let _ = state.alert_dialog.advance(now);
+            let _ = state.login_dialog.advance(now);
             let _ = state.snackbar.advance(now);
             let _ = state.date_picker.advance(now);
             let _ = state.date_range_picker.advance(now);
@@ -581,7 +602,7 @@ fn subscription(state: &Showcase) -> Subscription<Message> {
         || state.primary_tab_state.is_animating()
         || state.secondary_tab_state.is_animating()
         || state.log_viewer.is_animating()
-        || state.alert_dialog.is_animating()
+        || state.login_dialog.is_animating()
         || state.snackbar.is_active()
         || state.date_picker.is_animating()
         || state.date_range_picker.is_animating()
@@ -621,35 +642,45 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
 
     let content = material::widget::dialog::modal_animated(
         content,
-        &state.alert_dialog,
+        &state.login_dialog,
         now,
-        alert_dialog(state.alert_dialog.alpha(now)),
+        login_dialog(state),
     );
 
     state.theme_controller.reveal_over(content, now)
 }
 
-fn alert_dialog(alpha: f32) -> material::Element<'static, Message> {
-    let action_options = material::widget::dialog::AlphaOptions::default().alpha(alpha);
+fn dialog_account_input_id() -> iced::widget::Id {
+    iced::widget::Id::new("showcase-login-account")
+}
 
-    material::widget::dialog::alert_with(
-        "Discard draft?",
-        "Your current changes will be removed from this device.",
+fn login_dialog(state: &Showcase) -> material::Element<'_, Message> {
+    let body = iced::widget::Column::new()
+        .spacing(material::widget::page::STACK_SPACING)
+        .push(
+            material::widget::text_input::outlined("Account", &state.dialog_account)
+                .id(dialog_account_input_id())
+                .on_input(Message::DialogAccountChanged),
+        )
+        .push(
+            material::widget::text_input::outlined("Password", &state.dialog_password)
+                .secure(true)
+                .on_input(Message::DialogPasswordChanged)
+                .on_submit(Message::DialogConfirmed),
+        )
+        .push(material::widget::checkbox::standard(
+            state.dialog_remember_password,
+            "Remember password",
+            Message::DialogRememberPasswordChanged,
+        ));
+
+    material::widget::dialog::content(
+        "Sign in",
+        body,
         material::widget::dialog::actions([
-            material::widget::dialog::action_button_with(
-                "Cancel",
-                Message::DialogDismissed,
-                action_options,
-            ),
-            material::widget::dialog::action_button_with(
-                "Discard",
-                Message::DialogConfirmed,
-                action_options,
-            ),
+            material::widget::dialog::action_button("Cancel", Message::DialogDismissed),
+            material::widget::dialog::action_button("Log in", Message::DialogConfirmed),
         ]),
-        material::widget::dialog::AlertOptions::default()
-            .icon("info")
-            .alpha(alpha),
     )
     .into()
 }
@@ -764,26 +795,39 @@ mod tests {
     }
 
     #[test]
-    fn alert_dialog_messages_toggle_modal_state() {
+    fn login_dialog_messages_update_form_and_toggle_modal_state() {
         let mut showcase = Showcase::default();
 
         update(&mut showcase, Message::DialogOpened);
         assert_eq!(
-            showcase.alert_dialog.phase(),
+            showcase.login_dialog.phase(),
             material::widget::dialog::TransitionPhase::Showing
         );
-        assert!(showcase.alert_dialog.is_active());
+        assert!(showcase.login_dialog.is_active());
+
+        update(
+            &mut showcase,
+            Message::DialogAccountChanged("material-user".into()),
+        );
+        update(
+            &mut showcase,
+            Message::DialogPasswordChanged("secret".into()),
+        );
+        update(&mut showcase, Message::DialogRememberPasswordChanged(true));
+        assert_eq!(showcase.dialog_account, "material-user");
+        assert_eq!(showcase.dialog_password, "secret");
+        assert!(showcase.dialog_remember_password);
 
         update(&mut showcase, Message::DialogDismissed);
         assert_eq!(
-            showcase.alert_dialog.phase(),
+            showcase.login_dialog.phase(),
             material::widget::dialog::TransitionPhase::Dismissing
         );
 
         update(&mut showcase, Message::DialogOpened);
         update(&mut showcase, Message::DialogConfirmed);
         assert_eq!(
-            showcase.alert_dialog.phase(),
+            showcase.login_dialog.phase(),
             material::widget::dialog::TransitionPhase::Dismissing
         );
         assert_eq!(showcase.count, 1);

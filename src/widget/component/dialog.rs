@@ -6,7 +6,7 @@ use iced_widget::core::time::Instant;
 use iced_widget::core::widget::{self, Tree, tree};
 use iced_widget::core::{
     Background, Clipboard, Color, Element, Event, Layout, Length, Padding, Rectangle, Shell, Size,
-    Transformation, Vector, Widget, alignment, border, layout, mouse, overlay, renderer,
+    Transformation, Vector, Widget, alignment, border, layout, mouse, overlay, renderer, touch,
 };
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
@@ -259,6 +259,26 @@ where
         .style(move |theme| container_style_alpha(theme, options.alpha))
 }
 
+/// Creates a Material 3 dialog with a title, arbitrary interactive content,
+/// and actions.
+pub fn content<'a, Message, Renderer>(
+    title: impl text::IntoFragment<'a>,
+    body: impl Into<Element<'a, Message, Theme, Renderer>>,
+    actions: impl Into<Element<'a, Message, Theme, Renderer>>,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+{
+    dialog_content(
+        None,
+        title_text(title, alignment::Horizontal::Left, 1.0),
+        body.into(),
+        actions,
+        1.0,
+    )
+}
+
 /// Creates a Material 3 alert dialog with title, supporting text, and actions.
 pub fn alert<'a, Message, Renderer>(
     title: impl text::IntoFragment<'a>,
@@ -285,7 +305,18 @@ where
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    alert_content(title, supporting_text, actions, options)
+    let alpha = options.alpha;
+    let has_icon = options.icon.is_some();
+    let icon = options.icon.map(|icon| icon_text(icon, alpha));
+    let body = supporting_text_view(supporting_text, alpha).into();
+
+    dialog_content(
+        icon,
+        title_text(title, title_alignment(has_icon), alpha),
+        body,
+        actions,
+        alpha,
+    )
 }
 
 /// Creates a right-aligned Material 3 dialog actions row.
@@ -485,24 +516,22 @@ where
         .into()
 }
 
-fn alert_content<'a, Message, Renderer>(
-    title: impl text::IntoFragment<'a>,
-    supporting_text: impl text::IntoFragment<'a>,
+fn dialog_content<'a, Message, Renderer>(
+    icon: Option<Text<'a, Theme, Renderer>>,
+    title: Text<'a, Theme, Renderer>,
+    body: Element<'a, Message, Theme, Renderer>,
     actions: impl Into<Element<'a, Message, Theme, Renderer>>,
-    options: AlertOptions<'a>,
+    alpha: f32,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
-    iced_widget::core::Font: Into<Renderer::Font>,
 {
-    let alpha = options.alpha;
-    let title_alignment = title_alignment(options.icon.is_some());
     let mut content = Column::new().width(Length::Fill);
 
-    if let Some(icon) = options.icon {
+    if let Some(icon) = icon {
         content = content.push(
-            Container::new(icon_text(icon, alpha))
+            Container::new(icon)
                 .width(Length::Fill)
                 .padding(Padding {
                     top: 0.0,
@@ -514,27 +543,19 @@ where
         );
     }
 
-    content = content.push(
-        Container::new(title_text(title, title_alignment, alpha))
-            .width(Length::Fill)
-            .padding(Padding {
-                top: 0.0,
-                right: 0.0,
-                bottom: tokens::component::dialog::TITLE_BOTTOM_PADDING,
-                left: 0.0,
-            }),
-    );
+    content = content.push(Container::new(title).width(Length::Fill).padding(Padding {
+        top: 0.0,
+        right: 0.0,
+        bottom: tokens::component::dialog::TITLE_BOTTOM_PADDING,
+        left: 0.0,
+    }));
 
-    content = content.push(
-        Container::new(supporting_text_view(supporting_text, alpha))
-            .width(Length::Fill)
-            .padding(Padding {
-                top: 0.0,
-                right: 0.0,
-                bottom: tokens::component::dialog::SUPPORTING_TEXT_BOTTOM_PADDING,
-                left: 0.0,
-            }),
-    );
+    content = content.push(Container::new(body).width(Length::Fill).padding(Padding {
+        top: 0.0,
+        right: 0.0,
+        bottom: tokens::component::dialog::SUPPORTING_TEXT_BOTTOM_PADDING,
+        left: 0.0,
+    }));
 
     content = content.push(actions.into());
 
@@ -812,6 +833,8 @@ where
         } else {
             mouse::Cursor::Unavailable
         };
+        let transformed_event = transform_pointer_event(event, inverse);
+        let event = transformed_event.as_ref().unwrap_or(event);
 
         self.content.as_widget_mut().update(
             &mut tree.children[0],
@@ -906,6 +929,41 @@ where
             &(*viewport * inverse),
             translation + transformation.translation(),
         )
+    }
+}
+
+fn transform_pointer_event(event: &Event, transformation: Transformation) -> Option<Event> {
+    match event {
+        Event::Mouse(mouse::Event::CursorMoved { position }) => {
+            Some(Event::Mouse(mouse::Event::CursorMoved {
+                position: *position * transformation,
+            }))
+        }
+        Event::Touch(touch::Event::FingerPressed { id, position }) => {
+            Some(Event::Touch(touch::Event::FingerPressed {
+                id: *id,
+                position: *position * transformation,
+            }))
+        }
+        Event::Touch(touch::Event::FingerMoved { id, position }) => {
+            Some(Event::Touch(touch::Event::FingerMoved {
+                id: *id,
+                position: *position * transformation,
+            }))
+        }
+        Event::Touch(touch::Event::FingerLifted { id, position }) => {
+            Some(Event::Touch(touch::Event::FingerLifted {
+                id: *id,
+                position: *position * transformation,
+            }))
+        }
+        Event::Touch(touch::Event::FingerLost { id, position }) => {
+            Some(Event::Touch(touch::Event::FingerLost {
+                id: *id,
+                position: *position * transformation,
+            }))
+        }
+        _ => None,
     }
 }
 
