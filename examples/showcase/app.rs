@@ -950,6 +950,33 @@ mod tests {
     }
 
     #[test]
+    fn scrollable_pages_reserve_the_floating_controls_safe_area() {
+        let mut showcase = Showcase::default();
+
+        let closed_inset = pages::floating_content_inset(&showcase);
+        assert_eq!(
+            closed_inset,
+            theme_picker::FLOATING_MARGIN
+                + material::tokens::component::fab::CONTAINER_HEIGHT
+                + material::tokens::component::snackbar::BOTTOM_MARGIN
+                - material::widget::page::PADDING
+        );
+
+        let start = Instant::now();
+        showcase.theme_controller.update(
+            theme_picker::ThemeAction::TogglePicker,
+            showcase.window_size,
+            showcase_floating_bottom_margin(showcase.adaptive_navigation_layout()),
+            start,
+        );
+        let _ = showcase
+            .theme_controller
+            .advance(start + iced::time::Duration::from_secs(1));
+
+        assert!(pages::floating_content_inset(&showcase) > closed_inset);
+    }
+
+    #[test]
     fn selecting_current_theme_does_not_start_animation() {
         let mut showcase = Showcase::default();
 

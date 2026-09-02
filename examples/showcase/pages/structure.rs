@@ -1,4 +1,5 @@
-use iced::alignment;
+use iced::widget::{Column, Row, Space, Stack};
+use iced::{Length, alignment};
 use material::widget::page;
 use material_ui_rs as material;
 
@@ -164,26 +165,59 @@ fn bottom_sheets(state: &Showcase) -> material::Element<'static, Message> {
 
 fn side_sheets(state: &Showcase) -> material::Element<'static, Message> {
     let width = page::preview_width(state.window_size.width);
-    let standard = page::aligned_preview_pane(
-        alignment::Horizontal::Right,
-        material::widget::sheet::standard_side(side_sheet_content(
-            "Standard side sheet",
-            "Coexists with the page while supporting content remains visible.",
-        )),
+    let standard = page::preview_pane(
+        Row::new()
+            .push(side_sheet_preview_content())
+            .push(material::widget::sheet::standard_side(side_sheet_content(
+                "Standard side sheet",
+                "Coexists with the page while supporting content remains visible.",
+            )))
+            .width(Length::Fill)
+            .height(Length::Fill),
     );
 
-    let modal = page::preview_pane(material::widget::sheet::modal_side_overlay(
-        material::widget::sheet::Side::Right,
-        side_sheet_content(
-            "Modal side sheet",
-            "Uses a scrim and keeps focus on a temporary side task.",
-        ),
-    ));
+    let modal = page::preview_pane(
+        Stack::with_children([
+            side_sheet_preview_content(),
+            material::widget::sheet::modal_side_overlay(
+                material::widget::sheet::Side::Right,
+                side_sheet_content(
+                    "Modal side sheet",
+                    "Uses a scrim and keeps focus on a temporary side task.",
+                ),
+            )
+            .into(),
+        ])
+        .width(Length::Fill)
+        .height(Length::Fill),
+    );
 
     page::component_stack([
         page::centered_preview(width, standard).into(),
         page::centered_preview(width, modal).into(),
     ])
+    .into()
+}
+
+fn side_sheet_preview_content() -> material::Element<'static, Message> {
+    let supporting_items = material::widget::list::group([
+        material::widget::list::one_line_icon("description", "Project brief").into(),
+        material::widget::list::one_line_icon("schedule", "Recent activity").into(),
+    ]);
+
+    material::widget::container::surface_container_highest(
+        Column::new()
+            .push(material::text::title_medium("Supporting page"))
+            .push(material::text::body_medium(
+                "Primary content remains visible beside the standard sheet.",
+            ))
+            .push(Space::new().height(Length::Fixed(page::STACK_SPACING)))
+            .push(supporting_items)
+            .spacing(page::COMPACT_STACK_SPACING),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .padding(page::CARD_PADDING)
     .into()
 }
 
@@ -215,22 +249,32 @@ fn side_sheet_content(
     title: &'static str,
     supporting: &'static str,
 ) -> material::Element<'static, Message> {
-    use material::widget::button::{self, ButtonVariant};
+    use material::widget::button::{self, ButtonVariant, IconButtonVariant};
 
-    material::widget::sheet::side_content(page::compact_stack([
-        material::text::title_medium(title).into(),
-        material::text::body_medium(supporting).into(),
-        page::row([
-            button::action(
-                button::button("Dismiss", ButtonVariant::Text),
-                Message::Decrement,
-            ),
-            button::action(
-                button::button("Apply", ButtonVariant::Filled),
-                Message::Increment,
-            ),
-        ])
-        .into(),
-    ]))
+    let header = Row::new()
+        .push(material::text::title_medium(title).width(Length::Fill))
+        .push(button::action(
+            button::icon_button("close", IconButtonVariant::Standard),
+            Message::Decrement,
+        ))
+        .align_y(alignment::Vertical::Center);
+    let actions = Row::new()
+        .push(Space::new().width(Length::Fill))
+        .push(button::action(
+            button::button("Apply", ButtonVariant::Filled),
+            Message::Increment,
+        ))
+        .spacing(page::ROW_SPACING)
+        .align_y(alignment::Vertical::Center);
+
+    material::widget::sheet::side_content(
+        Column::new()
+            .push(header)
+            .push(material::text::body_medium(supporting))
+            .push(Space::new().height(Length::Fill))
+            .push(actions)
+            .spacing(page::COMPACT_STACK_SPACING)
+            .height(Length::Fill),
+    )
     .into()
 }
