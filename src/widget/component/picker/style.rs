@@ -25,20 +25,55 @@ fn date_header_style(theme: &Theme) -> iced_widget::container::Style {
 
 fn date_input_panel_style(theme: &Theme, content_alpha: f32) -> iced_widget::container::Style {
     let colors = theme.colors();
-    let background_alpha = date_input_panel_background_alpha(content_alpha);
 
     iced_widget::container::Style {
-        background: (background_alpha > 0.0).then_some(Background::Color(alpha_color(
-            colors.surface.container.high,
-            background_alpha,
-        ))),
+        background: None,
         text_color: Some(alpha_color(colors.surface.text, content_alpha)),
         ..Default::default()
     }
 }
 
-fn date_input_panel_background_alpha(content_alpha: f32) -> f32 {
-    if content_alpha > 0.0 { 1.0 } else { 0.0 }
+fn date_range_scrollable_style(
+    theme: &Theme,
+    status: iced_widget::scrollable::Status,
+    content_alpha: f32,
+) -> iced_widget::scrollable::Style {
+    let content_alpha = content_alpha.clamp(0.0, 1.0);
+    let mut style = crate::style::scrollable::default(theme, status);
+
+    style.container.background = None;
+    style.container.text_color = style
+        .container
+        .text_color
+        .map(|color| alpha_color(color, content_alpha));
+    style.container.border.color = alpha_color(style.container.border.color, content_alpha);
+    style.container.shadow.color = alpha_color(style.container.shadow.color, content_alpha);
+    style.vertical_rail = scrollable_rail_alpha(style.vertical_rail, content_alpha);
+    style.horizontal_rail = scrollable_rail_alpha(style.horizontal_rail, content_alpha);
+    style.gap = style
+        .gap
+        .map(|background| background.scale_alpha(content_alpha));
+    style.auto_scroll.background = style.auto_scroll.background.scale_alpha(content_alpha);
+    style.auto_scroll.border.color =
+        alpha_color(style.auto_scroll.border.color, content_alpha);
+    style.auto_scroll.shadow.color =
+        alpha_color(style.auto_scroll.shadow.color, content_alpha);
+    style.auto_scroll.icon = alpha_color(style.auto_scroll.icon, content_alpha);
+
+    style
+}
+
+fn scrollable_rail_alpha(
+    mut rail: iced_widget::scrollable::Rail,
+    content_alpha: f32,
+) -> iced_widget::scrollable::Rail {
+    rail.background = rail
+        .background
+        .map(|background| background.scale_alpha(content_alpha));
+    rail.border.color = alpha_color(rail.border.color, content_alpha);
+    rail.scroller.background = rail.scroller.background.scale_alpha(content_alpha);
+    rail.scroller.border.color = alpha_color(rail.scroller.border.color, content_alpha);
+    rail
 }
 
 fn year_picker_panel_style(theme: &Theme, content_alpha: f32) -> iced_widget::container::Style {

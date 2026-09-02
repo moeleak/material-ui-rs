@@ -2931,6 +2931,7 @@ where
 
     Container::new(content)
         .width(Length::Fill)
+        .height(Length::Fixed(date_display_input_height()))
         .padding(Padding {
             top: 10.0,
             right: 24.0,
@@ -2983,6 +2984,7 @@ where
             .align_y(alignment::Vertical::Top),
     )
     .width(Length::Fill)
+    .height(Length::Fixed(date_display_input_height()))
     .padding(Padding {
         top: 10.0,
         right: 24.0,
@@ -3393,7 +3395,8 @@ where
         Scrollable::new(column)
             .id(state.months_scroll_id.clone())
             .height(Length::Fixed(height))
-            .width(Length::Fill),
+            .width(Length::Fill)
+            .style(move |theme, status| date_range_scrollable_style(theme, status, content_alpha)),
     )
     .height(Length::Fixed(height))
     .into()

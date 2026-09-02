@@ -128,12 +128,13 @@ where
         cursor: mouse::Cursor,
         viewport: &Rectangle,
     ) {
-        let Some(viewport) = layout.bounds().intersection(viewport) else {
+        let translation = self.translation;
+        let Some(layer_bounds) = translated_layer_bounds(layout.bounds(), viewport, translation)
+        else {
             return;
         };
-        let translation = self.translation;
 
-        renderer.with_layer(viewport, |renderer| {
+        renderer.with_layer(layer_bounds, |renderer| {
             renderer.with_translation(translation, |renderer| {
                 self.content.as_widget().draw(
                     tree,
@@ -142,7 +143,7 @@ where
                     style,
                     layout,
                     cursor - translation,
-                    &(viewport - translation),
+                    &(*viewport - translation),
                 );
             });
         });
@@ -164,4 +165,12 @@ where
             translation + self.translation,
         )
     }
+}
+
+fn translated_layer_bounds(
+    bounds: Rectangle,
+    viewport: &Rectangle,
+    translation: Vector,
+) -> Option<Rectangle> {
+    (bounds + translation).intersection(viewport)
 }

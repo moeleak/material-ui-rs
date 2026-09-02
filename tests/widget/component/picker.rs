@@ -742,10 +742,7 @@ fn date_display_alpha_scales_calendar_control_styles() {
     let hidden_input = date_input_panel_style(&theme, 0.0);
     let entering_input = date_input_panel_style(&theme, 0.01);
     assert_eq!(hidden_input.background, None);
-    assert_eq!(
-        entering_input.background,
-        Some(Background::Color(colors.surface.container.high))
-    );
+    assert_eq!(entering_input.background, None);
 
     assert_eq!(year_picker_content_alpha(0.0, true), 0.6);
     assert_eq!(year_picker_content_alpha(1.0, true), 1.0);
@@ -756,6 +753,59 @@ fn date_display_alpha_scales_calendar_control_styles() {
             colors.surface.container.high,
             0.5
         )))
+    );
+}
+
+#[test]
+fn date_range_scrollable_uses_picker_background_and_fades_its_scroller() {
+    let theme = Theme::Light;
+    let status = iced_widget::scrollable::Status::Active {
+        is_horizontal_scrollbar_disabled: true,
+        is_vertical_scrollbar_disabled: false,
+    };
+    let base = crate::style::scrollable::default(&theme, status);
+    let faded = date_range_scrollable_style(&theme, status, 0.25);
+
+    assert_eq!(faded.container.background, None);
+    assert_eq!(
+        faded.vertical_rail.scroller.background,
+        base.vertical_rail.scroller.background.scale_alpha(0.25)
+    );
+}
+
+#[test]
+fn date_input_panels_fill_their_animated_target_height() {
+    let date = DatePickerState::new(Some(Date::new(2026, 7, 4).unwrap()));
+    let date_input: Element<'_, DatePickerAction, Theme, iced_widget::Renderer> =
+        date_input_content(&date, |action| action, 1.0);
+    assert_eq!(
+        date_input.as_widget().size().height,
+        Length::Fixed(date_display_input_height())
+    );
+
+    let range = DateRangePickerState::new(
+        Some(Date::new(2026, 7, 4).unwrap()),
+        Some(Date::new(2026, 7, 10).unwrap()),
+    );
+    let range_input: Element<'_, DateRangePickerAction, Theme, iced_widget::Renderer> =
+        date_range_input_content(&range, |action| action, 1.0);
+    assert_eq!(
+        range_input.as_widget().size().height,
+        Length::Fixed(date_display_input_height())
+    );
+}
+
+#[test]
+fn translated_picker_content_clips_at_its_visual_position() {
+    let bounds = Rectangle::new(Point::new(10.0, 20.0), Size::new(100.0, 80.0));
+    let viewport = Rectangle::new(Point::ORIGIN, Size::new(200.0, 120.0));
+
+    assert_eq!(
+        translated_layer_bounds(bounds, &viewport, Vector::new(0.0, 40.0)),
+        Some(Rectangle::new(
+            Point::new(10.0, 60.0),
+            Size::new(100.0, 60.0)
+        ))
     );
 }
 
