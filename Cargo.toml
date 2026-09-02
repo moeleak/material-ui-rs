@@ -181,3 +181,10 @@ unused_results = "deny"
 
 [lints.rustdoc]
 broken_intra_doc_links = "forbid"
+
+# iced 0.14 uses wgpu 27, whose Metal backend still depends on block 0.1.6.
+# This pinned patch keeps the ABI symbol opaque without declaring an
+# uninhabited extern static. Remove it once iced ships on wgpu 29 or newer.
+[patch.crates-io.block]
+git = "https://github.com/Dicklesworthstone/rust-block.git"
+rev = "b39ae859d1ee8e8cb5eef6a516471f1578d26b96"
