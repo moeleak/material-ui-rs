@@ -403,7 +403,7 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             state.theme_controller.update(
                 action,
                 state.window_size,
-                theme_picker::bottom_margin(state.adaptive_navigation_layout()),
+                showcase_floating_bottom_margin(state.adaptive_navigation_layout()),
                 Instant::now(),
             );
             Task::none()
@@ -618,25 +618,25 @@ fn subscription(state: &Showcase) -> Subscription<Message> {
 
 fn view(state: &Showcase) -> material::Element<'_, Message> {
     let now = Instant::now();
-    let page_content = material::widget::snackbar::host(
+    let navigation_layout = state.adaptive_navigation_layout();
+    let page_content = material::widget::snackbar::host_with(
         pages::view(state),
         &state.snackbar,
         now,
         "Photo archived",
         "Undo",
         Message::SnackbarUndo,
+        snackbar_host_options(&state.theme_controller),
     );
 
     let navigation_suite = navigation::suite(&NAV_DESTINATIONS, &state.navigation)
-        .layout(state.adaptive_navigation_layout())
-        .with_menu("Showcase", Message::MenuPressed);
-    #[cfg(target_os = "android")]
-    let navigation_suite =
-        navigation_suite.compact_navigation(navigation::CompactNavigation::ModalDrawer);
+        .layout(navigation_layout)
+        .with_menu("Showcase", Message::MenuPressed)
+        .compact_navigation(showcase_compact_navigation());
     let content = navigation_suite.view(Message::Navigate, page_content);
     let content = state.theme_controller.controls_over(
         content,
-        theme_picker::bottom_margin(state.adaptive_navigation_layout()),
+        showcase_floating_bottom_margin(navigation_layout),
         Message::ThemeChanged,
     );
 
@@ -648,6 +648,28 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
     );
 
     state.theme_controller.reveal_over(content, now)
+}
+
+fn snackbar_host_options(
+    theme_controller: &theme_picker::ThemeController,
+) -> material::widget::snackbar::HostOptions {
+    material::widget::snackbar::HostOptions::default().bottom_margin(
+        theme_picker::FLOATING_MARGIN
+            + theme_controller.floating_clearance()
+            + material::tokens::component::snackbar::BOTTOM_MARGIN,
+    )
+}
+
+fn showcase_floating_bottom_margin(layout: navigation::AdaptiveLayout) -> f32 {
+    theme_picker::bottom_margin_for(layout, showcase_compact_navigation())
+}
+
+fn showcase_compact_navigation() -> navigation::CompactNavigation {
+    if cfg!(target_os = "android") {
+        navigation::CompactNavigation::ModalDrawer
+    } else {
+        navigation::CompactNavigation::NavigationBar
+    }
 }
 
 fn dialog_account_input_id() -> iced::widget::Id {
@@ -885,6 +907,46 @@ mod tests {
             theme_picker::bottom_margin(navigation::AdaptiveLayout::NavigationRail),
             theme_picker::FLOATING_MARGIN
         );
+        assert_eq!(
+            theme_picker::bottom_margin_for(
+                navigation::AdaptiveLayout::NavigationBar,
+                navigation::CompactNavigation::ModalDrawer,
+            ),
+            theme_picker::FLOATING_MARGIN
+        );
+        assert_eq!(
+            snackbar_host_options(&theme_picker::ThemeController::default()).bottom_margin,
+            theme_picker::FLOATING_MARGIN
+                + material::tokens::component::fab::CONTAINER_HEIGHT
+                + material::tokens::component::snackbar::BOTTOM_MARGIN
+        );
+    }
+
+    #[test]
+    fn snackbar_stays_above_closed_and_open_theme_controls() {
+        let mut controller = theme_picker::ThemeController::default();
+        let assert_clearance = |controller: &theme_picker::ThemeController| {
+            let floating_top_from_content_bottom =
+                theme_picker::FLOATING_MARGIN + controller.floating_clearance();
+
+            assert_eq!(
+                snackbar_host_options(controller).bottom_margin - floating_top_from_content_bottom,
+                material::tokens::component::snackbar::BOTTOM_MARGIN
+            );
+        };
+
+        assert_clearance(&controller);
+
+        let start = Instant::now();
+        controller.update(
+            theme_picker::ThemeAction::TogglePicker,
+            Size::new(360.0, 800.0),
+            theme_picker::FLOATING_MARGIN,
+            start,
+        );
+        let _ = controller.advance(start + iced::time::Duration::from_secs(1));
+
+        assert_clearance(&controller);
     }
 
     #[test]
@@ -944,7 +1006,7 @@ mod tests {
 
         let expected_origin = theme_picker::swatch_center(
             showcase.window_size,
-            theme_picker::bottom_margin(showcase.adaptive_navigation_layout()),
+            showcase_floating_bottom_margin(showcase.adaptive_navigation_layout()),
             theme_picker::MaterialColor::Blue,
         );
         let animation = showcase

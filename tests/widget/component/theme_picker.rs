@@ -43,6 +43,29 @@ fn bottom_margin_accounts_for_adaptive_navigation_clearance() {
         bottom_margin(navigation::AdaptiveLayout::NavigationRail),
         FLOATING_MARGIN
     );
+    assert_eq!(
+        bottom_margin_for(
+            navigation::AdaptiveLayout::NavigationBar,
+            navigation::CompactNavigation::ModalDrawer,
+        ),
+        FLOATING_MARGIN
+    );
+}
+
+#[test]
+fn floating_clearance_tracks_the_revealed_picker_panel() {
+    let start = Instant::now();
+    let mut state = State::new();
+
+    assert_eq!(state.floating_clearance(), PALETTE_BUTTON_SIZE);
+
+    state.open_at(start);
+    let _ = state.advance(start + duration_ms(PICKER_PANEL_TRANSITION_DURATION_MS));
+
+    assert_eq!(
+        state.floating_clearance(),
+        PALETTE_BUTTON_SIZE + picker_panel_slot_height()
+    );
 }
 
 #[test]

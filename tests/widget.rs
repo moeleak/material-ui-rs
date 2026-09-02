@@ -1522,6 +1522,17 @@ fn material_snackbar_constructors_compile_to_elements() {
         "Undo",
         Message::Pressed,
     );
+
+    let content: TestElement<'_> = Text::new("Content above FAB").into();
+    let _: TestElement<'_> = snackbar::host_with(
+        content,
+        &snackbar::Transition::default(),
+        iced_widget::core::time::Instant::now(),
+        "Archived",
+        "Undo",
+        Message::Pressed,
+        snackbar::HostOptions::default().above_fab(tokens::component::fab::CONTAINER_HEIGHT, 24.0),
+    );
 }
 
 #[test]

@@ -45,12 +45,26 @@ const THEME_REVEAL_EDGE_FADE_THRESHOLD: f32 = 0.75;
 /// Returns the floating control bottom margin after accounting for an adaptive
 /// navigation layout.
 pub fn bottom_margin(layout: navigation::AdaptiveLayout) -> f32 {
+    bottom_margin_for(layout, navigation::CompactNavigation::NavigationBar)
+}
+
+/// Returns the floating control bottom margin for the actual adaptive
+/// navigation presentation.
+pub fn bottom_margin_for(
+    layout: navigation::AdaptiveLayout,
+    compact_navigation: navigation::CompactNavigation,
+) -> f32 {
     FLOATING_MARGIN
-        + match layout {
-            navigation::AdaptiveLayout::NavigationBar => {
-                tokens::component::navigation_bar::CONTAINER_HEIGHT
-            }
-            navigation::AdaptiveLayout::NavigationRail => 0.0,
+        + match (layout, compact_navigation) {
+            (
+                navigation::AdaptiveLayout::NavigationBar,
+                navigation::CompactNavigation::NavigationBar,
+            ) => tokens::component::navigation_bar::CONTAINER_HEIGHT,
+            (
+                navigation::AdaptiveLayout::NavigationBar,
+                navigation::CompactNavigation::ModalDrawer,
+            )
+            | (navigation::AdaptiveLayout::NavigationRail, _) => 0.0,
         }
 }
 
@@ -74,6 +88,12 @@ impl State {
 
     pub const fn is_animating(self) -> bool {
         self.panel_reveal.is_animating()
+    }
+
+    /// Returns the vertical space occupied by the floating button and the
+    /// currently revealed picker panel above its bottom margin.
+    pub fn floating_clearance(self) -> f32 {
+        PALETTE_BUTTON_SIZE + picker_panel_reveal_height(self.reveal())
     }
 
     pub fn advance(&mut self, now: Instant) -> bool {
@@ -190,6 +210,11 @@ impl ThemeController {
 
     pub const fn is_animating(&self) -> bool {
         self.transition.is_some() || self.picker.is_animating()
+    }
+
+    /// Returns the vertical space occupied by the floating theme controls.
+    pub fn floating_clearance(&self) -> f32 {
+        self.picker.floating_clearance()
     }
 
     pub fn update(

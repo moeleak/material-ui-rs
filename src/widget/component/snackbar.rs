@@ -264,6 +264,39 @@ impl ActionOptions {
     }
 }
 
+/// Layout options for a snackbar host.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HostOptions {
+    /// Distance between the snackbar bottom edge and the host bottom edge.
+    pub bottom_margin: f32,
+}
+
+impl Default for HostOptions {
+    fn default() -> Self {
+        Self {
+            bottom_margin: tokens::component::snackbar::BOTTOM_MARGIN,
+        }
+    }
+}
+
+impl HostOptions {
+    /// Sets the distance between the snackbar and the host bottom edge.
+    pub fn bottom_margin(mut self, bottom_margin: f32) -> Self {
+        self.bottom_margin = bottom_margin.max(0.0);
+        self
+    }
+
+    /// Places the snackbar above a floating action button, matching the
+    /// vertical stacking used by Material 3 Compose `Scaffold` while
+    /// preserving the snackbar's standard outer margin.
+    pub fn above_fab(mut self, fab_height: f32, fab_bottom_margin: f32) -> Self {
+        self.bottom_margin = fab_height.max(0.0)
+            + fab_bottom_margin.max(0.0)
+            + tokens::component::snackbar::BOTTOM_MARGIN;
+        self
+    }
+}
+
 /// Creates a snackbar surface.
 pub fn surface<'a, Message, Renderer>(
     message: impl text::IntoFragment<'a>,
@@ -403,9 +436,23 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + 'a,
 {
+    overlay_with(content, snackbar, translation_y, HostOptions::default())
+}
+
+/// Places snackbar content above app content with custom host layout options.
+pub fn overlay_with<'a, Message, Renderer>(
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    snackbar: impl Into<Element<'a, Message, Theme, Renderer>>,
+    translation_y: f32,
+    options: HostOptions,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
     Stack::with_children([
         content.into(),
-        floating_layer(snackbar, translation_y).into(),
+        floating_layer(snackbar, translation_y, options.bottom_margin).into(),
     ])
     .width(Length::Fill)
     .height(Length::Fill)
@@ -425,13 +472,39 @@ where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
 {
+    host_with(
+        content,
+        transition,
+        now,
+        message,
+        action_label,
+        on_action,
+        HostOptions::default(),
+    )
+}
+
+/// Places an Android-animated single-line snackbar over content with custom
+/// host layout options.
+pub fn host_with<'a, Message, Renderer>(
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    transition: &Transition,
+    now: Instant,
+    message: impl text::IntoFragment<'a>,
+    action_label: impl text::IntoFragment<'a>,
+    on_action: Message,
+    options: HostOptions,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+{
     if !transition.is_active() {
         return content.into();
     }
 
     let alpha = transition.content_alpha(now);
-    let hidden_distance = tokens::component::snackbar::WITH_SINGLE_LINE_CONTAINER_HEIGHT
-        + tokens::component::snackbar::BOTTOM_MARGIN;
+    let hidden_distance =
+        tokens::component::snackbar::WITH_SINGLE_LINE_CONTAINER_HEIGHT + options.bottom_margin;
     let translation_y = transition.translation_y(now, hidden_distance);
     let snackbar = surface(
         message,
@@ -443,7 +516,7 @@ where
         Options::default().content_alpha(alpha),
     );
 
-    overlay(content, snackbar, translation_y)
+    overlay_with(content, snackbar, translation_y, options)
 }
 
 fn surface_container<'a, Message, Renderer>(
@@ -494,6 +567,7 @@ where
 fn floating_layer<'a, Message, Renderer>(
     snackbar: impl Into<Element<'a, Message, Theme, Renderer>>,
     translation_y: f32,
+    bottom_margin: f32,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Message: 'a,
@@ -509,7 +583,7 @@ where
         .padding(Padding {
             top: 0.0,
             right: tokens::component::snackbar::HORIZONTAL_MARGIN,
-            bottom: tokens::component::snackbar::BOTTOM_MARGIN,
+            bottom: bottom_margin,
             left: tokens::component::snackbar::HORIZONTAL_MARGIN,
         })
         .align_x(alignment::Horizontal::Center)

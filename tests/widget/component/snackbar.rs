@@ -1,6 +1,26 @@
 use super::*;
 
 #[test]
+fn snackbar_host_defaults_to_material_bottom_margin() {
+    assert_eq!(
+        HostOptions::default().bottom_margin,
+        tokens::component::snackbar::BOTTOM_MARGIN
+    );
+}
+
+#[test]
+fn snackbar_host_preserves_material_margin_above_fab_like_compose_scaffold() {
+    let fab_height = tokens::component::fab::CONTAINER_HEIGHT;
+    let fab_bottom_margin = 24.0;
+    let options = HostOptions::default().above_fab(fab_height, fab_bottom_margin);
+
+    assert_eq!(
+        options.bottom_margin,
+        fab_bottom_margin + fab_height + tokens::component::snackbar::BOTTOM_MARGIN
+    );
+}
+
+#[test]
 fn snackbar_transition_matches_android_slide_and_content_fade_timing() {
     let start = Instant::now();
     let mut transition = Transition::default();
