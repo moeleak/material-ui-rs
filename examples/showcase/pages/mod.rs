@@ -38,7 +38,7 @@ pub(super) fn floating_content_inset(state: &Showcase) -> f32 {
 }
 
 fn header(page: ShowcasePage) -> material::Element<'static, Message> {
-    material::widget::page::header("material-ui-rs 0.5.2", page_label(page)).into()
+    material::widget::page::header("material-ui-rs 0.5.3", page_label(page)).into()
 }
 
 fn page_label(page: ShowcasePage) -> &'static str {
