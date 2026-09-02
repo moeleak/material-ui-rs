@@ -644,7 +644,7 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
         content,
         &state.login_dialog,
         now,
-        login_dialog(state),
+        login_dialog(state, state.login_dialog.alpha(now)),
     );
 
     state.theme_controller.reveal_over(content, now)
@@ -654,33 +654,47 @@ fn dialog_account_input_id() -> iced::widget::Id {
     iced::widget::Id::new("showcase-login-account")
 }
 
-fn login_dialog(state: &Showcase) -> material::Element<'_, Message> {
+fn login_dialog(state: &Showcase, alpha: f32) -> material::Element<'_, Message> {
     let body = iced::widget::Column::new()
         .spacing(material::widget::page::STACK_SPACING)
         .push(
             material::widget::text_input::outlined("Account", &state.dialog_account)
                 .id(dialog_account_input_id())
-                .on_input(Message::DialogAccountChanged),
+                .on_input(Message::DialogAccountChanged)
+                .alpha(alpha),
         )
         .push(
             material::widget::text_input::outlined("Password", &state.dialog_password)
                 .secure(true)
                 .on_input(Message::DialogPasswordChanged)
-                .on_submit(Message::DialogConfirmed),
+                .on_submit(Message::DialogConfirmed)
+                .alpha(alpha),
         )
-        .push(material::widget::checkbox::standard(
+        .push(material::widget::checkbox::standard_with_alpha(
             state.dialog_remember_password,
             "Remember password",
             Message::DialogRememberPasswordChanged,
+            alpha,
         ));
 
-    material::widget::dialog::content(
+    let options = material::widget::dialog::AlphaOptions::default().alpha(alpha);
+
+    material::widget::dialog::content_with(
         "Sign in",
         body,
         material::widget::dialog::actions([
-            material::widget::dialog::action_button("Cancel", Message::DialogDismissed),
-            material::widget::dialog::action_button("Log in", Message::DialogConfirmed),
+            material::widget::dialog::action_button_with(
+                "Cancel",
+                Message::DialogDismissed,
+                options,
+            ),
+            material::widget::dialog::action_button_with(
+                "Log in",
+                Message::DialogConfirmed,
+                options,
+            ),
         ]),
+        options,
     )
     .into()
 }

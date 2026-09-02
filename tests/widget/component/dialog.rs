@@ -124,6 +124,11 @@ fn dialog_transition_matches_android_platform_timing() {
     assert_eq!(transition.scale(shown), 1.0);
     assert_eq!(transition.alpha(shown), 1.0);
 
+    let faded = shown + duration_ms(tokens::component::dialog::ALPHA_ANIMATION_DURATION_MS);
+    assert_eq!(transition.alpha(faded), 0.0);
+    assert!(transition.scale(faded) > tokens::component::dialog::EXIT_SCALE_TO);
+    assert_eq!(transition.phase(), TransitionPhase::Dismissing);
+
     let hidden = shown + duration_ms(tokens::component::dialog::SCALE_ANIMATION_DURATION_MS);
     assert_eq!(
         transition.scale(hidden),

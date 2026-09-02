@@ -270,12 +270,31 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
 {
+    content_with(title, body, actions, AlphaOptions::default())
+}
+
+/// Creates a Material 3 dialog with arbitrary interactive content and custom
+/// visual options.
+///
+/// The alpha applies to the dialog-owned surface and title. Custom body and
+/// action widgets should use the same alpha when participating in a dialog
+/// transition.
+pub fn content_with<'a, Message, Renderer>(
+    title: impl text::IntoFragment<'a>,
+    body: impl Into<Element<'a, Message, Theme, Renderer>>,
+    actions: impl Into<Element<'a, Message, Theme, Renderer>>,
+    options: AlphaOptions,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+{
     dialog_content(
         None,
-        title_text(title, alignment::Horizontal::Left, 1.0),
+        title_text(title, alignment::Horizontal::Left, options.alpha),
         body.into(),
         actions,
-        1.0,
+        options.alpha,
     )
 }
 

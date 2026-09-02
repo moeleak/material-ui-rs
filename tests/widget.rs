@@ -958,6 +958,20 @@ fn material_dialog_constructors_compile_to_elements() {
     ];
     let _: TestElement<'_> = dialog::content("Sign in", body, dialog::actions(actions)).into();
 
+    let body: TestElement<'_> = Text::new("Interactive content").into();
+    let actions: [TestElement<'_>; 1] = [dialog::action_button_with(
+        "Done",
+        Message::Pressed,
+        dialog::AlphaOptions::default().alpha(0.5),
+    )];
+    let _: TestElement<'_> = dialog::content_with(
+        "Animated content",
+        body,
+        dialog::actions(actions),
+        dialog::AlphaOptions::default().alpha(0.5),
+    )
+    .into();
+
     let actions: [TestElement<'_>; 2] = [
         dialog::action("Cancel").on_press(Message::Pressed).into(),
         dialog::action("OK").on_press(Message::Pressed).into(),
@@ -1622,6 +1636,7 @@ fn material_tooltip_constructor_compiles_to_element() {
 #[test]
 fn material_selection_constructors_compile_to_elements() {
     let _: TestElement<'_> = checkbox::standard(true, "Enable actions", toggled);
+    let _: TestElement<'_> = checkbox::standard_with_alpha(true, "Fading action", toggled, 0.5);
     let _: TestElement<'_> = toggler::standard(true, "Dark theme", toggled);
     let _: TestElement<'_> = toggler::standard_with_origin(true, "Dark theme", toggled_at);
     let controller = theme_picker::ThemeController::new(theme_picker::MaterialColor::Purple, true);

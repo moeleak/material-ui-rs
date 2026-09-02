@@ -21,6 +21,7 @@ where
     text_wrapping: text::Wrapping,
     font: Option<Renderer::Font>,
     style: StyleFn<'a>,
+    content_alpha: f32,
 }
 
 impl<Message, Renderer> std::fmt::Debug for Checkbox<'_, Message, Renderer>
@@ -37,6 +38,7 @@ where
             .field("spacing", &self.spacing)
             .field("text_size", &self.text_size)
             .field("text_line_height", &self.text_line_height)
+            .field("content_alpha", &self.content_alpha)
             .finish_non_exhaustive()
     }
 }
@@ -61,6 +63,7 @@ where
             text_wrapping: text::Wrapping::default(),
             font: None,
             style: Box::new(checkbox_style::default),
+            content_alpha: 1.0,
         }
     }
 
@@ -126,6 +129,19 @@ where
         self.style = Box::new(style);
         self
     }
+
+    pub fn alpha(mut self, content_alpha: f32) -> Self {
+        self.content_alpha = content_alpha.clamp(0.0, 1.0);
+        self
+    }
+}
+
+fn checkbox_style_alpha(mut style: iced_checkbox::Style, alpha: f32) -> iced_checkbox::Style {
+    style.background = style.background.scale_alpha(alpha);
+    style.icon_color = alpha_color(style.icon_color, alpha);
+    style.border = alpha_border(style.border, alpha);
+    style.text_color = style.text_color.map(|color| alpha_color(color, alpha));
+    style
 }
 
 impl<Message, Renderer> Checkbox<'_, Message, Renderer>
@@ -408,9 +424,11 @@ where
                 iced_checkbox::Status::Disabled { is_checked: true }
             }
         };
-        let current_style = (self.style)(theme, status);
-        let unchecked_style = (self.style)(theme, unchecked_status);
-        let checked_style = (self.style)(theme, checked_status);
+        let current_style = checkbox_style_alpha((self.style)(theme, status), self.content_alpha);
+        let unchecked_style =
+            checkbox_style_alpha((self.style)(theme, unchecked_status), self.content_alpha);
+        let checked_style =
+            checkbox_style_alpha((self.style)(theme, checked_status), self.content_alpha);
 
         let selection = state.position.value.clamp(0.0, 1.0);
         let opacity = state.color.value.clamp(0.0, 1.0);
@@ -538,7 +556,29 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + core_svg::Renderer + 'a,
 {
-    Container::new(control(is_checked).label(label).on_toggle(on_toggle))
-        .center_y(Length::Fixed(tokens::component::checkbox::STATE_LAYER_SIZE))
-        .into()
+    standard_with_alpha(is_checked, label, on_toggle, 1.0)
 }
+
+pub fn standard_with_alpha<'a, Message, Renderer>(
+    is_checked: bool,
+    label: impl text::IntoFragment<'a>,
+    on_toggle: impl Fn(bool) -> Message + 'a,
+    alpha: f32,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + core_svg::Renderer + 'a,
+{
+    Container::new(
+        control(is_checked)
+            .label(label)
+            .on_toggle(on_toggle)
+            .alpha(alpha),
+    )
+    .center_y(Length::Fixed(tokens::component::checkbox::STATE_LAYER_SIZE))
+    .into()
+}
+
+#[cfg(test)]
+#[path = "../../../tests/widget/component/checkbox.rs"]
+mod tests;
