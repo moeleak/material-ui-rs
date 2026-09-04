@@ -568,6 +568,8 @@ pub struct Suite<'a, Id> {
     state: &'a NavigationState<Id>,
     layout: AdaptiveLayout,
     window_size: Option<Size>,
+    insets: Padding,
+    navigation_bar_visible: bool,
 }
 
 impl<'a, Id> Suite<'a, Id> {
@@ -582,6 +584,8 @@ impl<'a, Id> Suite<'a, Id> {
             state,
             layout: AdaptiveLayout::NavigationRail,
             window_size: None,
+            insets: Padding::ZERO,
+            navigation_bar_visible: true,
         }
     }
 
@@ -602,6 +606,24 @@ impl<'a, Id> Suite<'a, Id> {
     pub fn dimensions(mut self, width: f32, height: f32) -> Self {
         self.layout = adaptive_layout(width, height);
         self.window_size = Some(Size::new(width, height));
+        self
+    }
+
+    /// Reserves safe-area space in logical pixels, consuming each edge once.
+    ///
+    /// A visible bottom bar paints behind its bottom and horizontal insets while
+    /// keeping its items above them. Other layouts inset the complete shell.
+    /// Pass already combined system and keyboard insets; do not also pad the parent.
+    pub fn insets(mut self, insets: Padding) -> Self {
+        self.insets = insets;
+        self
+    }
+
+    /// Shows or hides the bottom navigation bar without leaving reserved space.
+    ///
+    /// Defaults to `true`. This does not hide a rail or a compact modal drawer.
+    pub fn navigation_bar_visible(mut self, visible: bool) -> Self {
+        self.navigation_bar_visible = visible;
         self
     }
 
@@ -635,12 +657,14 @@ impl<'a, Id> Suite<'a, Id> {
         Font: Into<Renderer::Font>,
         F: Fn(Id) -> Message + Clone + 'a,
     {
-        view_for_layout(
+        view_for_layout_with_insets(
             self.layout,
             self.destinations,
             self.state.selection(),
             on_select,
             content,
+            self.insets,
+            self.navigation_bar_visible,
         )
     }
 }
@@ -673,6 +697,18 @@ impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
         self
     }
 
+    /// Reserves safe-area space once, as described by [`Suite::insets`].
+    pub fn insets(mut self, insets: Padding) -> Self {
+        self.suite = self.suite.insets(insets);
+        self
+    }
+
+    /// Shows or hides only the bottom bar; see [`Suite::navigation_bar_visible`].
+    pub fn navigation_bar_visible(mut self, visible: bool) -> Self {
+        self.suite = self.suite.navigation_bar_visible(visible);
+        self
+    }
+
     /// Selects the navigation presentation used for compact windows.
     pub fn compact_navigation(mut self, compact_navigation: CompactNavigation) -> Self {
         self.compact_navigation = compact_navigation;
@@ -702,6 +738,8 @@ impl<'a, Id, Message> SuiteWithMenu<'a, Id, Message> {
             self.compact_navigation,
             self.suite.window_size.map(|size| size.width),
             content,
+            self.suite.insets,
+            self.suite.navigation_bar_visible,
         )
     }
 }
@@ -744,22 +782,92 @@ where
     Font: Into<Renderer::Font>,
     F: Fn(Id) -> Message + Clone + 'a,
 {
+    view_for_layout_with_insets(
+        layout,
+        destinations,
+        selection,
+        on_select,
+        content,
+        Padding::ZERO,
+        true,
+    )
+}
+
+fn view_for_layout_with_insets<'a, Id, Message, Renderer, F>(
+    layout: AdaptiveLayout,
+    destinations: &'a [Destination<Id>],
+    selection: Selection<Id>,
+    on_select: F,
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    insets: Padding,
+    navigation_bar_visible: bool,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Id: Copy + Eq + 'a,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+    F: Fn(Id) -> Message + Clone + 'a,
+{
     let content = content.into();
 
     match layout {
-        AdaptiveLayout::NavigationBar => Column::new()
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(content)
-            .push(bar(destinations, selection, on_select))
-            .into(),
-        AdaptiveLayout::NavigationRail => Row::new()
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(rail(destinations, selection, on_select))
-            .push(content)
-            .into(),
+        AdaptiveLayout::NavigationBar => {
+            if !navigation_bar_visible {
+                return inset_navigation_shell(content, insets);
+            }
+
+            Column::new()
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(inset_navigation_shell(
+                    content,
+                    Padding {
+                        bottom: 0.0,
+                        ..insets
+                    },
+                ))
+                .push(bar_with(
+                    destinations,
+                    selection,
+                    on_select,
+                    NavigationBarOptions::default().insets(Padding { top: 0.0, ..insets }),
+                ))
+                .into()
+        }
+        AdaptiveLayout::NavigationRail => inset_navigation_shell(
+            Row::new()
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .push(rail(destinations, selection, on_select))
+                .push(content),
+            insets,
+        ),
     }
+}
+
+fn inset_navigation_shell<'a, Message, Renderer>(
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    insets: Padding,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: renderer::Renderer + 'a,
+{
+    let content = content.into();
+    if insets == Padding::ZERO {
+        return content;
+    }
+
+    Container::new(content)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(insets)
+        .style(|theme: &Theme| iced_widget::container::Style {
+            background: Some(theme.colors().surface.color.into()),
+            ..iced_widget::container::Style::default()
+        })
+        .into()
 }
 
 pub fn view_with_menu<'a, Id, Message, Renderer, F>(
@@ -788,6 +896,8 @@ where
         CompactNavigation::default(),
         Some(window_size.width),
         content,
+        Padding::ZERO,
+        true,
     )
 }
 
@@ -801,6 +911,8 @@ fn view_menu_for_layout<'a, Id, Message, Renderer, F>(
     compact_navigation: CompactNavigation,
     window_width: Option<f32>,
     content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    insets: Padding,
+    navigation_bar_visible: bool,
 ) -> Element<'a, Message, Theme, Renderer>
 where
     Id: Copy + Eq + 'a,
@@ -816,15 +928,18 @@ where
     if layout == AdaptiveLayout::NavigationBar
         && compact_navigation == CompactNavigation::NavigationBar
     {
-        return Column::new()
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .push(content)
-            .push(bar(destinations, selection, on_select))
-            .into();
+        return view_for_layout_with_insets(
+            layout,
+            destinations,
+            selection,
+            on_select,
+            content,
+            insets,
+            navigation_bar_visible,
+        );
     }
 
-    match layout {
+    let shell: Element<'a, Message, Theme, Renderer> = match layout {
         AdaptiveLayout::NavigationBar => {
             let top_bar = app_bar::small(
                 headline,
@@ -839,11 +954,13 @@ where
                 .into();
 
             if !state.is_menu_visible() {
-                return page;
+                return inset_navigation_shell(page, insets);
             }
 
             let scrim = modal_drawer_scrim(state.is_menu_open(), on_menu.clone(), menu_progress);
-            let drawer_width = modal_drawer_width(window_width);
+            let drawer_width = modal_drawer_width(
+                window_width.map(|width| (width - insets.left - insets.right).max(0.0)),
+            );
             let drawer_offset = modal_drawer_offset(drawer_width, menu_progress);
             let drawer = Float::new(opaque(drawer_with_optional_header(
                 headline,
@@ -884,6 +1001,26 @@ where
             })
             .push(content)
             .into(),
+    };
+
+    inset_navigation_shell(shell, insets)
+}
+
+/// Safe-area padding for a standalone navigation bar.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NavigationBarOptions {
+    insets: Padding,
+}
+
+impl NavigationBarOptions {
+    /// Adds safe-area space outside the fixed 80dp item region.
+    ///
+    /// The bar background covers this space; it is not an interactive target.
+    /// Defaults to zero. A bottom screen bar normally supplies only horizontal
+    /// and bottom insets; embedded previews should keep the default.
+    pub fn insets(mut self, insets: Padding) -> Self {
+        self.insets = insets;
+        self
     }
 }
 
@@ -891,6 +1028,28 @@ pub fn bar<'a, Id, Message, Renderer, F>(
     destinations: &'a [Destination<Id>],
     selection: Selection<Id>,
     on_select: F,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Id: Copy + Eq + 'a,
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    Font: Into<Renderer::Font>,
+    F: Fn(Id) -> Message + Clone + 'a,
+{
+    bar_with(
+        destinations,
+        selection,
+        on_select,
+        NavigationBarOptions::default(),
+    )
+}
+
+/// Creates a navigation bar whose surface extends into the supplied safe area.
+pub fn bar_with<'a, Id, Message, Renderer, F>(
+    destinations: &'a [Destination<Id>],
+    selection: Selection<Id>,
+    on_select: F,
+    options: NavigationBarOptions,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Id: Copy + Eq + 'a,
@@ -920,13 +1079,16 @@ where
     Container::new(items)
         .width(Length::Fill)
         .height(Length::Fixed(
-            tokens::component::navigation_bar::CONTAINER_HEIGHT,
+            tokens::component::navigation_bar::CONTAINER_HEIGHT
+                + options.insets.top
+                + options.insets.bottom,
         ))
         .padding(Padding {
-            top: 0.0,
-            right: tokens::component::navigation_bar::ITEM_HORIZONTAL_PADDING,
-            bottom: 0.0,
-            left: tokens::component::navigation_bar::ITEM_HORIZONTAL_PADDING,
+            top: options.insets.top,
+            right: tokens::component::navigation_bar::ITEM_HORIZONTAL_PADDING
+                + options.insets.right,
+            bottom: options.insets.bottom,
+            left: tokens::component::navigation_bar::ITEM_HORIZONTAL_PADDING + options.insets.left,
         })
         .style(bar_container)
 }

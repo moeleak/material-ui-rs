@@ -67,6 +67,186 @@ fn menu_builder_defaults_to_the_compatible_compact_navigation_bar() {
     assert_eq!(menu.compact_navigation, CompactNavigation::ModalDrawer);
 }
 
+fn layout_navigation(
+    mut element: Element<'_, Message, Theme, SingleLineTestRenderer>,
+    size: Size,
+) -> layout::Node {
+    let mut tree = Tree::new(element.as_widget());
+    element.as_widget_mut().layout(
+        &mut tree,
+        &SingleLineTestRenderer,
+        &layout::Limits::new(Size::ZERO, size),
+    )
+}
+
+#[test]
+fn standalone_navigation_bar_adds_safe_area_outside_its_item_region() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let insets = Padding {
+        top: 4.0,
+        right: 12.0,
+        bottom: 24.0,
+        left: 16.0,
+    };
+    let node = layout_navigation(
+        bar_with(
+            &destinations,
+            Selection::new(Page::One),
+            |_| Message::Frame,
+            NavigationBarOptions::default().insets(insets),
+        )
+        .into(),
+        Size::new(360.0, 800.0),
+    );
+    let layout = Layout::new(&node);
+    let items = layout.children().next().unwrap();
+    assert_eq!(layout.bounds().height, 108.0);
+    assert_eq!(
+        items.bounds(),
+        Rectangle {
+            x: 24.0,
+            y: 4.0,
+            width: 316.0,
+            height: 80.0
+        }
+    );
+    assert_eq!(items.children().next().unwrap().bounds().height, 80.0);
+
+    let default_node = layout_navigation(
+        bar(&destinations, Selection::new(Page::One), |_| Message::Frame).into(),
+        Size::new(360.0, 800.0),
+    );
+    assert_eq!(default_node.size(), Size::new(360.0, 80.0));
+}
+
+#[test]
+fn navigation_suite_consumes_each_inset_once_above_visible_bottom_bar() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let state = NavigationState::new(Page::One);
+    let insets = Padding {
+        top: 24.0,
+        right: 12.0,
+        bottom: 24.0,
+        left: 16.0,
+    };
+    for with_menu in [false, true] {
+        let suite = suite(&destinations, &state)
+            .dimensions(360.0, 800.0)
+            .insets(insets);
+        let content = Space::new().width(Length::Fill).height(Length::Fill);
+        let element = if with_menu {
+            suite
+                .with_menu("Menu", Message::Frame)
+                .view(|_| Message::Frame, content)
+        } else {
+            suite.view(|_| Message::Frame, content)
+        };
+        let node = layout_navigation(element, Size::new(360.0, 800.0));
+        let root = Layout::new(&node);
+        let mut children = root.children();
+        let page = children.next().unwrap().children().next().unwrap();
+        let bar = children.next().unwrap();
+        assert_eq!(
+            page.bounds(),
+            Rectangle {
+                x: 16.0,
+                y: 24.0,
+                width: 332.0,
+                height: 672.0
+            }
+        );
+        assert_eq!(
+            bar.bounds(),
+            Rectangle {
+                x: 0.0,
+                y: 696.0,
+                width: 360.0,
+                height: 104.0
+            }
+        );
+        assert_eq!(bar.children().next().unwrap().bounds().height, 80.0);
+    }
+}
+
+#[test]
+fn hidden_bottom_navigation_leaves_no_gap_above_keyboard() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let state = NavigationState::new(Page::One);
+    let insets = Padding {
+        top: 24.0,
+        right: 12.0,
+        bottom: 280.0,
+        left: 16.0,
+    };
+    let element = suite(&destinations, &state)
+        .dimensions(360.0, 800.0)
+        .with_menu("Menu", Message::Frame)
+        .insets(insets)
+        .navigation_bar_visible(false)
+        .view(
+            |_| Message::Frame,
+            Space::new().width(Length::Fill).height(Length::Fill),
+        );
+    let node = layout_navigation(element, Size::new(360.0, 800.0));
+    let root = Layout::new(&node);
+    let page = root.children().next().unwrap();
+    assert_eq!(root.children().count(), 1);
+    assert_eq!(
+        page.bounds(),
+        Rectangle {
+            x: 16.0,
+            y: 24.0,
+            width: 332.0,
+            height: 496.0
+        }
+    );
+}
+
+#[test]
+fn safe_area_and_bottom_bar_visibility_preserve_rail_and_modal_drawer() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let state = NavigationState::new(Page::One);
+    let insets = Padding {
+        top: 24.0,
+        right: 12.0,
+        bottom: 32.0,
+        left: 16.0,
+    };
+    for layout in [
+        AdaptiveLayout::NavigationBar,
+        AdaptiveLayout::NavigationRail,
+    ] {
+        let element = suite(&destinations, &state)
+            .dimensions(360.0, 800.0)
+            .layout(layout)
+            .insets(insets)
+            .navigation_bar_visible(false)
+            .with_menu("Menu", Message::Frame)
+            .compact_navigation(CompactNavigation::ModalDrawer)
+            .view(
+                |_| Message::Frame,
+                Space::new().width(Length::Fill).height(Length::Fill),
+            );
+        let node = layout_navigation(element, Size::new(360.0, 800.0));
+        let root = Layout::new(&node);
+        let shell = root.children().next().unwrap();
+        assert_eq!(
+            shell.bounds(),
+            Rectangle {
+                x: 16.0,
+                y: 24.0,
+                width: 332.0,
+                height: 744.0
+            }
+        );
+        assert_eq!(
+            shell.children().count(),
+            2,
+            "rail/top app bar and page remain visible"
+        );
+    }
+}
+
 #[test]
 fn closing_modal_drawer_scrim_does_not_block_page_hit_testing() {
     let mut scrim =
@@ -707,6 +887,21 @@ impl renderer::Renderer for SingleLineTestRenderer {
         _callback: impl FnOnce(Result<image::Allocation, image::Error>) + Send + 'static,
     ) {
     }
+}
+
+impl geometry::Renderer for SingleLineTestRenderer {
+    type Geometry = iced_widget::renderer::wgpu::geometry::Geometry;
+    type Frame = iced_widget::renderer::wgpu::geometry::Frame;
+
+    fn new_frame(&self, _bounds: Rectangle) -> Self::Frame {
+        panic!("navigation layout and input tests do not draw canvas geometry")
+    }
+
+    fn draw_geometry(&mut self, _geometry: Self::Geometry) {}
+}
+
+impl primitive::Renderer for SingleLineTestRenderer {
+    fn draw_primitive(&mut self, _bounds: Rectangle, _primitive: impl primitive::Primitive) {}
 }
 
 impl core_text::Renderer for SingleLineTestRenderer {
