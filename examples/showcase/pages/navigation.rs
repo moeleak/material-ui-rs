@@ -5,7 +5,8 @@ use super::super::{Message, NAV_DESTINATIONS, Showcase, TabChoice};
 
 pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     let selection = state.navigation_selection();
-    let bar = material::widget::navigation::bar(&NAV_DESTINATIONS, selection, Message::Navigate);
+    let bar =
+        material::widget::navigation::bar(&NAV_DESTINATIONS[..3], selection, Message::Navigate);
     let rail = material::widget::navigation::rail_with(
         &NAV_DESTINATIONS,
         selection,

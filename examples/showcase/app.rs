@@ -3,6 +3,9 @@
 #[path = "pages/mod.rs"]
 mod pages;
 
+#[cfg(any(target_os = "android", test))]
+mod mobile;
+
 use iced::time::Instant;
 use iced::{Size, Subscription, Task};
 use material::Theme;
@@ -12,7 +15,13 @@ use material_ui_rs as material;
 pub fn main() -> iced::Result {
     let window_size = Size::new(1080.0, 980.0);
 
-    material::application(boot, update, view)
+    let application = material::application(boot, update, view);
+    #[cfg(target_os = "android")]
+    let application = material::android::system_fonts()
+        .into_iter()
+        .fold(application, iced::Application::font);
+
+    application
         .title("material-ui-rs showcase")
         .subscription(subscription)
         .theme(theme)
@@ -23,6 +32,11 @@ pub fn main() -> iced::Result {
         .run()
 }
 
+#[cfg(target_os = "android")]
+pub fn run_android(app: material::android::AndroidApp) {
+    material::android::run(app, main);
+}
+
 #[cfg(any(target_arch = "wasm32", test))]
 const CJK_CORE_FONT_URL: &str = "fonts/NotoSansSC-Core-0a7ff25a.otf";
 #[cfg(any(target_arch = "wasm32", test))]
@@ -30,6 +44,8 @@ const CJK_REGIONAL_FONT_URL: &str = "fonts/NotoSansSC-faa6c9df.otf";
 
 fn boot() -> (Showcase, Task<Message>) {
     let state = Showcase::default();
+    #[cfg(target_os = "android")]
+    sync_system_bars(&state);
 
     #[cfg(any(target_arch = "wasm32", test))]
     let load_cjk_core =
@@ -47,6 +63,10 @@ enum Message {
     #[cfg(any(target_arch = "wasm32", test))]
     CjkRegionalFontFinished,
     Navigate(ShowcasePage),
+    #[cfg(any(target_os = "android", test))]
+    NavigateSection(mobile::Section),
+    #[cfg(target_os = "android")]
+    Android(material::android::Event),
     Increment,
     Decrement,
     TextChanged(String),
@@ -167,6 +187,12 @@ const INVENTORY_ROWS: [InventoryRow; 3] = [
 #[derive(Debug)]
 struct Showcase {
     navigation: navigation::NavigationState<ShowcasePage>,
+    #[cfg(any(target_os = "android", test))]
+    mobile: mobile::Navigation,
+    #[cfg(target_os = "android")]
+    safe_area: material::android::SafeAreaInsets,
+    #[cfg(target_os = "android")]
+    layout_insets: material::android::SafeAreaInsets,
     window_size: Size,
     count: i32,
     note: String,
@@ -203,7 +229,16 @@ impl Default for Showcase {
     fn default() -> Self {
         Self {
             navigation: navigation::NavigationState::new(ShowcasePage::Inputs),
+            #[cfg(any(target_os = "android", test))]
+            mobile: mobile::Navigation::default(),
+            #[cfg(target_os = "android")]
+            safe_area: material::android::safe_area_insets(),
+            #[cfg(target_os = "android")]
+            layout_insets: material::android::layout_insets(),
+            #[cfg(not(target_os = "android"))]
             window_size: Size::new(1080.0, 980.0),
+            #[cfg(target_os = "android")]
+            window_size: Size::new(360.0, 640.0),
             count: 0,
             note: String::new(),
             editor_content: material::widget::text_editor::Content::with_text(
@@ -263,6 +298,50 @@ impl Showcase {
     fn adaptive_navigation_layout(&self) -> navigation::AdaptiveLayout {
         navigation::adaptive_layout(self.window_size.width, self.window_size.height)
     }
+
+    fn navigation_bar_visible(&self) -> bool {
+        #[cfg(target_os = "android")]
+        {
+            self.safe_area.ime.bottom == 0.0
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            true
+        }
+    }
+
+    fn content_insets(&self) -> iced::Padding {
+        #[cfg(target_os = "android")]
+        {
+            let insets = self.layout_insets.content();
+            iced::Padding {
+                top: insets.top,
+                right: insets.right,
+                bottom: insets.bottom,
+                left: insets.left,
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            iced::Padding::ZERO
+        }
+    }
+
+    fn floating_bottom_margin(&self) -> f32 {
+        floating_bottom_margin(
+            self.adaptive_navigation_layout(),
+            self.content_insets().bottom,
+            self.navigation_bar_visible(),
+        )
+    }
+
+    fn select_page(&mut self, page: ShowcasePage) {
+        let now = Instant::now();
+        let layout = self.adaptive_navigation_layout();
+        self.navigation.select(page, now, layout);
+        #[cfg(any(target_os = "android", test))]
+        self.mobile.select_page(page, now, layout);
+    }
 }
 
 fn update(state: &mut Showcase, message: Message) -> Task<Message> {
@@ -272,9 +351,18 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
         #[cfg(any(target_arch = "wasm32", test))]
         Message::CjkRegionalFontFinished => Task::none(),
         Message::Navigate(page) => {
-            state
-                .navigation
-                .select(page, Instant::now(), state.adaptive_navigation_layout());
+            state.select_page(page);
+            Task::none()
+        }
+        #[cfg(any(target_os = "android", test))]
+        Message::NavigateSection(section) => {
+            state.select_page(state.mobile.page_for(section));
+            Task::none()
+        }
+        #[cfg(target_os = "android")]
+        Message::Android(material::android::Event::InsetsChanged(insets)) => {
+            state.safe_area = insets;
+            state.layout_insets = material::android::layout_insets();
             Task::none()
         }
         Message::Increment => {
@@ -400,17 +488,23 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
             Task::none()
         }
         Message::ThemeChanged(action) => {
-            state.theme_controller.update(
-                action,
-                state.window_size,
-                showcase_floating_bottom_margin(state.adaptive_navigation_layout()),
-                Instant::now(),
+            let bottom_margin = state.floating_bottom_margin();
+            let controls_viewport = Size::new(
+                state.window_size.width - state.content_insets().right,
+                state.window_size.height,
             );
+            state
+                .theme_controller
+                .update(action, controls_viewport, bottom_margin, Instant::now());
+            #[cfg(target_os = "android")]
+            sync_system_bars(state);
             Task::none()
         }
         Message::Frame(now) => {
             let _ = state.theme_controller.advance(now);
             let _ = state.navigation.advance(now);
+            #[cfg(any(target_os = "android", test))]
+            state.mobile.advance(now);
             let _ = state.segment_state.advance(now);
             let _ = state.primary_tab_state.advance(now);
             let _ = state.secondary_tab_state.advance(now);
@@ -593,10 +687,22 @@ fn theme(state: &Showcase) -> Theme {
 }
 
 fn subscription(state: &Showcase) -> Subscription<Message> {
-    let mut subscriptions =
-        vec![iced::window::resize_events().map(|(_id, size)| Message::WindowResized(size))];
+    let mut subscriptions = vec![iced::event::listen_with(|event, _, _| match event {
+        iced::Event::Window(
+            iced::window::Event::Opened { size, .. } | iced::window::Event::Resized(size),
+        ) => Some(Message::WindowResized(size)),
+        _ => None,
+    })];
+    #[cfg(target_os = "android")]
+    subscriptions.push(material::android::events().map(Message::Android));
 
-    if state.theme_controller.is_animating()
+    #[cfg(any(target_os = "android", test))]
+    let mobile_animating = state.mobile.is_animating();
+    #[cfg(not(any(target_os = "android", test)))]
+    let mobile_animating = false;
+
+    if mobile_animating
+        || state.theme_controller.is_animating()
         || state.navigation.is_animating()
         || state.segment_state.is_animating()
         || state.primary_tab_state.is_animating()
@@ -618,7 +724,6 @@ fn subscription(state: &Showcase) -> Subscription<Message> {
 
 fn view(state: &Showcase) -> material::Element<'_, Message> {
     let now = Instant::now();
-    let navigation_layout = state.adaptive_navigation_layout();
     let page_content = material::widget::snackbar::host_with(
         pages::view(state),
         &state.snackbar,
@@ -629,16 +734,34 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
         snackbar_host_options(&state.theme_controller),
     );
 
+    #[cfg(not(target_os = "android"))]
     let navigation_suite = navigation::suite(&NAV_DESTINATIONS, &state.navigation)
-        .layout(navigation_layout)
+        .window_size(state.window_size)
         .with_menu("Showcase", Message::MenuPressed)
         .compact_navigation(showcase_compact_navigation());
+    #[cfg(not(target_os = "android"))]
     let content = navigation_suite.view(Message::Navigate, page_content);
-    let content = state.theme_controller.controls_over(
-        content,
-        showcase_floating_bottom_margin(navigation_layout),
-        Message::ThemeChanged,
+
+    #[cfg(target_os = "android")]
+    let content = navigation::suite(&mobile::DESTINATIONS, &state.mobile.sections)
+        .window_size(state.window_size)
+        .insets(state.content_insets())
+        .navigation_bar_visible(state.navigation_bar_visible())
+        .view(Message::NavigateSection, page_content);
+    let floating_layer = theme_picker::floating_layer(
+        state.theme_controller.picker_state(),
+        state.theme_controller.selected_color(),
+        state.floating_bottom_margin(),
+        Message::ThemeChanged(theme_picker::ThemeAction::TogglePicker),
+        |color| Message::ThemeChanged(theme_picker::ThemeAction::SelectColor(color)),
     );
+    let insets = state.content_insets();
+    let floating_layer = iced::widget::container(floating_layer).padding(iced::Padding {
+        left: insets.left,
+        right: insets.right,
+        ..iced::Padding::ZERO
+    });
+    let content = iced::widget::stack![content, floating_layer];
 
     let content = material::widget::dialog::modal_animated(
         content,
@@ -660,15 +783,42 @@ fn snackbar_host_options(
     )
 }
 
+#[cfg(test)]
 fn showcase_floating_bottom_margin(layout: navigation::AdaptiveLayout) -> f32 {
     theme_picker::bottom_margin_for(layout, showcase_compact_navigation())
 }
 
+#[cfg(any(not(target_os = "android"), test))]
 fn showcase_compact_navigation() -> navigation::CompactNavigation {
-    if cfg!(target_os = "android") {
-        navigation::CompactNavigation::ModalDrawer
+    navigation::CompactNavigation::NavigationBar
+}
+
+fn floating_bottom_margin(
+    layout: navigation::AdaptiveLayout,
+    bottom_inset: f32,
+    bar_visible: bool,
+) -> f32 {
+    let bar_height = if bar_visible && layout == navigation::AdaptiveLayout::NavigationBar {
+        material::tokens::component::navigation_bar::CONTAINER_HEIGHT
     } else {
-        navigation::CompactNavigation::NavigationBar
+        0.0
+    };
+    theme_picker::FLOATING_MARGIN + bottom_inset + bar_height
+}
+
+#[cfg(target_os = "android")]
+fn sync_system_bars(state: &Showcase) {
+    let theme = Theme::new(
+        "Android system bars",
+        state
+            .theme_controller
+            .selected_color()
+            .color_scheme(state.theme_controller.dark_mode()),
+    );
+    if let Err(error) =
+        material::android::set_system_bars(material::android::SystemBarsStyle::from_theme(&theme))
+    {
+        eprintln!("Could not request Android system bars: {error}");
     }
 }
 
@@ -1106,6 +1256,64 @@ mod tests {
         let search_update = update(&mut search, Message::SearchChanged("中文".into()));
         assert_eq!(search_update.units(), 0);
         assert_eq!(search.search_query, "中文");
+    }
+
+    #[test]
+    fn mobile_sections_remember_component_page_and_preserve_demo_tabs() {
+        let mut showcase = Showcase::default();
+        assert_eq!(mobile::DESTINATIONS.len(), 3);
+        let primary = showcase.primary_tab_state.selected_index();
+        let secondary = showcase.secondary_tab_state.selected_index();
+
+        for (index, (page, _)) in mobile::COMPONENT_PAGES.iter().enumerate() {
+            update(&mut showcase, Message::Navigate(*page));
+            assert_eq!(
+                showcase.mobile.sections.selected(),
+                mobile::Section::Components
+            );
+            assert_eq!(showcase.mobile.component_tabs.selected_index(), index);
+
+            update(
+                &mut showcase,
+                Message::NavigateSection(mobile::Section::Navigation),
+            );
+            assert_eq!(showcase.navigation.selected(), ShowcasePage::Navigation);
+            update(
+                &mut showcase,
+                Message::NavigateSection(mobile::Section::Structure),
+            );
+            assert_eq!(showcase.navigation.selected(), ShowcasePage::Structure);
+            update(
+                &mut showcase,
+                Message::WindowResized(Size::new(900.0, 600.0)),
+            );
+            update(
+                &mut showcase,
+                Message::NavigateSection(mobile::Section::Components),
+            );
+            assert_eq!(showcase.navigation.selected(), *page);
+        }
+        assert_eq!(showcase.primary_tab_state.selected_index(), primary);
+        assert_eq!(showcase.secondary_tab_state.selected_index(), secondary);
+    }
+
+    #[test]
+    fn floating_controls_follow_keyboard_and_actual_bar_visibility() {
+        use navigation::AdaptiveLayout::{NavigationBar, NavigationRail};
+        let margin = theme_picker::FLOATING_MARGIN;
+        assert_eq!(
+            floating_bottom_margin(NavigationBar, 24.0, true),
+            margin + 104.0
+        );
+        assert_eq!(
+            floating_bottom_margin(NavigationBar, 280.0, false),
+            margin + 280.0
+        );
+        assert_eq!(floating_bottom_margin(NavigationBar, 0.0, false), margin);
+        assert_eq!(
+            floating_bottom_margin(NavigationRail, 24.0, true),
+            margin + 24.0
+        );
     }
 
     #[test]

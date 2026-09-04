@@ -26,7 +26,27 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
         .push(content)
         .push(Space::new().height(Length::Fixed(floating_content_inset(state))));
 
-    page::surface(header(page), content).into()
+    let surface = page::surface(header(page), content);
+    #[cfg(target_os = "android")]
+    if state.mobile.sections.selected() == super::mobile::Section::Components {
+        let tabs = material::widget::tabs::animated_tabs(
+            material::widget::tabs::Variant::Secondary,
+            &state.mobile.component_tabs,
+            super::mobile::COMPONENT_PAGES.map(|(page, label)| {
+                (
+                    material::widget::tabs::Content::label(label),
+                    Message::Navigate(page),
+                )
+            }),
+        );
+        return Column::new()
+            .push(tabs)
+            .push(surface)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into();
+    }
+    surface.into()
 }
 
 pub(super) fn floating_content_inset(state: &Showcase) -> f32 {
