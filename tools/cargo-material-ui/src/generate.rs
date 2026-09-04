@@ -913,7 +913,8 @@ mod tests {
 
         assert!(app.contains("navigation::suite"));
         assert!(app.contains(".window_size(app.window_size)"));
-        assert!(app.contains("iced::window::resize_events()"));
+        assert!(app.contains("iced::window::Event::Opened { size, .. }"));
+        assert!(app.contains("iced::window::Event::Resized(size)"));
         assert!(app.contains(".toggle_menu_for_size("));
         assert!(!app.contains(".layout(navigation::AdaptiveLayout::NavigationRail)"));
         assert!(app.contains(".with_menu("));

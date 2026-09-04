@@ -178,7 +178,12 @@ fn update(app: &mut App, message: Message) {
 fn subscription(app: &App) -> Subscription<Message> {
     let subscriptions = vec![
         app.navigation.subscription(Message::NavigationFrame),
-        iced::window::resize_events().map(|(_id, size)| Message::WindowResized(size)),
+        iced::event::listen_with(|event, _, _| match event {
+            iced::Event::Window(
+                iced::window::Event::Opened { size, .. } | iced::window::Event::Resized(size),
+            ) => Some(Message::WindowResized(size)),
+            _ => None,
+        }),
     ];
     #[cfg(target_os = "android")]
     let subscriptions = {
