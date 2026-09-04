@@ -1443,6 +1443,309 @@ fn navigation_touch_disables_hover_until_real_mouse_motion() {
     assert!(state.hover_enabled);
 }
 
+struct NavigationInputHarness {
+    surface: NavigationPressSurface<'static, Message, SingleLineTestRenderer>,
+    tree: Tree,
+    node: layout::Node,
+    messages: Vec<Message>,
+}
+
+impl NavigationInputHarness {
+    fn new() -> Self {
+        let mut surface = press_surface(
+            Space::new().width(120.0).height(80.0),
+            Message::Frame,
+            NavigationStateLayer::BarOrRail,
+            NavigationIndicatorPlacement::TopCenter {
+                top: 12.0,
+                width: 64.0,
+                height: 32.0,
+            },
+        );
+        let mut tree = Tree::new(&surface as &dyn Widget<Message, Theme, SingleLineTestRenderer>);
+        let node = surface
+            .layout(
+                &mut tree,
+                &SingleLineTestRenderer,
+                &layout::Limits::new(Size::ZERO, Size::new(120.0, 80.0)),
+            )
+            .move_to(Point::new(0.0, 720.0));
+        Self {
+            surface,
+            tree,
+            node,
+            messages: Vec::new(),
+        }
+    }
+
+    fn send(&mut self, event: Event, cursor: mouse::Cursor) -> bool {
+        let mut shell = Shell::new(&mut self.messages);
+        self.surface.update(
+            &mut self.tree,
+            &event,
+            Layout::new(&self.node),
+            cursor,
+            &SingleLineTestRenderer,
+            &mut iced_widget::core::clipboard::Null,
+            &mut shell,
+            &Rectangle::with_size(Size::new(360.0, 800.0)),
+        );
+        shell.is_event_captured()
+    }
+
+    fn touch(&mut self, event: touch::Event) -> bool {
+        self.send(Event::Touch(event), mouse::Cursor::Unavailable)
+    }
+
+    fn state(&self) -> &NavigationPressSurfaceState {
+        self.tree
+            .state
+            .downcast_ref::<NavigationPressSurfaceState>()
+    }
+}
+
+#[test]
+fn navigation_widget_tap_with_small_motion_selects_once_without_hover() {
+    let mut input = NavigationInputHarness::new();
+    let id = touch::Finger(0);
+    assert!(input.touch(touch::Event::FingerPressed {
+        id,
+        position: Point::new(40.0, 750.0)
+    }));
+    let _ = input.touch(touch::Event::FingerMoved {
+        id,
+        position: Point::new(44.0, 752.0),
+    });
+    assert!(input.touch(touch::Event::FingerLifted {
+        id,
+        position: Point::new(46.0, 752.0)
+    }));
+    assert!(!input.touch(touch::Event::FingerLifted {
+        id,
+        position: Point::new(46.0, 752.0)
+    }));
+    assert_eq!(input.messages.len(), 1);
+    assert!(!input.state().is_hovered);
+    assert!(!input.state().is_pressed);
+    assert!(input.state().active_press.is_none());
+}
+
+#[test]
+fn navigation_widget_drag_cancels_even_if_finger_returns_to_item() {
+    let mut input = NavigationInputHarness::new();
+    let id = touch::Finger(0);
+    let _ = input.touch(touch::Event::FingerPressed {
+        id,
+        position: Point::new(40.0, 750.0),
+    });
+    assert!(!input.touch(touch::Event::FingerMoved {
+        id,
+        position: Point::new(40.0, 780.0)
+    }));
+    let _ = input.touch(touch::Event::FingerMoved {
+        id,
+        position: Point::new(40.0, 750.0),
+    });
+    let _ = input.touch(touch::Event::FingerLifted {
+        id,
+        position: Point::new(40.0, 750.0),
+    });
+    assert!(input.messages.is_empty());
+    assert!(!input.state().is_pressed);
+    assert!(!input.state().has_visible_ripples(Instant::now()));
+}
+
+#[test]
+fn navigation_widget_release_checks_touch_distance_when_move_was_not_delivered() {
+    let mut input = NavigationInputHarness::new();
+    let id = touch::Finger(0);
+    let _ = input.touch(touch::Event::FingerPressed {
+        id,
+        position: Point::new(20.0, 750.0),
+    });
+    let _ = input.touch(touch::Event::FingerLifted {
+        id,
+        position: Point::new(90.0, 750.0),
+    });
+    assert!(input.messages.is_empty());
+    assert!(!input.state().is_pressed);
+}
+
+#[test]
+fn navigation_widget_keeps_touch_ownership_across_other_fingers_and_mouse_events() {
+    let mut input = NavigationInputHarness::new();
+    let position = Point::new(40.0, 750.0);
+    let id = touch::Finger(0);
+    let other = touch::Finger(1);
+    let _ = input.touch(touch::Event::FingerPressed { id, position });
+    for event in [
+        touch::Event::FingerPressed {
+            id: other,
+            position,
+        },
+        touch::Event::FingerMoved {
+            id: other,
+            position: Point::new(90.0, 750.0),
+        },
+        touch::Event::FingerLifted {
+            id: other,
+            position,
+        },
+        touch::Event::FingerLost {
+            id: other,
+            position,
+        },
+    ] {
+        assert!(!input.touch(event));
+    }
+    for event in [
+        mouse::Event::ButtonPressed(mouse::Button::Left),
+        mouse::Event::ButtonReleased(mouse::Button::Left),
+    ] {
+        assert!(!input.send(Event::Mouse(event), mouse::Cursor::Available(position)));
+    }
+    assert!(input.messages.is_empty());
+    assert!(input.state().is_pressed);
+    let _ = input.touch(touch::Event::FingerLifted { id, position });
+    assert_eq!(input.messages.len(), 1);
+}
+
+#[test]
+fn navigation_widget_keeps_mouse_ownership_across_touch_events() {
+    let mut input = NavigationInputHarness::new();
+    let position = Point::new(40.0, 750.0);
+    let cursor = mouse::Cursor::Available(position);
+    let _ = input.send(
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+        cursor,
+    );
+    let _ = input.touch(touch::Event::FingerPressed {
+        id: touch::Finger(0),
+        position,
+    });
+    let _ = input.touch(touch::Event::FingerLifted {
+        id: touch::Finger(0),
+        position,
+    });
+    assert!(input.messages.is_empty());
+    assert!(input.state().is_pressed);
+    let _ = input.send(
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+        cursor,
+    );
+    assert_eq!(input.messages.len(), 1);
+}
+
+#[test]
+fn navigation_widget_cancels_on_owner_loss_and_window_unfocus() {
+    let position = Point::new(40.0, 750.0);
+    let id = touch::Finger(0);
+    for cancel in [
+        Event::Touch(touch::Event::FingerLost { id, position }),
+        Event::Window(window::Event::Unfocused),
+    ] {
+        let mut input = NavigationInputHarness::new();
+        let _ = input.touch(touch::Event::FingerPressed { id, position });
+        let _ = input.send(cancel, mouse::Cursor::Unavailable);
+        let _ = input.touch(touch::Event::FingerLifted { id, position });
+        assert!(input.messages.is_empty());
+        assert!(input.state().active_press.is_none());
+        assert!(!input.state().has_visible_ripples(Instant::now()));
+    }
+}
+
+#[test]
+fn navigation_widget_uses_translated_cursor_for_entire_touch_gesture() {
+    let mut input = NavigationInputHarness::new();
+    let id = touch::Finger(0);
+    for (event, position) in [
+        (
+            touch::Event::FingerPressed {
+                id,
+                position: Point::new(40.0, 50.0),
+            },
+            Point::new(40.0, 750.0),
+        ),
+        (
+            touch::Event::FingerMoved {
+                id,
+                position: Point::new(40.0, 100.0),
+            },
+            Point::new(40.0, 752.0),
+        ),
+        (
+            touch::Event::FingerLifted {
+                id,
+                position: Point::new(40.0, 150.0),
+            },
+            Point::new(40.0, 754.0),
+        ),
+    ] {
+        let _ = input.send(Event::Touch(event), mouse::Cursor::Available(position));
+    }
+    assert_eq!(input.messages.len(), 1);
+}
+
+#[test]
+fn navigation_widget_cancels_touch_that_leaves_visible_hit_region() {
+    let mut input = NavigationInputHarness::new();
+    let position = Point::new(40.0, 750.0);
+    let id = touch::Finger(0);
+    let _ = input.touch(touch::Event::FingerPressed { id, position });
+    let _ = input.send(
+        Event::Touch(touch::Event::FingerMoved { id, position }),
+        mouse::Cursor::Levitating(position),
+    );
+    let _ = input.touch(touch::Event::FingerLifted { id, position });
+    assert!(input.messages.is_empty());
+    assert!(!input.state().is_pressed);
+}
+
+#[test]
+fn navigation_bar_safe_area_is_not_a_touch_target() {
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let mut bar = bar_with(
+        &destinations,
+        Selection::new(Page::One),
+        |_| Message::Frame,
+        NavigationBarOptions::default().insets(Padding {
+            bottom: 24.0,
+            ..Padding::ZERO
+        }),
+    );
+    let mut tree = Tree::new(&bar as &dyn Widget<Message, Theme, SingleLineTestRenderer>);
+    let node = bar.layout(
+        &mut tree,
+        &SingleLineTestRenderer,
+        &layout::Limits::new(Size::ZERO, Size::new(360.0, 104.0)),
+    );
+    let mut messages = Vec::new();
+    for y in [92.0, 40.0] {
+        for event in [
+            touch::Event::FingerPressed {
+                id: touch::Finger(0),
+                position: Point::new(180.0, y),
+            },
+            touch::Event::FingerLifted {
+                id: touch::Finger(0),
+                position: Point::new(180.0, y),
+            },
+        ] {
+            bar.update(
+                &mut tree,
+                &Event::Touch(event),
+                Layout::new(&node),
+                mouse::Cursor::Unavailable,
+                &SingleLineTestRenderer,
+                &mut iced_widget::core::clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &Rectangle::with_size(Size::new(360.0, 104.0)),
+            );
+        }
+        assert_eq!(messages.len(), usize::from(y < 80.0));
+    }
+}
+
 #[test]
 fn navigation_draw_keeps_mouse_hover_enter_animation_after_first_frame() {
     let start = Instant::now();

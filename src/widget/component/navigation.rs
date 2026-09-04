@@ -44,6 +44,7 @@ const NAVIGATION_MENU_ICON_ARROW_TOP_Y: f32 = 5.0;
 const NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y: f32 = 19.0;
 const NAVIGATION_MENU_ICON_STROKE_WIDTH: f32 = 2.4;
 const NAVIGATION_INITIAL_HOVER_ENABLED: bool = !cfg!(target_os = "android");
+const NAVIGATION_TOUCH_SLOP: f32 = 8.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdaptiveLayout {
@@ -2386,6 +2387,7 @@ impl NavigationIndicatorPlacement {
 struct NavigationPressSurfaceState {
     is_hovered: bool,
     is_pressed: bool,
+    active_press: Option<NavigationPress>,
     hover_enabled: bool,
     state_layer_opacity: AnimatedScalar,
     ripples: PressRippleState,
@@ -2403,6 +2405,7 @@ impl NavigationPressSurfaceState {
         Self {
             is_hovered: false,
             is_pressed: false,
+            active_press: None,
             hover_enabled,
             state_layer_opacity: AnimatedScalar::new(0.0),
             ripples: PressRippleState::default(),
@@ -2456,6 +2459,7 @@ impl NavigationPressSurfaceState {
 
     fn release_with_hover(&mut self, keep_ripple: bool, is_hovered: bool, now: Instant) {
         self.is_pressed = false;
+        self.active_press = None;
         self.is_hovered = is_hovered;
 
         if keep_ripple {
@@ -2475,6 +2479,7 @@ impl NavigationPressSurfaceState {
 
     fn cancel(&mut self, now: Instant) {
         self.is_pressed = false;
+        self.active_press = None;
         self.is_hovered = false;
         self.clear_ripples();
 
@@ -2597,6 +2602,17 @@ where
         }
 
         let state = tree.state.downcast_mut::<NavigationPressSurfaceState>();
+        let pointer = NavigationPointer { event, cursor };
+
+        // A second finger or a synthesized mouse event cannot take ownership of
+        // a press that began with a different pointer.
+        if let Some(press) = state.active_press
+            && let Some(source) = pointer.source()
+            && source != press.source
+        {
+            return;
+        }
+
         state.observe_pointer_kind(event);
         let now = match event {
             Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
@@ -2609,7 +2625,6 @@ where
             cursor,
             is_hovered,
         };
-        let pointer = NavigationPointer { event, cursor };
         let should_snap_initial_redraw_hover = interaction.should_snap_initial_redraw(state);
 
         if interaction.should_sync_hover()
@@ -2625,21 +2640,35 @@ where
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerPressed { .. })
-                if pointer.is_over(layout.bounds()) =>
+                if !state.is_pressed && pointer.is_over(layout.bounds()) =>
             {
                 let indicator_bounds = self.indicator.bounds(layout.bounds());
 
-                if let Some(origin) = pointer.press_origin(indicator_bounds) {
+                if let Some(origin) = pointer.press_origin(indicator_bounds)
+                    && let Some(press) = NavigationPress::new(pointer)
+                {
                     state.press(origin, now.unwrap_or_else(Instant::now));
+                    state.active_press = Some(press);
                     shell.request_redraw();
                     shell.capture_event();
                 }
             }
+            Event::Touch(touch::Event::FingerMoved { .. })
+                if state
+                    .active_press
+                    .is_some_and(|press| press.moved_beyond_slop(pointer)) =>
+            {
+                state.cancel(now.unwrap_or_else(Instant::now));
+                shell.request_redraw();
+            }
             Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
             | Event::Touch(touch::Event::FingerLifted { .. })
-                if state.is_pressed =>
+                if state.active_press.is_some() =>
             {
-                let is_released_over = pointer.is_over(layout.bounds());
+                let is_released_over = pointer.is_over(layout.bounds())
+                    && !state
+                        .active_press
+                        .is_some_and(|press| press.moved_beyond_slop(pointer));
                 let is_touch_release = matches!(event, Event::Touch(_));
 
                 if is_touch_release {
@@ -2659,7 +2688,10 @@ where
 
                 shell.capture_event();
             }
-            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+            Event::Touch(touch::Event::FingerLost { .. })
+            | Event::Window(window::Event::Unfocused)
+                if state.is_pressed =>
+            {
                 state.cancel(now.unwrap_or_else(Instant::now));
                 shell.request_redraw();
             }
@@ -2845,7 +2877,61 @@ struct NavigationPointer<'a> {
     cursor: mouse::Cursor,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NavigationPointerSource {
+    Mouse,
+    Touch(touch::Finger),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NavigationPress {
+    source: NavigationPointerSource,
+    position: Point,
+}
+
+impl NavigationPress {
+    fn new(pointer: NavigationPointer<'_>) -> Option<Self> {
+        Some(Self {
+            source: pointer.source()?,
+            position: pointer.current_position()?,
+        })
+    }
+
+    fn moved_beyond_slop(self, pointer: NavigationPointer<'_>) -> bool {
+        if !matches!(self.source, NavigationPointerSource::Touch(_)) {
+            return false;
+        }
+
+        let Some(position) = pointer.current_position() else {
+            return true;
+        };
+        let delta = position - self.position;
+        delta.x * delta.x + delta.y * delta.y > NAVIGATION_TOUCH_SLOP * NAVIGATION_TOUCH_SLOP
+    }
+}
+
 impl NavigationPointer<'_> {
+    fn source(self) -> Option<NavigationPointerSource> {
+        match self.event {
+            Event::Mouse(_) => Some(NavigationPointerSource::Mouse),
+            Event::Touch(
+                touch::Event::FingerPressed { id, .. }
+                | touch::Event::FingerMoved { id, .. }
+                | touch::Event::FingerLifted { id, .. }
+                | touch::Event::FingerLost { id, .. },
+            ) => Some(NavigationPointerSource::Touch(*id)),
+            _ => None,
+        }
+    }
+
+    fn current_position(self) -> Option<Point> {
+        if self.cursor.is_levitating() {
+            None
+        } else {
+            self.cursor.position().or_else(|| self.position())
+        }
+    }
+
     fn is_over(self, bounds: Rectangle) -> bool {
         if self.cursor.position().is_some() {
             return self.cursor.is_over(bounds);
@@ -2861,11 +2947,7 @@ impl NavigationPointer<'_> {
     }
 
     fn press_origin(self, indicator_bounds: Rectangle) -> Option<Point> {
-        let position = self.cursor.position().or_else(|| self.position())?;
-
-        if self.cursor.is_levitating() {
-            return None;
-        }
+        let position = self.current_position()?;
 
         Some(position - Vector::new(indicator_bounds.x, indicator_bounds.y))
     }
