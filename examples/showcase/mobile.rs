@@ -5,6 +5,9 @@ use material_ui_rs::widget::{navigation, tabs};
 
 use super::ShowcasePage;
 
+#[cfg(target_os = "android")]
+pub(super) const TABS_ID: &str = "showcase-component-tabs";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Section {
     Components,

@@ -29,6 +29,17 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     let surface = page::surface(header(page), content);
     #[cfg(target_os = "android")]
     if state.mobile.sections.selected() == super::mobile::Section::Components {
+        // The longest label needs about 61px plus Material's 16px padding per side.
+        const MIN_COMPONENT_TAB_WIDTH: f32 = 96.0;
+        let insets = state.content_insets();
+        let rail_width = if state.adaptive_navigation_layout()
+            == material::widget::navigation::AdaptiveLayout::NavigationRail
+        {
+            material::tokens::component::navigation_rail::CONTAINER_WIDTH
+        } else {
+            0.0
+        };
+        let available_width = state.window_size.width - insets.left - insets.right - rail_width;
         let tabs = material::widget::tabs::animated_tabs(
             material::widget::tabs::Variant::Secondary,
             &state.mobile.component_tabs,
@@ -38,7 +49,16 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
                     Message::Navigate(page),
                 )
             }),
-        );
+        )
+        .width(Length::Fixed(
+            available_width.max(MIN_COMPONENT_TAB_WIDTH * 4.0),
+        ));
+        let tabs = iced::widget::scrollable(tabs)
+            .id(super::mobile::TABS_ID)
+            .direction(iced::widget::scrollable::Direction::Horizontal(
+                iced::widget::scrollable::Scrollbar::hidden(),
+            ))
+            .width(Length::Fill);
         return Column::new()
             .push(tabs)
             .push(surface)

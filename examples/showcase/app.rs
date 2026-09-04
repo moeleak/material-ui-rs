@@ -352,12 +352,12 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
         Message::CjkRegionalFontFinished => Task::none(),
         Message::Navigate(page) => {
             state.select_page(page);
-            Task::none()
+            reveal_component_tab(state)
         }
         #[cfg(any(target_os = "android", test))]
         Message::NavigateSection(section) => {
             state.select_page(state.mobile.page_for(section));
-            Task::none()
+            reveal_component_tab(state)
         }
         #[cfg(target_os = "android")]
         Message::Android(material::android::Event::InsetsChanged(insets)) => {
@@ -485,7 +485,7 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
         }
         Message::WindowResized(size) => {
             state.window_size = size;
-            Task::none()
+            reveal_component_tab(state)
         }
         Message::ThemeChanged(action) => {
             let bottom_margin = state.floating_bottom_margin();
@@ -807,6 +807,20 @@ fn floating_bottom_margin(
         0.0
     };
     theme_picker::FLOATING_MARGIN + bottom_inset + bar_height
+}
+
+fn reveal_component_tab(_state: &Showcase) -> Task<Message> {
+    #[cfg(target_os = "android")]
+    if _state.mobile.sections.selected() == mobile::Section::Components {
+        return iced::widget::operation::snap_to(
+            mobile::TABS_ID,
+            iced::widget::scrollable::RelativeOffset {
+                x: _state.mobile.component_tabs.selected_index() as f32 / 3.0,
+                y: 0.0,
+            },
+        );
+    }
+    Task::none()
 }
 
 #[cfg(target_os = "android")]
