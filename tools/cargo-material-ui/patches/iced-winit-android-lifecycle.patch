@@ -82,18 +82,19 @@
          }
 
          fn new_events(
-@@ -235,6 +277,17 @@
+@@ -235,6 +277,18 @@
              }
          }
 
 +        fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
 +            #[cfg(target_os = "android")]
 +            {
-+                self.is_resumed = false;
++                // Release the surface before Android's synchronous callback returns.
 +                self.process_event(
 +                    _event_loop,
 +                    Event::EventLoopAwakened(winit::event::Event::Suspended),
 +                );
++                self.is_resumed = false;
 +            }
 +        }
 +
