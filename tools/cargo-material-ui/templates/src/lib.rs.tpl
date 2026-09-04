@@ -2,7 +2,7 @@
 use iced::Padding;
 use iced::time::Instant;
 use iced::widget::column;
-use iced::{Size, Subscription};
+use iced::{Size, Subscription, Task};
 use material::widget::navigation;
 use material_ui_rs as material;
 
@@ -42,6 +42,12 @@ const COMPONENT_PAGES: [DemoPage; 4] = [
     DemoPage::Feedback,
     DemoPage::Surfaces,
 ];
+
+#[cfg(target_os = "android")]
+// Keep the longest label and its 16dp side padding on one line.
+const COMPONENT_TAB_MIN_WIDTH: f32 = 96.0;
+#[cfg(target_os = "android")]
+const COMPONENT_TABS_ID: &str = "component-tabs";
 
 pub fn run() -> iced::Result {
     let application = material::application(boot, update, view);
@@ -127,7 +133,7 @@ fn boot() -> App {
     }
 }
 
-fn update(app: &mut App, message: Message) {
+fn update(app: &mut App, message: Message) -> Task<Message> {
     match message {
         Message::Increment => app.count += 1,
         Message::Decrement => app.count -= 1,
@@ -156,6 +162,17 @@ fn update(app: &mut App, message: Message) {
             };
             let layout = navigation::adaptive_layout(app.window_size.width, app.window_size.height);
             app.navigation.select(page, Instant::now(), layout);
+            #[cfg(target_os = "android")]
+            if page == DemoPage::Components {
+                return iced::widget::operation::snap_to(
+                    iced::widget::Id::new(COMPONENT_TABS_ID),
+                    iced::widget::scrollable::RelativeOffset {
+                        x: app.component_tabs.selected_index() as f32
+                            / (COMPONENT_PAGES.len() - 1) as f32,
+                        y: 0.0,
+                    },
+                );
+            }
         }
         Message::ToggleMenu => app
             .navigation
@@ -173,6 +190,7 @@ fn update(app: &mut App, message: Message) {
             app.navigation.advance_frame(Instant::now());
         }
     }
+    Task::none()
 }
 
 fn subscription(app: &App) -> Subscription<Message> {
@@ -263,15 +281,34 @@ fn view(app: &App) -> material::Element<'_, Message> {
     #[cfg(target_os = "android")]
     let page: material::Element<'_, Message> = if app.navigation.selected() == DemoPage::Components
     {
-        column![
-            material::widget::tabs::animated_tabs(
-                material::widget::tabs::Variant::Secondary,
-                &app.component_tabs,
-                COMPONENT_PAGES.map(|page| (
+        let insets = app.safe_area.content();
+        let rail_width =
+            match navigation::adaptive_layout(app.window_size.width, app.window_size.height) {
+                navigation::AdaptiveLayout::NavigationBar => 0.0,
+                navigation::AdaptiveLayout::NavigationRail => {
+                    navigation::expanded_rail_width(app.navigation.menu_progress())
+                }
+            };
+        let tab_width = (app.window_size.width - insets.left - insets.right - rail_width)
+            .max(COMPONENT_TAB_MIN_WIDTH * COMPONENT_PAGES.len() as f32);
+        let tabs = material::widget::tabs::animated_tabs(
+            material::widget::tabs::Variant::Secondary,
+            &app.component_tabs,
+            COMPONENT_PAGES.map(|page| {
+                (
                     material::widget::tabs::Content::label(page.label()),
                     Message::Navigate(page),
-                )),
-            ),
+                )
+            }),
+        )
+        .width(iced::Length::Fixed(tab_width));
+        column![
+            iced::widget::scrollable(tabs)
+                .id(iced::widget::Id::new(COMPONENT_TABS_ID))
+                .direction(iced::widget::scrollable::Direction::Horizontal(
+                    iced::widget::scrollable::Scrollbar::hidden(),
+                ))
+                .width(iced::Length::Fill),
             page,
         ]
         .into()
