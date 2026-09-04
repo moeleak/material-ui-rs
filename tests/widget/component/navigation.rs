@@ -189,7 +189,7 @@ fn hidden_bottom_navigation_leaves_no_gap_above_keyboard() {
         );
     let node = layout_navigation(element, Size::new(360.0, 800.0));
     let root = Layout::new(&node);
-    let page = root.children().next().unwrap();
+    let page = root.children().next().unwrap().children().next().unwrap();
     assert_eq!(root.children().count(), 1);
     assert_eq!(
         page.bounds(),
@@ -200,6 +200,87 @@ fn hidden_bottom_navigation_leaves_no_gap_above_keyboard() {
             height: 496.0
         }
     );
+}
+
+#[test]
+fn navigation_bar_visibility_and_insets_preserve_focused_input_tree() {
+    use iced_widget::core::widget::{Id, operation::focusable};
+
+    fn input_is_focused(tree: &Tree) -> bool {
+        type InputState = iced_widget::text_input::State<SingleLineTestParagraph>;
+        if tree.tag == tree::Tag::of::<InputState>() {
+            tree.state.downcast_ref::<InputState>().is_focused()
+        } else {
+            tree.children.iter().any(input_is_focused)
+        }
+    }
+
+    let destinations = [Destination::new(Page::One, "1", "One")];
+    let state = NavigationState::new(Page::One);
+    let input_id = Id::new("navigation-focus-regression");
+    let limits = layout::Limits::new(Size::ZERO, Size::new(360.0, 800.0));
+    for with_menu in [false, true] {
+        let build = |visible, insets| {
+            let input = iced_widget::text_input("Input", "persistent value")
+                .id(input_id.clone())
+                .on_input(|_| Message::Frame);
+            let suite = suite(&destinations, &state)
+                .dimensions(360.0, 800.0)
+                .insets(insets)
+                .navigation_bar_visible(visible);
+            if with_menu {
+                suite
+                    .with_menu("Menu", Message::Frame)
+                    .view(|_| Message::Frame, input)
+            } else {
+                suite.view(|_| Message::Frame, input)
+            }
+        };
+        let mut element: Element<'_, Message, Theme, SingleLineTestRenderer> =
+            build(true, Padding::ZERO);
+        let mut tree = Tree::new(element.as_widget());
+        let node = element
+            .as_widget_mut()
+            .layout(&mut tree, &SingleLineTestRenderer, &limits);
+        element.as_widget_mut().operate(
+            &mut tree,
+            Layout::new(&node),
+            &SingleLineTestRenderer,
+            &mut focusable::focus::<()>(input_id.clone()),
+        );
+        assert!(input_is_focused(&tree));
+
+        // Cover both overlaying IMEs and native-resized windows, which report
+        // zero remaining keyboard inset while the navigation bar is hidden.
+        for (visible, insets) in [
+            (
+                false,
+                Padding {
+                    bottom: 280.0,
+                    ..Padding::ZERO
+                },
+            ),
+            (
+                true,
+                Padding {
+                    bottom: 24.0,
+                    ..Padding::ZERO
+                },
+            ),
+            (false, Padding::ZERO),
+            (true, Padding::ZERO),
+        ] {
+            let mut element = build(visible, insets);
+            tree.diff(element.as_widget());
+            let _ = element
+                .as_widget_mut()
+                .layout(&mut tree, &SingleLineTestRenderer, &limits);
+            assert!(
+                input_is_focused(&tree),
+                "focus lost with visible={visible}, insets={insets:?}"
+            );
+        }
+    }
 }
 
 #[test]

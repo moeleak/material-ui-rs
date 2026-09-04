@@ -814,27 +814,34 @@ where
 
     match layout {
         AdaptiveLayout::NavigationBar => {
-            if !navigation_bar_visible {
-                return inset_navigation_shell(content, insets);
-            }
-
-            Column::new()
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .push(inset_navigation_shell(
+            // Keep the page at the same widget-tree path while the keyboard
+            // hides the bar, so focused inputs and scroll positions survive.
+            let shell = Column::new().width(Length::Fill).height(Length::Fill).push(
+                inset_navigation_shell(
                     content,
-                    Padding {
-                        bottom: 0.0,
-                        ..insets
+                    if navigation_bar_visible {
+                        Padding {
+                            bottom: 0.0,
+                            ..insets
+                        }
+                    } else {
+                        insets
                     },
-                ))
-                .push(bar_with(
-                    destinations,
-                    selection,
-                    on_select,
-                    NavigationBarOptions::default().insets(Padding { top: 0.0, ..insets }),
-                ))
-                .into()
+                ),
+            );
+
+            if navigation_bar_visible {
+                shell
+                    .push(bar_with(
+                        destinations,
+                        selection,
+                        on_select,
+                        NavigationBarOptions::default().insets(Padding { top: 0.0, ..insets }),
+                    ))
+                    .into()
+            } else {
+                shell.into()
+            }
         }
         AdaptiveLayout::NavigationRail => inset_navigation_shell(
             Row::new()
@@ -855,11 +862,6 @@ where
     Message: 'a,
     Renderer: renderer::Renderer + 'a,
 {
-    let content = content.into();
-    if insets == Padding::ZERO {
-        return content;
-    }
-
     Container::new(content)
         .width(Length::Fill)
         .height(Length::Fill)
