@@ -894,6 +894,17 @@ mod tests {
     }
 
     #[test]
+    fn generated_workspace_resolves_dependencies_for_its_minimum_rust_version() {
+        let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
+        let root: toml::Value = toml::from_str(&files["Cargo.toml"]).unwrap();
+        let android: toml::Value = toml::from_str(&files["android/Cargo.toml"]).unwrap();
+
+        assert_eq!(root["workspace"]["resolver"].as_str(), Some("3"));
+        assert_eq!(root["package"]["rust-version"].as_str(), Some("1.88"));
+        assert_eq!(android["package"]["rust-version"].as_str(), Some("1.88"));
+    }
+
+    #[test]
     fn android_suite_owns_safe_area_and_keyboard_avoidance() {
         let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
         let app = &files["src/lib.rs"];

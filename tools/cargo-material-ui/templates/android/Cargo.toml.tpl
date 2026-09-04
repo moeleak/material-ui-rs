@@ -2,6 +2,7 @@
 name = "{{crate_name}}-android"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 
 [lib]
 name = "{{crate_name}}_android"

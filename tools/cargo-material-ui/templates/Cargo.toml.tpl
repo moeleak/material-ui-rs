@@ -2,10 +2,11 @@
 name = "{{package_name}}"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.88"
 
 [workspace]
 members = [{{workspace_members}}]
-resolver = "2"
+resolver = "3"
 
 [lib]
 name = "{{crate_name}}"
