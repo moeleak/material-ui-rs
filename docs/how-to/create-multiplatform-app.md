@@ -82,12 +82,13 @@ supports `--force-flake-overwrite`.
 The source templates live under `tools/cargo-material-ui/templates/`, separate
 from the Rust generator.
 
-The starter UI tracks the actual window size. Desktop and Web builds keep the
-standard bottom navigation bar on compact windows and use an expandable
-navigation rail on wider windows. Android explicitly selects a modal drawer for
-compact windows. The drawer follows AndroidX Compose's fixed-width,
-translated-surface model with a 256 ms FastOutSlowIn tween; its text and item
-geometry are not remeasured while the drawer moves.
+The starter UI tracks the actual window size. Compact windows use a bottom
+navigation bar; wider windows use an expandable navigation rail. Android uses
+three top-level destinations: Components, Navigation, and Structure. Components
+has four secondary tabs and remembers its last selected tab. Desktop and Web
+retain all six destinations. The note field and theme button exercise keyboard
+avoidance and system-bar appearance on Android. A compact modal drawer remains
+an explicit [adaptive-navigation option](adaptive-navigation.md).
 
 ## Build
 
@@ -122,20 +123,73 @@ profile.
 
 ## Android runtime behavior
 
-The Android wrapper uses NativeActivity and the same compatibility approach as
-the sibling `rdict` application:
+The Android wrapper uses NativeActivity with compatibility patches applied by
+the CLI build command:
 
 - suspend drops the graphics surface, resume recreates it, and the window is
   redrawn instead of continuing with a stale surface;
 - status and navigation bars remain visible but transparent, with edge-to-edge
   content and Android's automatic contrast scrims disabled;
 - status, navigation, cutout, and IME insets are queried separately and the
-  generated page reacts to inset changes;
+  generated navigation suite reacts to inset changes;
 - Android text events, composing ranges, commits, and IME actions are forwarded
   to iced, with UTF-16 indices converted safely for Rust strings;
 - generated applications load available Android system fonts so CJK input and
   other Unicode scripts render without embedding large font files in the APK.
 
-The generated app applies system and IME-safe content padding. Use
-`material_ui_rs::android::set_system_bars` when the app theme changes so icon
-appearance and fallback colors stay synchronized.
+The generated app passes `android::layout_insets().content()` to the navigation
+suite, which distributes safe-area padding between content and navigation.
+These insets exclude any area already consumed by the native window. The raw
+`safe_area_insets()` values remain available for observing keyboard visibility.
+The bottom navigation bar hides while the keyboard is visible and restores its
+selection after the keyboard closes.
+
+System-bar updates run asynchronously on Android's UI thread. Call
+`android::set_system_bars(android::SystemBarsStyle::from_theme(&theme))` at
+startup and when the application theme changes, as the starter does. A successful
+return means the request was accepted; asynchronous failures are logged and
+retried while the app is resumed, retaining the last valid insets. Subscribe to `android::events()`
+for inset updates, including changes detected while the foreground app is idle.
+
+The generated Android resources include API 28 cutout/divider settings and API
+29 contrast settings. Both gesture navigation and three-button navigation use
+the app's extended background. This follows Android's
+[edge-to-edge layout guidance](https://developer.android.com/develop/ui/views/layout/edge-to-edge).
+The default minimum SDK is 26 and target SDK is 35.
+
+## Verify local Android changes
+
+Run the current CLI directly from a repository checkout so validation uses its
+latest templates and compatibility patches:
+
+```sh
+cargo run --manifest-path tools/cargo-material-ui/Cargo.toml -- new /tmp/material-android-check \
+  --non-interactive --name material-android-check \
+  --label "Material Android Check" --app-id dev.example.material_android_check \
+  --backend native --platform android
+```
+
+In the generated `Cargo.toml`, replace the `material-ui-rs` Git dependency with
+an absolute path to the checkout under test:
+
+```toml
+material-ui-rs = { path = "/absolute/path/to/material-ui-rs" }
+```
+
+With `ANDROID_HOME` (or `ANDROID_SDK_ROOT`), the NDK, JDK, `cargo-apk`, and the
+configured Rust Android targets installed, build and install the resulting APK:
+
+```sh
+cargo run --manifest-path tools/cargo-material-ui/Cargo.toml -- doctor /tmp/material-android-check
+cargo run --manifest-path tools/cargo-material-ui/Cargo.toml -- build /tmp/material-android-check --platform android
+adb devices
+adb -s emulator-5554 install -r /tmp/material-android-check/dist/android/material-android-check-debug.apk
+adb -s emulator-5554 shell am start -n dev.example.material_android_check/android.app.NativeActivity
+```
+
+Use the serial reported by `adb devices` if it differs. Build through the CLI:
+it prepares the lifecycle and IME overrides before invoking `cargo apk`.
+Check all three destinations, Components tab restoration, light/dark themes,
+the note field with the keyboard open and closed, rotation, and background /
+foreground transitions. Repeat with gesture and three-button navigation, then
+restore the emulator's original navigation and rotation settings.
