@@ -767,7 +767,10 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
         content,
         &state.login_dialog,
         now,
-        login_dialog(state, state.login_dialog.alpha(now)),
+        iced::widget::container(login_dialog(state, state.login_dialog.alpha(now)))
+            .width(iced::Length::Shrink)
+            .height(iced::Length::Shrink)
+            .padding(state.content_insets()),
     );
 
     state.theme_controller.reveal_over(content, now)
