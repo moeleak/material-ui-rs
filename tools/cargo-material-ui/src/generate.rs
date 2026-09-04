@@ -26,6 +26,10 @@ const WEB_TEMPLATE: &str = include_str!("../templates/web/index.html.tpl");
 const ANDROID_CARGO_TEMPLATE: &str = include_str!("../templates/android/Cargo.toml.tpl");
 const ANDROID_MAIN_TEMPLATE: &str = include_str!("../templates/android/src/lib.rs.tpl");
 const ANDROID_STYLES_TEMPLATE: &str = include_str!("../templates/android/res/values/styles.xml");
+const ANDROID_STYLES_V28_TEMPLATE: &str =
+    include_str!("../templates/android/res/values-v28/styles.xml");
+const ANDROID_STYLES_V29_TEMPLATE: &str =
+    include_str!("../templates/android/res/values-v29/styles.xml");
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct GeneratedState {
@@ -495,10 +499,16 @@ fn render_android(config: &ProjectConfig, crate_name: &str) -> BTreeMap<String, 
         "android/src/lib.rs".to_owned(),
         render_template(ANDROID_MAIN_TEMPLATE, &[("crate_name", crate_name)]),
     );
-    let _ = files.insert(
-        "android/res/values/styles.xml".to_owned(),
-        ANDROID_STYLES_TEMPLATE.to_owned(),
-    );
+    for (directory, template) in [
+        ("values", ANDROID_STYLES_TEMPLATE),
+        ("values-v28", ANDROID_STYLES_V28_TEMPLATE),
+        ("values-v29", ANDROID_STYLES_V29_TEMPLATE),
+    ] {
+        let _ = files.insert(
+            format!("android/res/{directory}/styles.xml"),
+            template.to_owned(),
+        );
+    }
     files
 }
 
@@ -735,6 +745,14 @@ mod tests {
         .unwrap();
         assert!(directory.path().join("web/index.html").exists());
         assert!(directory.path().join("android/Cargo.toml").exists());
+        for directory_name in ["values", "values-v28", "values-v29"] {
+            assert!(
+                directory
+                    .path()
+                    .join(format!("android/res/{directory_name}/styles.xml"))
+                    .exists()
+            );
+        }
 
         apply_project(
             directory.path(),
@@ -748,6 +766,14 @@ mod tests {
         .unwrap();
         assert!(directory.path().join("web/index.html").exists());
         assert!(!directory.path().join("android/Cargo.toml").exists());
+        for directory_name in ["values", "values-v28", "values-v29"] {
+            assert!(
+                !directory
+                    .path()
+                    .join(format!("android/res/{directory_name}/styles.xml"))
+                    .exists()
+            );
+        }
         assert!(state_path(directory.path()).exists());
     }
 
@@ -868,16 +894,16 @@ mod tests {
     }
 
     #[test]
-    fn android_page_draws_behind_the_navigation_bar() {
+    fn android_suite_owns_safe_area_and_keyboard_avoidance() {
         let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
         let app = &files["src/lib.rs"];
 
-        assert!(
-            app.contains("height(iced::Length::Fixed(app.safe_area.system().bottom))"),
-            "{app}"
-        );
-        assert!(app.contains("bottom: app.safe_area.ime.bottom"), "{app}");
-        assert!(!app.contains("bottom: safe_area.bottom"), "{app}");
+        assert!(app.contains("material::android::layout_insets()"));
+        assert!(app.contains(".navigation_bar_visible(!app.ime_visible)"));
+        assert!(app.contains(".insets(Padding {"));
+        assert!(!app.contains(".padding(Padding {"));
+        assert!(!app.contains("iced::widget::Space"));
+        assert!(!app.contains("CompactNavigation::ModalDrawer"));
     }
 
     #[test]
@@ -891,7 +917,6 @@ mod tests {
         assert!(app.contains(".toggle_menu_for_size("));
         assert!(!app.contains(".layout(navigation::AdaptiveLayout::NavigationRail)"));
         assert!(app.contains(".with_menu("));
-        assert!(app.contains(".compact_navigation(navigation::CompactNavigation::ModalDrawer)"));
         assert!(app.contains("#[cfg(target_os = \"android\")]"));
         assert!(app.contains("app.navigation.advance_frame(Instant::now())"));
         assert!(app.contains(".badge(\"3\")"));
