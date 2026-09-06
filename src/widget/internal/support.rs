@@ -78,27 +78,85 @@ pub(super) fn text_field_floating_label_notch(
     })
 }
 
+/// Restricts both renderer layers and text clips to the visible part of a field.
+/// `bounds` may extend above the field for a floating label.
+pub(super) fn draw_text_field_content<Renderer>(
+    renderer: &mut Renderer,
+    bounds: Rectangle,
+    viewport: &Rectangle,
+    draw: impl FnOnce(&mut Renderer, &Rectangle),
+) where
+    Renderer: iced_widget::core::Renderer,
+{
+    if let Some(visible) = bounds.intersection(viewport) {
+        renderer.with_layer(visible, |renderer| draw(renderer, &visible));
+    }
+}
+
+pub(super) fn draw_text_field_label<Renderer>(
+    renderer: &mut Renderer,
+    defaults: &renderer::Style,
+    bounds: Rectangle,
+    paragraph: &Renderer::Paragraph,
+    color: Color,
+    viewport: &Rectangle,
+) where
+    Renderer: core_text::Renderer,
+{
+    draw_text_field_content(renderer, bounds, viewport, |renderer, visible| {
+        core_widget::text::draw(
+            renderer,
+            defaults,
+            bounds,
+            paragraph,
+            core_widget::text::Style { color: Some(color) },
+            visible,
+        );
+    });
+}
+
+pub(super) fn draw_text_field_text<Renderer>(
+    renderer: &mut Renderer,
+    text: core_text::Text<String, Renderer::Font>,
+    position: Point,
+    color: Color,
+    bounds: Rectangle,
+    viewport: &Rectangle,
+) where
+    Renderer: core_text::Renderer,
+{
+    draw_text_field_content(renderer, bounds, viewport, |renderer, _visible| {
+        // tiny-skia uses the supplied text clip to decide whether its layer mask
+        // is needed. Keep the complete glyph region here: passing the already
+        // intersected layer bounds makes it incorrectly skip a partial clip.
+        renderer.fill_text(text, position, color, bounds);
+    });
+}
+
 pub(super) fn draw_text_field_outline<Renderer>(
     renderer: &mut Renderer,
     bounds: Rectangle,
     background: Background,
     border: Border,
     floating_label_notch: Option<Rectangle>,
+    viewport: &Rectangle,
 ) where
     Renderer: iced_widget::core::Renderer,
 {
-    renderer.fill_quad(
-        renderer::Quad {
-            bounds,
-            border: Border {
-                color: Color::TRANSPARENT,
-                width: 0.0,
-                radius: border.radius,
+    draw_text_field_content(renderer, bounds, viewport, |renderer, _visible| {
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds,
+                border: Border {
+                    color: Color::TRANSPARENT,
+                    width: 0.0,
+                    radius: border.radius,
+                },
+                ..renderer::Quad::default()
             },
-            ..renderer::Quad::default()
-        },
-        background,
-    );
+            background,
+        )
+    });
 
     if border.width <= 0.0 {
         return;
@@ -115,7 +173,8 @@ pub(super) fn draw_text_field_outline<Renderer>(
         bounds,
         border.width,
         floating_label_notch,
-        |renderer| {
+        viewport,
+        |renderer, _visible| {
             renderer.fill_quad(outline, Color::TRANSPARENT);
         },
     );
@@ -126,12 +185,21 @@ pub(super) fn draw_text_field_notched<Renderer>(
     bounds: Rectangle,
     outline_width: f32,
     floating_label_notch: Option<Rectangle>,
-    mut draw: impl FnMut(&mut Renderer),
+    viewport: &Rectangle,
+    mut draw: impl FnMut(&mut Renderer, &Rectangle),
 ) where
     Renderer: iced_widget::core::Renderer,
 {
+    // iced's renderer layers replace the clip region instead of intersecting
+    // it with the parent layer. Preserve the scrollable's visible viewport in
+    // every notch segment so outlined fields cannot paint over navigation.
+    let mut draw_region = |region: Rectangle| {
+        if let Some(visible) = region.intersection(viewport) {
+            renderer.with_layer(visible, |renderer| draw(renderer, &visible));
+        }
+    };
     let Some(notch) = floating_label_notch.filter(|notch| notch.width > 0.0) else {
-        draw(renderer);
+        draw_region(bounds);
         return;
     };
 
@@ -143,7 +211,7 @@ pub(super) fn draw_text_field_notched<Renderer>(
     let notch_end = (notch.x + notch.width).clamp(left, right);
 
     if notch_end <= notch_start {
-        draw(renderer);
+        draw_region(bounds);
         return;
     }
 
@@ -151,39 +219,30 @@ pub(super) fn draw_text_field_notched<Renderer>(
     let lower_y = (top + top_clear_height).min(bottom);
 
     if notch_start > left {
-        renderer.with_layer(
-            Rectangle {
-                x: left,
-                y: top,
-                width: notch_start - left,
-                height: top_clear_height,
-            },
-            |renderer| draw(renderer),
-        );
+        draw_region(Rectangle {
+            x: left,
+            y: top,
+            width: notch_start - left,
+            height: top_clear_height,
+        });
     }
 
     if notch_end < right {
-        renderer.with_layer(
-            Rectangle {
-                x: notch_end,
-                y: top,
-                width: right - notch_end,
-                height: top_clear_height,
-            },
-            |renderer| draw(renderer),
-        );
+        draw_region(Rectangle {
+            x: notch_end,
+            y: top,
+            width: right - notch_end,
+            height: top_clear_height,
+        });
     }
 
     if lower_y < bottom {
-        renderer.with_layer(
-            Rectangle {
-                x: left,
-                y: lower_y,
-                width: bounds.width,
-                height: bottom - lower_y,
-            },
-            |renderer| draw(renderer),
-        );
+        draw_region(Rectangle {
+            x: left,
+            y: lower_y,
+            width: bounds.width,
+            height: bottom - lower_y,
+        });
     }
 }
 

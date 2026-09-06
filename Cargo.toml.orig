@@ -86,6 +86,10 @@ js-sys = "0.3"
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 
+[dev-dependencies]
+iced_tiny_skia = { version = "0.14", default-features = false, features = ["geometry"] }
+tiny-skia = { version = "0.11", default-features = false, features = ["std", "simd"] }
+
 [[example]]
 name = "quickstart"
 path = "examples/quickstart/app.rs"

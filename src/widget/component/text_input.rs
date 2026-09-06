@@ -591,6 +591,7 @@ where
                 radius: tokens::component::text_field::CONTAINER_SHAPE.into(),
             },
             label_notch,
+            viewport,
         );
 
         let input_layout = layout.children().next().unwrap();
@@ -627,23 +628,25 @@ where
             &self.input
         };
 
-        <IcedTextInput<'_, Message, Theme, Renderer> as Widget<Message, Theme, Renderer>>::draw(
-            input,
-            &tree.children[0],
-            renderer,
-            theme,
-            defaults,
-            input_layout,
-            cursor,
-            viewport,
-        );
+        super::support::draw_text_field_content(renderer, bounds, viewport, |renderer, visible| {
+            <IcedTextInput<'_, Message, Theme, Renderer> as Widget<Message, Theme, Renderer>>::draw(
+                input,
+                &tree.children[0],
+                renderer,
+                theme,
+                defaults,
+                input_layout,
+                cursor,
+                visible,
+            );
+        });
 
         if self.label_mode == LabelMode::Placeholder && self.is_populated {
             return;
         }
 
         if progress < 0.99 {
-            core_widget::text::draw(
+            super::support::draw_text_field_label(
                 renderer,
                 defaults,
                 Rectangle {
@@ -653,15 +656,13 @@ where
                     height: label_line_height,
                 },
                 state.label.raw(),
-                core_widget::text::Style {
-                    color: Some(alpha_color(label_color, 1.0 - progress)),
-                },
+                alpha_color(label_color, 1.0 - progress),
                 viewport,
             );
         }
 
         if progress > 0.01 {
-            core_widget::text::draw(
+            super::support::draw_text_field_label(
                 renderer,
                 defaults,
                 Rectangle {
@@ -671,9 +672,7 @@ where
                     height: floating_label_line_height,
                 },
                 state.floating_label.raw(),
-                core_widget::text::Style {
-                    color: Some(alpha_color(label_color, progress)),
-                },
+                alpha_color(label_color, progress),
                 viewport,
             );
         }

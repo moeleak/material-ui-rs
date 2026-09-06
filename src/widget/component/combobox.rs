@@ -1016,7 +1016,8 @@ where
             bounds,
             outline_clip_width,
             label_notch,
-            |renderer| {
+            viewport,
+            |renderer, visible| {
                 self.text_input.draw(
                     &tree.children[0],
                     renderer,
@@ -1024,7 +1025,7 @@ where
                     layout,
                     cursor,
                     selection,
-                    viewport,
+                    visible,
                 );
             },
         );
@@ -1037,7 +1038,8 @@ where
             let label_height = f32::from(label_line_height.to_absolute(label_size));
             let label_y = bounds.y;
 
-            renderer.fill_text(
+            super::support::draw_text_field_text(
+                renderer,
                 core_text::Text {
                     content: label.clone(),
                     size: label_size,
@@ -1051,7 +1053,13 @@ where
                 },
                 Point::new(label_x, label_y),
                 combobox_label_color(theme, is_focused, is_hovered),
-                *viewport,
+                Rectangle {
+                    x: label_x,
+                    y: label_y - label_height / 2.0,
+                    width: label_width,
+                    height: label_height,
+                },
+                viewport,
             );
         }
     }

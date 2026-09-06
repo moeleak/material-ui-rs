@@ -528,6 +528,7 @@ where
             style.background,
             style.border,
             label_notch,
+            viewport,
         );
 
         let text_handle = match &self.handle {
@@ -536,12 +537,19 @@ where
                 let right = bounds.x + bounds.width - self.field_padding.right;
                 let center = Point::new(right - size.0 / 2.0, bounds.center_y());
 
-                draw_default_handle(
+                super::support::draw_text_field_content(
                     renderer,
-                    center,
-                    size.0,
-                    state.handle_rotation.value,
-                    style.handle_color,
+                    bounds,
+                    viewport,
+                    |renderer, _visible| {
+                        draw_default_handle(
+                            renderer,
+                            center,
+                            size.0,
+                            state.handle_rotation.value,
+                            style.handle_color,
+                        )
+                    },
                 );
 
                 None
@@ -578,7 +586,8 @@ where
         if let Some((font, code_point, size, line_height, shaping)) = text_handle {
             let size = size.unwrap_or_else(|| renderer.default_size());
 
-            renderer.fill_text(
+            super::support::draw_text_field_text(
+                renderer,
                 Text {
                     content: code_point.to_string(),
                     size,
@@ -595,7 +604,8 @@ where
                     bounds.center_y(),
                 ),
                 style.handle_color,
-                *viewport,
+                bounds,
+                viewport,
             );
         }
 
@@ -604,7 +614,8 @@ where
         if let Some(label) = label.or_else(|| self.placeholder.clone()) {
             let text_size = self.text_size.unwrap_or_else(|| renderer.default_size());
 
-            renderer.fill_text(
+            super::support::draw_text_field_text(
+                renderer,
                 Text {
                     content: label,
                     size: text_size,
@@ -625,7 +636,13 @@ where
                 } else {
                     style.placeholder_color
                 },
-                *viewport,
+                Rectangle {
+                    x: bounds.x + self.field_padding.left,
+                    y: bounds.y,
+                    width: (bounds.width - self.field_padding.x()).max(0.0),
+                    height: bounds.height,
+                },
+                viewport,
             );
         }
 
@@ -637,7 +654,8 @@ where
             let label_height = f32::from(label_line_height.to_absolute(label_size));
             let label_y = bounds.y;
 
-            renderer.fill_text(
+            super::support::draw_text_field_text(
+                renderer,
                 Text {
                     content: label.clone(),
                     size: label_size,
@@ -651,7 +669,13 @@ where
                 },
                 Point::new(label_x, label_y),
                 select_label_color(theme, status),
-                *viewport,
+                Rectangle {
+                    x: label_x,
+                    y: label_y - label_height / 2.0,
+                    width: label_width,
+                    height: label_height,
+                },
+                viewport,
             );
         }
     }
