@@ -250,6 +250,18 @@ where
                 );
             }
             TextFieldInnerTouchHandling::Suppress => {}
+            TextFieldInnerTouchHandling::ConfirmedOutsideTap => {
+                self.inner.update(
+                    &mut tree.children[0],
+                    &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                    layout.children().next().unwrap(),
+                    mouse::Cursor::Unavailable,
+                    renderer,
+                    clipboard,
+                    shell,
+                    viewport,
+                );
+            }
             TextFieldInnerTouchHandling::ConfirmedTap => {
                 let press = Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
                 self.inner.update(

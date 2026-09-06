@@ -223,10 +223,14 @@ fn text_field_keyboard_activation(
     match event {
         Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => cursor.is_over(bounds),
         Event::Touch(touch::Event::FingerPressed { id, position }) => {
-            if let Some(position) = text_field_touch_position(*position, cursor)
-                && bounds.contains(position)
-            {
-                *touch_activation = Some(TextFieldTouchActivation::new(*id, position));
+            if touch_activation.is_some_and(|activation| !activation.matches(*id)) {
+                return false;
+            }
+            if let Some(local_position) = text_field_touch_position(*position, cursor) {
+                *touch_activation = Some(
+                    TextFieldTouchActivation::new(*id, *position)
+                        .inside(bounds.contains(local_position)),
+                );
             } else {
                 *touch_activation = None;
             }
@@ -234,23 +238,31 @@ fn text_field_keyboard_activation(
             false
         }
         Event::Touch(touch::Event::FingerMoved { id, position }) => {
-            if let Some(position) = text_field_touch_position(*position, cursor)
-                && touch_activation.is_some_and(|activation| {
-                    activation.matches(*id)
-                        && activation.moved_beyond_slop(position, TEXT_FIELD_TOUCH_SLOP)
-                })
-            {
+            if touch_activation.is_some_and(|activation| {
+                activation.matches(*id)
+                    && (cursor.is_levitating()
+                        || activation.moved_beyond_slop(*position, TEXT_FIELD_TOUCH_SLOP))
+            }) {
                 *touch_activation = None;
             }
 
             false
         }
         Event::Touch(touch::Event::FingerLifted { id, position }) => {
+            let raw_position = *position;
             let position = text_field_touch_position(*position, cursor);
 
+            if touch_activation.is_some_and(|activation| !activation.matches(*id)) {
+                return false;
+            }
+
             touch_activation.take().is_some_and(|activation| {
-                position
-                    .is_some_and(|position| activation.matches(*id) && bounds.contains(position))
+                position.is_some_and(|position| {
+                    activation.started_inside()
+                        && activation.matches(*id)
+                        && bounds.contains(position)
+                        && !activation.moved_beyond_slop(raw_position, TEXT_FIELD_TOUCH_SLOP)
+                })
             })
         }
         Event::Touch(touch::Event::FingerLost { id, .. }) => {
@@ -269,6 +281,7 @@ enum TextFieldInnerTouchHandling {
     Forward,
     Suppress,
     ConfirmedTap,
+    ConfirmedOutsideTap,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -295,19 +308,16 @@ struct TextFieldTouchContext<'a> {
 
 impl TextFieldTouchContext<'_> {
     fn keyboard_activation(&self, touch_activation: &mut Option<TextFieldTouchActivation>) -> bool {
-        let TextFieldTouchBounds::Visible(bounds) = self.bounds else {
-            if matches!(self.event, Event::Touch(_)) {
-                *touch_activation = None;
-            }
-
-            return false;
+        let bounds = match self.bounds {
+            TextFieldTouchBounds::Visible(bounds) => bounds,
+            TextFieldTouchBounds::Hidden => Rectangle::with_size(Size::ZERO),
         };
 
         text_field_keyboard_activation(touch_activation, self.event, bounds, self.cursor)
     }
 
     fn inner_handling(self) -> TextFieldInnerTouchHandling {
-        if !self.is_enabled {
+        if !self.is_enabled || !matches!(self.event, Event::Touch(_)) {
             return TextFieldInnerTouchHandling::Forward;
         }
 
@@ -315,43 +325,16 @@ impl TextFieldTouchContext<'_> {
             return TextFieldInnerTouchHandling::ConfirmedTap;
         }
 
-        let TextFieldTouchBounds::Visible(bounds) = self.bounds else {
-            return if matches!(self.event, Event::Touch(_)) {
-                TextFieldInnerTouchHandling::Suppress
-            } else {
-                TextFieldInnerTouchHandling::Forward
-            };
-        };
-
-        if self.press_is_over(bounds) || self.matches_activation() {
-            TextFieldInnerTouchHandling::Suppress
-        } else {
-            TextFieldInnerTouchHandling::Forward
+        if let Event::Touch(touch::Event::FingerLifted { id, position }) = self.event
+            && let Some(activation) = self.activation_before
+            && activation.matches(*id)
+            && !activation.started_inside()
+            && text_field_touch_position(*position, self.cursor).is_some()
+            && !activation.moved_beyond_slop(*position, TEXT_FIELD_TOUCH_SLOP)
+        {
+            return TextFieldInnerTouchHandling::ConfirmedOutsideTap;
         }
-    }
-
-    fn press_is_over(self, bounds: Rectangle) -> bool {
-        matches!(
-            self.event,
-            Event::Touch(touch::Event::FingerPressed { position, .. })
-                if text_field_touch_position(*position, self.cursor)
-                    .is_some_and(|position| bounds.contains(position))
-        )
-    }
-
-    fn matches_activation(self) -> bool {
-        let Some(activation) = self.activation_before else {
-            return false;
-        };
-
-        match self.event {
-            Event::Touch(
-                touch::Event::FingerMoved { id, .. }
-                | touch::Event::FingerLifted { id, .. }
-                | touch::Event::FingerLost { id, .. },
-            ) => activation.matches(*id),
-            _ => false,
-        }
+        TextFieldInnerTouchHandling::Suppress
     }
 }
 
@@ -429,6 +412,9 @@ fn text_input_activation(
     cursor: mouse::Cursor,
 ) -> TextInputActivation {
     web_input_position.update(event, cursor);
+    if !is_enabled || matches!(event, Event::Window(window::Event::Unfocused)) {
+        *touch_activation = None;
+    }
     let inner_cursor = text_field_touch_cursor(event, cursor);
     let touch = TextFieldTouchContext {
         is_enabled,
@@ -566,6 +552,20 @@ fn update_mobile_text_input<'a, Message, Renderer>(
             );
         }
         TextFieldInnerTouchHandling::Suppress => {}
+        TextFieldInnerTouchHandling::ConfirmedOutsideTap => {
+            // Defer blur until a real outside tap, so another field can be used
+            // as a scroll origin without dismissing the current keyboard.
+            input.update(
+                tree,
+                &Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+                layout,
+                mouse::Cursor::Unavailable,
+                context.renderer,
+                &mut *context.clipboard,
+                &mut *context.shell,
+                context.viewport,
+            );
+        }
         TextFieldInnerTouchHandling::ConfirmedTap => {
             let press = Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left));
             input.update(

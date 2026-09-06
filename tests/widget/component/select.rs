@@ -248,7 +248,7 @@ fn selection_fields_inside_scrollable_allow_touch_scrolling_and_taps() {
         }
     }
 
-    for kind in 0..1 {
+    for kind in 0..3 {
         for drag in [false, true] {
             let combo_state = crate::widget::combobox::State::new(vec![1_u8, 2, 3]);
             let field: Element<'_, ScrollMessage, Theme, iced_tiny_skia::Renderer> = match kind {

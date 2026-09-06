@@ -429,7 +429,7 @@ fn text_field_keyboard_activation_rejects_raw_position_when_translated_cursor_is
         bounds,
         mouse::Cursor::Available(Point::new(20.0, 530.0))
     ));
-    assert!(activation.is_none());
+    assert!(activation.is_none_or(|activation| !activation.started_inside()));
 
     assert!(!text_field_keyboard_activation(
         &mut activation,
@@ -464,7 +464,7 @@ fn text_field_visible_keyboard_activation_rejects_touch_without_visible_bounds()
         }
         .keyboard_activation(&mut activation)
     );
-    assert!(activation.is_none());
+    assert!(activation.is_none_or(|activation| !activation.started_inside()));
 }
 
 fn touch_ctx(
@@ -506,7 +506,7 @@ fn text_field_inner_touch_handling_delays_inside_press() {
 }
 
 #[test]
-fn text_field_inner_touch_handling_forwards_outside_press() {
+fn text_field_inner_touch_handling_defers_outside_press_until_a_tap() {
     let bounds = Rectangle::new(Point::new(10.0, 120.0), Size::new(100.0, 48.0));
     let event = Event::Touch(touch::Event::FingerPressed {
         id: touch::Finger(1),
@@ -522,7 +522,7 @@ fn text_field_inner_touch_handling_forwards_outside_press() {
             false,
         )
         .inner_handling(),
-        TextFieldInnerTouchHandling::Forward
+        TextFieldInnerTouchHandling::Suppress
     );
 }
 

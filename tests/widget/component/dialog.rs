@@ -162,6 +162,8 @@ fn dialog_content_does_not_collapse_under_a_shrink_wrapper() {
 #[derive(Default)]
 struct FormProbe {
     account_focused: bool,
+    password_focused: bool,
+    password_bounds: Option<Rectangle>,
     scroll_translation: Vector,
     scroll_to_end: bool,
 }
@@ -174,11 +176,15 @@ impl widget::Operation for FormProbe {
     fn focusable(
         &mut self,
         id: Option<&widget::Id>,
-        _bounds: Rectangle,
+        bounds: Rectangle,
         state: &mut dyn widget::operation::focusable::Focusable,
     ) {
         if id == Some(&widget::Id::new("dialog-account")) {
             self.account_focused = state.is_focused();
+        }
+        if id == Some(&widget::Id::new("dialog-password")) {
+            self.password_focused = state.is_focused();
+            self.password_bounds = Some(bounds);
         }
     }
 
@@ -198,6 +204,104 @@ impl widget::Operation for FormProbe {
             });
         }
     }
+}
+
+#[test]
+fn dragging_from_another_dialog_field_keeps_focus_until_a_real_tap() {
+    let renderer = test_renderer();
+    let viewport = Rectangle::with_size(Size::new(360.0, 640.0));
+    let mut modal = test_modal(Padding {
+        top: 24.0,
+        bottom: 340.0,
+        ..Padding::ZERO
+    });
+    let mut tree = Tree::new(modal.as_widget());
+    let node = modal.as_widget_mut().layout(
+        &mut tree,
+        &renderer,
+        &layout::Limits::new(Size::ZERO, viewport.size()),
+    );
+    modal.as_widget_mut().operate(
+        &mut tree,
+        Layout::new(&node),
+        &renderer,
+        &mut widget::operation::focusable::focus::<()>(widget::Id::new("dialog-account")),
+    );
+    let mut probe = FormProbe::default();
+    modal
+        .as_widget_mut()
+        .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+    let body_bounds = dialog_layout(&tree, Layout::new(&node))
+        .unwrap()
+        .children()
+        .nth(1)
+        .unwrap()
+        .bounds();
+    let start = (probe.password_bounds.unwrap() - probe.scroll_translation)
+        .intersection(&body_bounds)
+        .unwrap()
+        .center();
+    let end = start - Vector::new(0.0, 60.0);
+    let mut messages = Vec::new();
+    for (index, position) in [start, end, end].into_iter().enumerate() {
+        let id = touch::Finger(0);
+        let event = Event::Touch(match index {
+            0 => touch::Event::FingerPressed { id, position },
+            1 => touch::Event::FingerMoved { id, position },
+            _ => touch::Event::FingerLifted { id, position },
+        });
+        modal.as_widget_mut().update(
+            &mut tree,
+            &event,
+            Layout::new(&node),
+            mouse::Cursor::Available(position),
+            &renderer,
+            &mut iced_widget::core::clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport,
+        );
+        probe = FormProbe::default();
+        modal
+            .as_widget_mut()
+            .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+        assert!(
+            probe.account_focused,
+            "drag phase {index} must retain focus"
+        );
+        assert!(!probe.password_focused);
+    }
+    assert!(probe.scroll_translation.y > 0.0);
+    let tap = probe.password_bounds.unwrap().center() - probe.scroll_translation;
+    for event in [
+        Event::Touch(touch::Event::FingerPressed {
+            id: touch::Finger(0),
+            position: tap,
+        }),
+        Event::Touch(touch::Event::FingerLifted {
+            id: touch::Finger(0),
+            position: tap,
+        }),
+    ] {
+        modal.as_widget_mut().update(
+            &mut tree,
+            &event,
+            Layout::new(&node),
+            mouse::Cursor::Available(tap),
+            &renderer,
+            &mut iced_widget::core::clipboard::Null,
+            &mut Shell::new(&mut messages),
+            &viewport,
+        );
+    }
+    probe = FormProbe::default();
+    modal
+        .as_widget_mut()
+        .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+    assert!(
+        !probe.account_focused,
+        "the old field must blur on a real tap"
+    );
+    assert!(probe.password_focused);
 }
 
 #[test]

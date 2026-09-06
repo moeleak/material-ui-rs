@@ -805,12 +805,27 @@ impl<Paragraph: core_text::Paragraph> TextFieldState<Paragraph> {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct TextFieldTouchActivation {
     finger: touch::Finger,
+    // Event coordinates stay stable while a scrollable translates its child cursor.
     start: Point,
+    started_inside: bool,
 }
 
 impl TextFieldTouchActivation {
     pub(super) fn new(finger: touch::Finger, start: Point) -> Self {
-        Self { finger, start }
+        Self {
+            finger,
+            start,
+            started_inside: true,
+        }
+    }
+
+    pub(super) fn inside(mut self, inside: bool) -> Self {
+        self.started_inside = inside;
+        self
+    }
+
+    pub(super) fn started_inside(self) -> bool {
+        self.started_inside
     }
 
     pub(super) fn matches(self, finger: touch::Finger) -> bool {
