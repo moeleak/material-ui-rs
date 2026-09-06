@@ -28,7 +28,42 @@
          })
      }
 
-@@ -270,6 +275,7 @@
+@@ -212,15 +217,22 @@
+
+             match event {
+                 MainEvent::InitWindow { .. } => {
++                    resized = true;
+                     callback(event::Event::Resumed, self.window_target());
+                 },
+                 MainEvent::TerminateWindow { .. } => {
+                     callback(event::Event::Suspended, self.window_target());
+                 },
+                 MainEvent::WindowResized { .. } => resized = true,
+-                MainEvent::RedrawNeeded { .. } => pending_redraw = true,
++                MainEvent::RedrawNeeded { .. } => {
++                    // A NativeActivity surface can resize without WindowResized.
++                    resized = true;
++                    pending_redraw = true;
++                },
+                 MainEvent::ContentRectChanged { .. } => {
+-                    warn!("TODO: find a way to notify application of content rect change");
++                    // The content rect is not the rendering viewport. Its
++                    // change is a signal to query the current native surface.
++                    resized = true;
+                 },
+                 MainEvent::GainedFocus => {
+                     HAS_FOCUS.store(true, Ordering::Relaxed);
+@@ -243,6 +255,9 @@
+                     );
+                 },
+                 MainEvent::ConfigChanged { .. } => {
++                    // ScaleFactorChanged alone does not notify applications of
++                    // their new logical window size (e.g. adaptive navigation).
++                    resized = true;
+                     let monitor = MonitorHandle::new(self.android_app.clone());
+                     let old_scale_factor = monitor.scale_factor();
+                     let scale_factor = monitor.scale_factor();
+@@ -270,6 +285,7 @@
                      warn!("TODO: forward onStart notification to application");
                  },
                  MainEvent::Resume { .. } => {
@@ -36,7 +71,7 @@
                      debug!("App Resumed - is running");
                      self.running = true;
                  },
-@@ -279,6 +285,7 @@
+@@ -279,6 +295,7 @@
                      warn!("TODO: forward saveState notification to application");
                  },
                  MainEvent::Pause => {
@@ -44,7 +79,7 @@
                      debug!("App Paused - stopped running");
                      self.running = false;
                  },
-@@ -287,9 +294,10 @@
+@@ -287,9 +304,10 @@
                      warn!("TODO: forward onStop notification to application");
                  },
                  MainEvent::Destroy => {
@@ -58,7 +93,7 @@
                  },
                  MainEvent::InsetsChanged { .. } => {
                      // XXX: how to forward this state to applications?
-@@ -473,12 +481,126 @@
+@@ -473,12 +491,126 @@
                      },
                  }
              },
@@ -185,7 +220,7 @@
      }
 
      pub fn run<F>(mut self, event_handler: F) -> Result<(), EventLoopError>
-@@ -630,6 +752,14 @@
+@@ -630,6 +762,14 @@
      }
  }
 
@@ -200,7 +235,7 @@
  pub struct EventLoopProxy<T: 'static> {
      user_events_sender: mpsc::Sender<T>,
      waker: AndroidAppWaker,
-@@ -917,9 +1047,19 @@
+@@ -917,9 +1057,19 @@
 
      pub fn set_ime_allowed(&self, allowed: bool) {
          if allowed {
@@ -220,7 +255,7 @@
          }
      }
 
-@@ -1139,3 +1279,47 @@
+@@ -1139,3 +1289,47 @@
          self.monitor.clone()
      }
  }
