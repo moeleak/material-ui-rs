@@ -31,5 +31,5 @@ theme = "@style/MaterialUiTheme"
 has_code = false
 
 [package.metadata.android.application.activity]
-config_changes = "orientation|keyboardHidden|screenSize|screenLayout|uiMode|density"
+config_changes = "orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode|density"
 exported = true

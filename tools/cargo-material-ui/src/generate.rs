@@ -905,6 +905,29 @@ mod tests {
     }
 
     #[test]
+    fn android_handles_smallest_screen_size_changes_without_recreating_activity() {
+        let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
+        let android: toml::Value = toml::from_str(&files["android/Cargo.toml"]).unwrap();
+        let changes =
+            android["package"]["metadata"]["android"]["application"]["activity"]["config_changes"]
+                .as_str()
+                .unwrap();
+
+        assert_eq!(
+            changes.split('|').collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "orientation",
+                "keyboardHidden",
+                "screenSize",
+                "smallestScreenSize",
+                "screenLayout",
+                "uiMode",
+                "density",
+            ])
+        );
+    }
+
+    #[test]
     fn android_suite_owns_safe_area_and_keyboard_avoidance() {
         let files = render_files(&config(BTreeSet::from([Platform::Android]))).unwrap();
         let app = &files["src/lib.rs"];
