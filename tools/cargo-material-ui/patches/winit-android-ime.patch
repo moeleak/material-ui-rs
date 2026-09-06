@@ -28,7 +28,31 @@
          })
      }
 
-@@ -473,6 +478,12 @@
+@@ -270,6 +275,7 @@
+                     warn!("TODO: forward onStart notification to application");
+                 },
+                 MainEvent::Resume { .. } => {
++                    crate::platform::android::notify_activity_lifecycle(true);
+                     debug!("App Resumed - is running");
+                     self.running = true;
+                 },
+@@ -279,6 +285,7 @@
+                     warn!("TODO: forward saveState notification to application");
+                 },
+                 MainEvent::Pause => {
++                    crate::platform::android::notify_activity_lifecycle(false);
+                     debug!("App Paused - stopped running");
+                     self.running = false;
+                 },
+@@ -287,6 +294,7 @@
+                     warn!("TODO: forward onStop notification to application");
+                 },
+                 MainEvent::Destroy => {
++                    crate::platform::android::notify_activity_lifecycle(false);
+                     // XXX: maybe exit mainloop to drop things before being
+                     // killed by the OS?
+                     warn!("TODO: forward onDestroy notification to application");
+@@ -473,12 +481,126 @@
                      },
                  }
              },
@@ -41,10 +65,11 @@
              _ => {
                  warn!("Unknown android_activity input event {event:?}")
              },
-@@ -481,6 +492,114 @@
-         input_status
-     }
+         }
 
+         input_status
++    }
++
 +    fn handle_text_input_event<F>(
 +        &mut self,
 +        android_app: &AndroidApp,
@@ -151,12 +176,10 @@
 +            },
 +            self.window_target(),
 +        );
-+    }
-+
+     }
+
      pub fn run<F>(mut self, event_handler: F) -> Result<(), EventLoopError>
-     where
-         F: FnMut(event::Event<T>, &event_loop::ActiveEventLoop),
-@@ -917,9 +1036,19 @@
+@@ -917,9 +1039,19 @@
 
      pub fn set_ime_allowed(&self, allowed: bool) {
          if allowed {
@@ -176,7 +199,7 @@
          }
      }
 
-@@ -1139,3 +1268,47 @@
+@@ -1139,3 +1271,47 @@
          self.monitor.clone()
      }
  }
@@ -224,3 +247,30 @@
 +        text[compose_region.start..end].chars().count(),
 +    ))
 +}
+--- a/src/platform/android.rs
++++ b/src/platform/android.rs
+@@ -74,6 +74,24 @@
+ use crate::window::{Window, WindowAttributes};
+
+ use self::activity::{AndroidApp, ConfigurationRef, Rect};
++
++static ACTIVITY_LIFECYCLE_LISTENER: std::sync::Mutex<Option<fn(bool)>> =
++    std::sync::Mutex::new(None);
++
++/// Installs a non-blocking observer for Android Activity resume/pause changes.
++///
++/// The observer runs on the native event-loop thread. It must not wait for the
++/// Java UI thread, which may be waiting for the current lifecycle callback.
++pub fn set_activity_lifecycle_listener(listener: Option<fn(bool)>) {
++    *ACTIVITY_LIFECYCLE_LISTENER.lock().unwrap() = listener;
++}
++
++pub(crate) fn notify_activity_lifecycle(resumed: bool) {
++    let listener = *ACTIVITY_LIFECYCLE_LISTENER.lock().unwrap();
++    if let Some(listener) = listener {
++        listener(resumed);
++    }
++}
+
+ /// Additional methods on [`EventLoop`] that are specific to Android.
+ pub trait EventLoopExtAndroid {

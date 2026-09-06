@@ -31,3 +31,8 @@ pub type Element<'a, Message, T = crate::Theme, Renderer = iced::Renderer> =
 /// An [`iced::widget::Container`] that uses the bundled [`Theme`] by default.
 pub type Container<'a, Message, T = crate::Theme, Renderer = iced::Renderer> =
     iced::widget::Container<'a, Message, T, Renderer>;
+
+#[cfg(all(test, not(target_os = "android")))]
+#[path = "android/state.rs"]
+#[allow(dead_code)]
+mod android_state_tests;

@@ -3,7 +3,9 @@
 #![allow(unsafe_code)]
 
 use std::borrow::Cow;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, OnceLock};
+
+use std::time::{Duration, Instant};
 
 use iced::{Color, Subscription};
 use jni::objects::{JObject, JValue};
@@ -12,112 +14,146 @@ use jni::{JavaVM, jni_sig, jni_str};
 /// The native Android application handle received by `android_main`.
 pub use iced_winit::winit::platform::android::activity::AndroidApp;
 
-static ANDROID_APP: Mutex<Option<AndroidApp>> = Mutex::new(None);
-static SAFE_AREA: Mutex<SafeAreaInsets> = Mutex::new(SafeAreaInsets::ZERO);
-static SYSTEM_BARS_STYLE: Mutex<SystemBarsStyle> = Mutex::new(SystemBarsStyle {
-    edge_to_edge: true,
-    light_status_icons: false,
-    light_navigation_icons: false,
-    status_bar_color: Color::TRANSPARENT,
-    navigation_bar_color: Color::TRANSPARENT,
-});
+mod state;
+mod subscription;
 
-/// Insets on each edge, expressed in iced logical pixels.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Insets {
-    /// Left inset.
-    pub left: f32,
-    /// Top inset.
-    pub top: f32,
-    /// Right inset.
-    pub right: f32,
-    /// Bottom inset.
-    pub bottom: f32,
+pub use state::{Insets, SafeAreaInsets, SystemBarsStyle};
+use state::{RefreshState, Snapshot, WakeListeners};
+
+struct Runtime {
+    app: Option<AndroidApp>,
+    state: RefreshState,
+    desired_style: SystemBarsStyle,
+    applied_style: Option<SystemBarsStyle>,
+    dirty: bool,
+    last_error: Option<String>,
+    listeners: WakeListeners,
+    next_poll: Instant,
 }
 
-impl Insets {
-    /// No inset on any edge.
-    pub const ZERO: Self = Self {
-        left: 0.0,
-        top: 0.0,
-        right: 0.0,
-        bottom: 0.0,
-    };
+impl Runtime {
+    fn wake(&mut self) {
+        self.listeners.wake();
+    }
+}
 
-    /// Combines two sources by taking the largest value on every edge.
-    #[must_use]
-    pub fn max(self, other: Self) -> Self {
-        Self {
-            left: self.left.max(other.left),
-            top: self.top.max(other.top),
-            right: self.right.max(other.right),
-            bottom: self.bottom.max(other.bottom),
+fn runtime() -> MutexGuard<'static, Runtime> {
+    static RUNTIME: OnceLock<Mutex<Runtime>> = OnceLock::new();
+    RUNTIME
+        .get_or_init(|| {
+            Mutex::new(Runtime {
+                app: None,
+                state: RefreshState::new(),
+                desired_style: SystemBarsStyle::default(),
+                applied_style: None,
+                dirty: true,
+                last_error: None,
+                listeners: WakeListeners::default(),
+                next_poll: Instant::now(),
+            })
+        })
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn activity_lifecycle(active: bool) {
+    let mut runtime = runtime();
+    runtime.state.set_active(active);
+    if active {
+        runtime.applied_style = None;
+        runtime.dirty = true;
+    }
+    runtime.wake();
+    drop(runtime);
+    if active {
+        let _ = queue_refresh();
+    }
+}
+
+fn invalidate(reapply_style: bool) {
+    let mut runtime = runtime();
+    runtime.dirty = true;
+    if reapply_style {
+        runtime.applied_style = None;
+    }
+    runtime.wake();
+}
+
+// At most one JNI callback is queued. The callback never waits for the native
+// event loop, which can itself be inside a synchronized Activity callback.
+fn queue_refresh() -> bool {
+    let (app, request, style, apply_style) = {
+        let mut runtime = runtime();
+        if !runtime.dirty {
+            return false;
         }
-    }
-}
-
-/// Independently tracked Android window inset sources.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct SafeAreaInsets {
-    /// Insets occupied by the status bar.
-    pub status_bars: Insets,
-    /// Insets occupied by gesture or button navigation.
-    pub navigation_bars: Insets,
-    /// Insets occupied by a display cutout.
-    pub display_cutout: Insets,
-    /// Insets occupied by the on-screen keyboard.
-    pub ime: Insets,
-}
-
-impl SafeAreaInsets {
-    /// An empty safe area.
-    pub const ZERO: Self = Self {
-        status_bars: Insets::ZERO,
-        navigation_bars: Insets::ZERO,
-        display_cutout: Insets::ZERO,
-        ime: Insets::ZERO,
+        let Some(app) = runtime.app.clone() else {
+            return false;
+        };
+        let Some(request) = runtime.state.begin_request() else {
+            return false;
+        };
+        runtime.dirty = false;
+        runtime.next_poll = Instant::now() + Duration::from_millis(100);
+        (
+            app,
+            request,
+            runtime.desired_style,
+            runtime.applied_style != Some(runtime.desired_style),
+        )
     };
-
-    /// Insets suitable for persistent page padding.
-    #[must_use]
-    pub fn system(self) -> Insets {
-        self.status_bars
-            .max(self.navigation_bars)
-            .max(self.display_cutout)
-    }
-
-    /// Insets suitable for content that must stay visible above the keyboard.
-    #[must_use]
-    pub fn content(self) -> Insets {
-        self.system().max(self.ime)
-    }
-}
-
-/// System-bar presentation synchronized with an application theme.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SystemBarsStyle {
-    /// Draw application content behind system bars.
-    pub edge_to_edge: bool,
-    /// Use dark status-bar icons on a light background.
-    pub light_status_icons: bool,
-    /// Use dark navigation-bar icons on a light background.
-    pub light_navigation_icons: bool,
-    /// Status-bar fallback color.
-    pub status_bar_color: Color,
-    /// Navigation-bar fallback color.
-    pub navigation_bar_color: Color,
-}
-
-impl Default for SystemBarsStyle {
-    fn default() -> Self {
-        Self {
-            edge_to_edge: true,
-            light_status_icons: false,
-            light_navigation_icons: false,
-            status_bar_color: Color::TRANSPARENT,
-            navigation_bar_color: Color::TRANSPARENT,
+    let callback_app = app.clone();
+    app.run_on_java_main_thread(Box::new(move || {
+        {
+            let mut guard = runtime();
+            if !guard.state.is_current(request) {
+                if guard.state.finish_request(request) {
+                    guard.wake();
+                }
+                drop(guard);
+                let _ = queue_refresh();
+                return;
+            }
         }
-    }
+        let result = (|| {
+            if apply_style && apply_system_ui(&callback_app, style)? {
+                let mut runtime = runtime();
+                if runtime.state.is_current(request) {
+                    runtime.applied_style = Some(style);
+                }
+            }
+            if callback_app.native_window().is_none() {
+                return Ok(None);
+            }
+            query_insets(&callback_app)
+        })();
+        let mut guard = runtime();
+        if !guard.state.finish_request(request) {
+            return;
+        }
+        if guard.state.active && guard.state.generation == request.generation {
+            match result {
+                Ok(Some(snapshot)) => {
+                    let _ = guard.state.accept(request.generation, snapshot);
+                    guard.last_error = None;
+                }
+                Ok(None) => {}
+                Err(error) => {
+                    let message = format!("{error:?}");
+                    if guard.last_error.as_ref() != Some(&message) {
+                        eprintln!("Could not refresh Android system UI: {message}");
+                        guard.last_error = Some(message);
+                    }
+                }
+            }
+        }
+        guard.wake();
+        drop(guard);
+        // A newer explicit request must not depend on an events() subscriber.
+        // Failures themselves do not mark dirty, so this cannot spin on errors.
+        let _ = queue_refresh();
+    }));
+    true
 }
 
 /// Android runtime changes observable by an iced application.
@@ -129,17 +165,22 @@ pub enum Event {
 
 /// Starts a shared iced application from `android_main`.
 pub fn run(app: AndroidApp, launch: impl FnOnce() -> iced::Result) {
-    if let Ok(mut current) = ANDROID_APP.lock() {
-        *current = Some(app.clone());
+    {
+        let mut runtime = runtime();
+        runtime.app = Some(app.clone());
+        runtime.state.begin_session();
+        runtime.last_error = None;
+        runtime.applied_style = None;
+        runtime.dirty = true;
     }
+    iced_winit::winit::platform::android::set_activity_lifecycle_listener(Some(activity_lifecycle));
     iced_winit::set_android_app(app);
-    if let Err(error) = refresh_system_ui() {
-        eprintln!("Could not configure Android system bars: {error:?}");
-    }
-
     if let Err(error) = launch() {
         eprintln!("Android application failed: {error:?}");
     }
+    activity_lifecycle(false);
+    iced_winit::winit::platform::android::set_activity_lifecycle_listener(None);
+    runtime().app = None;
 }
 
 /// Loads Android system fonts suitable for Unicode fallback.
@@ -198,50 +239,45 @@ pub fn system_fonts() -> Vec<Cow<'static, [u8]>> {
 /// Returns the most recently observed safe-area insets.
 #[must_use]
 pub fn safe_area_insets() -> SafeAreaInsets {
-    SAFE_AREA
-        .lock()
-        .map_or(SafeAreaInsets::ZERO, |insets| *insets)
+    runtime().state.snapshot.raw
 }
 
-/// Listens for window changes that can affect Android insets.
+/// Insets still overlapping the native rendering surface, in iced logical pixels.
+///
+/// Unlike [`safe_area_insets`], these subtract space already consumed by Android
+/// window resizing. Use these for padding and the raw IME inset for visibility.
+#[must_use]
+pub fn layout_insets() -> SafeAreaInsets {
+    runtime().state.snapshot.layout
+}
+
+/// Observes inset changes without continuously redrawing the application.
 #[must_use]
 pub fn events() -> Subscription<Event> {
-    iced::event::listen_with(|event, _status, _window| match event {
-        iced::Event::Window(
-            iced::window::Event::Opened { .. }
-            | iced::window::Event::Resized(_)
-            | iced::window::Event::Rescaled(_)
-            | iced::window::Event::Focused,
-        ) => refresh_system_ui().ok().map(Event::InsetsChanged),
-        iced::Event::InputMethod(_) => refresh_insets().ok().map(Event::InsetsChanged),
-        _ => None,
-    })
+    iced_winit::futures::subscription::from_recipe(subscription::AndroidEvents)
 }
 
-/// Applies edge-to-edge and system-bar icon styling.
+/// Queues edge-to-edge and system-bar icon styling on Android's UI thread.
+///
+/// `Ok(())` means the request was accepted. Asynchronous platform failures are
+/// logged and retried while the activity is resumed; the last valid insets stay
+/// available. Repeating an unchanged style does not reconfigure the window.
 pub fn set_system_bars(style: SystemBarsStyle) -> jni::errors::Result<()> {
-    if let Ok(mut current) = SYSTEM_BARS_STYLE.lock() {
-        *current = style;
+    {
+        let mut runtime = runtime();
+        if runtime.desired_style == style {
+            return Ok(());
+        }
+        runtime.desired_style = style;
+        runtime.dirty = true;
+        runtime.wake();
     }
-    apply_system_ui(style)?;
-    let _ = refresh_insets();
+    let _ = queue_refresh();
     Ok(())
 }
 
-fn refresh_system_ui() -> jni::errors::Result<SafeAreaInsets> {
-    let style = SYSTEM_BARS_STYLE
-        .lock()
-        .map_or_else(|_| SystemBarsStyle::default(), |style| *style);
-    apply_system_ui(style)?;
-    refresh_insets()
-}
-
-fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
-    let Some(app) = android_app() else {
-        return Ok(());
-    };
-
-    with_activity(&app, |env, activity| {
+fn apply_system_ui(app: &AndroidApp, style: SystemBarsStyle) -> jni::errors::Result<bool> {
+    with_activity(app, |env, activity| {
         const LAYOUT_STABLE: i32 = 0x0000_0100;
         const LAYOUT_HIDE_NAVIGATION: i32 = 0x0000_0200;
         const LAYOUT_FULLSCREEN: i32 = 0x0000_0400;
@@ -295,6 +331,35 @@ fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
             &[JValue::Int(android_color(style.navigation_bar_color))],
         )?;
 
+        if sdk >= 28 {
+            let _ = env.call_method(
+                &window,
+                jni_str!("setNavigationBarDividerColor"),
+                jni_sig!("(I)V"),
+                &[JValue::Int(0)],
+            )?;
+            let attributes = env
+                .call_method(
+                    &window,
+                    jni_str!("getAttributes"),
+                    jni_sig!("()Landroid/view/WindowManager$LayoutParams;"),
+                    &[],
+                )?
+                .l()?;
+            env.set_field(
+                &attributes,
+                jni_str!("layoutInDisplayCutoutMode"),
+                jni_sig!("I"),
+                JValue::Int(if style.edge_to_edge { 1 } else { 0 }),
+            )?;
+            let _ = env.call_method(
+                &window,
+                jni_str!("setAttributes"),
+                jni_sig!("(Landroid/view/WindowManager$LayoutParams;)V"),
+                &[JValue::Object(&attributes)],
+            )?;
+        }
+
         if sdk >= 29 {
             let _ = env.call_method(
                 &window,
@@ -327,32 +392,34 @@ fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
                 &[],
             )?
             .l()?;
-        let current = env
-            .call_method(
+        if sdk < 30 {
+            let current = env
+                .call_method(
+                    &decor,
+                    jni_str!("getSystemUiVisibility"),
+                    jni_sig!("()I"),
+                    &[],
+                )?
+                .i()?;
+            let layout = LAYOUT_STABLE | LAYOUT_HIDE_NAVIGATION | LAYOUT_FULLSCREEN;
+            let mut visibility = if style.edge_to_edge {
+                current | layout
+            } else {
+                current & !layout
+            };
+            visibility = set_flag(visibility, LIGHT_STATUS_BAR, style.light_status_icons);
+            visibility = set_flag(
+                visibility,
+                LIGHT_NAVIGATION_BAR,
+                style.light_navigation_icons,
+            );
+            let _ = env.call_method(
                 &decor,
-                jni_str!("getSystemUiVisibility"),
-                jni_sig!("()I"),
-                &[],
-            )?
-            .i()?;
-        let layout = LAYOUT_STABLE | LAYOUT_HIDE_NAVIGATION | LAYOUT_FULLSCREEN;
-        let mut visibility = if style.edge_to_edge {
-            current | layout
-        } else {
-            current & !layout
-        };
-        visibility = set_flag(visibility, LIGHT_STATUS_BAR, style.light_status_icons);
-        visibility = set_flag(
-            visibility,
-            LIGHT_NAVIGATION_BAR,
-            style.light_navigation_icons,
-        );
-        let _ = env.call_method(
-            &decor,
-            jni_str!("setSystemUiVisibility"),
-            jni_sig!("(I)V"),
-            &[JValue::Int(visibility)],
-        )?;
+                jni_str!("setSystemUiVisibility"),
+                jni_sig!("(I)V"),
+                &[JValue::Int(visibility)],
+            )?;
+        }
 
         if sdk >= 30 {
             let controller = env
@@ -363,7 +430,10 @@ fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
                     &[],
                 )?
                 .l()?;
-            if !controller.as_raw().is_null() {
+            if controller.as_raw().is_null() {
+                return Ok(false);
+            }
+            {
                 let mask = APPEARANCE_LIGHT_STATUS_BARS | APPEARANCE_LIGHT_NAVIGATION_BARS;
                 let mut appearance = 0;
                 appearance = set_flag(
@@ -399,26 +469,11 @@ fn apply_system_ui(style: SystemBarsStyle) -> jni::errors::Result<()> {
                 )?;
             }
         }
-        Ok(())
+        Ok(true)
     })
 }
 
-fn refresh_insets() -> jni::errors::Result<SafeAreaInsets> {
-    let Some(app) = android_app() else {
-        return Ok(SafeAreaInsets::ZERO);
-    };
-    let insets = query_insets(&app)?;
-    if let Ok(mut current) = SAFE_AREA.lock() {
-        *current = insets;
-    }
-    Ok(insets)
-}
-
-fn android_app() -> Option<AndroidApp> {
-    ANDROID_APP.lock().ok()?.clone()
-}
-
-fn query_insets(app: &AndroidApp) -> jni::errors::Result<SafeAreaInsets> {
+fn query_insets(app: &AndroidApp) -> jni::errors::Result<Option<Snapshot>> {
     with_activity(app, |env, activity| {
         let window = env
             .call_method(
@@ -444,121 +499,165 @@ fn query_insets(app: &AndroidApp) -> jni::errors::Result<SafeAreaInsets> {
                 &[],
             )?
             .l()?;
-        let density = display_density(env, activity)?;
-        let (status_fallback, navigation_fallback) =
-            system_bar_resource_insets(env, activity, density)?;
+        // Attachment and rotation can briefly remove the insets object. Do not
+        // replace a valid snapshot with guessed resource dimensions or zeroes.
         if root.as_raw().is_null() {
-            return Ok(SafeAreaInsets {
-                status_bars: status_fallback,
-                navigation_bars: navigation_fallback,
-                display_cutout: Insets::ZERO,
-                ime: Insets::ZERO,
-            });
+            return Ok(None);
         }
-
-        if sdk_int(env)? >= 30 {
-            let stable = legacy_stable_insets(env, &root, density)?;
-            Ok(SafeAreaInsets {
-                status_bars: typed_insets(env, &root, jni_str!("statusBars"), density, true)?
-                    .max(Insets {
-                        top: stable.top,
-                        ..Insets::ZERO
-                    })
-                    .max(status_fallback),
-                navigation_bars: typed_insets(
-                    env,
-                    &root,
-                    jni_str!("navigationBars"),
-                    density,
-                    true,
-                )?
-                .max(Insets {
-                    left: stable.left,
-                    right: stable.right,
-                    bottom: stable.bottom,
-                    ..Insets::ZERO
+        let density = display_density(env, activity)?;
+        let sdk = sdk_int(env)?;
+        let consumed = consumed_insets(env, activity, &decor, app, density)?;
+        let typed = if sdk >= 30 {
+            let result: jni::errors::Result<SafeAreaInsets> = (|| {
+                Ok(SafeAreaInsets {
+                    status_bars: typed_insets(env, &root, jni_str!("statusBars"), density, false)?,
+                    navigation_bars: typed_insets(
+                        env,
+                        &root,
+                        jni_str!("navigationBars"),
+                        density,
+                        false,
+                    )?,
+                    display_cutout: typed_insets(
+                        env,
+                        &root,
+                        jni_str!("displayCutout"),
+                        density,
+                        true,
+                    )?,
+                    ime: typed_insets(env, &root, jni_str!("ime"), density, false)?,
                 })
-                .max(navigation_fallback),
-                display_cutout: typed_insets(env, &root, jni_str!("displayCutout"), density, true)?,
-                ime: typed_insets(env, &root, jni_str!("ime"), density, false)?,
-            })
+            })();
+            match result {
+                Ok(insets) => Some(insets),
+                Err(_error) => {
+                    env.exception_clear();
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let raw = if let Some(typed) = typed {
+            // Typed API values, including zero and lateral navigation, are
+            // authoritative. Resource dimensions must never enlarge them.
+            typed
         } else {
             let system = Insets {
                 left: inset_method(env, &root, jni_str!("getSystemWindowInsetLeft"))? / density,
                 top: inset_method(env, &root, jni_str!("getSystemWindowInsetTop"))? / density,
                 right: inset_method(env, &root, jni_str!("getSystemWindowInsetRight"))? / density,
-                bottom: inset_method(env, &root, jni_str!("getSystemWindowInsetBottom"))? / density,
+                bottom: (inset_method(env, &root, jni_str!("getSystemWindowInsetBottom"))?
+                    / density)
+                    .max(consumed.bottom),
             };
-            Ok(SafeAreaInsets {
-                status_bars: Insets {
-                    top: system.top,
-                    ..Insets::ZERO
-                },
-                navigation_bars: Insets {
-                    left: system.left,
-                    right: system.right,
-                    bottom: system.bottom,
-                    ..Insets::ZERO
-                },
-                display_cutout: Insets::ZERO,
-                ime: Insets::ZERO,
-            })
-        }
+            let stable = legacy_stable_insets(env, &root, density)?;
+            let cutout = if sdk >= 28 {
+                let cutout = env
+                    .call_method(
+                        &root,
+                        jni_str!("getDisplayCutout"),
+                        jni_sig!("()Landroid/view/DisplayCutout;"),
+                        &[],
+                    )?
+                    .l()?;
+                if cutout.as_raw().is_null() {
+                    Insets::ZERO
+                } else {
+                    Insets {
+                        left: inset_method(env, &cutout, jni_str!("getSafeInsetLeft"))? / density,
+                        top: inset_method(env, &cutout, jni_str!("getSafeInsetTop"))? / density,
+                        right: inset_method(env, &cutout, jni_str!("getSafeInsetRight"))? / density,
+                        bottom: inset_method(env, &cutout, jni_str!("getSafeInsetBottom"))?
+                            / density,
+                    }
+                }
+            } else {
+                Insets::ZERO
+            };
+            state::legacy_insets(system, stable, cutout)
+        };
+        Ok(Some(Snapshot {
+            raw,
+            layout: raw.remaining(consumed),
+        }))
     })
 }
 
-fn system_bar_resource_insets(
+fn consumed_insets(
     env: &mut jni::Env<'_>,
     activity: &JObject<'_>,
+    decor: &JObject<'_>,
+    app: &AndroidApp,
     density: f32,
-) -> jni::errors::Result<(Insets, Insets)> {
-    let resources = env
+) -> jni::errors::Result<Insets> {
+    let Some(native) = app.native_window() else {
+        return Ok(Insets::ZERO);
+    };
+    // NativeActivity's rendering view fills android.R.id.content. Its origin
+    // plus ANativeWindow dimensions describe the actual rendering viewport.
+    let content = env
         .call_method(
             activity,
-            jni_str!("getResources"),
-            jni_sig!("()Landroid/content/res/Resources;"),
-            &[],
+            jni_str!("findViewById"),
+            jni_sig!("(I)Landroid/view/View;"),
+            &[JValue::Int(0x0102_0002)],
         )?
         .l()?;
-    let dimension = |env: &mut jni::Env<'_>, name: &str| -> jni::errors::Result<f32> {
-        let name = JObject::from(env.new_string(name)?);
-        let kind = JObject::from(env.new_string("dimen")?);
-        let package = JObject::from(env.new_string("android")?);
-        let identifier = env
+    if content.as_raw().is_null() {
+        return Ok(Insets::ZERO);
+    }
+    let location = env.new_int_array(2)?;
+    let _ = env.call_method(
+        &content,
+        jni_str!("getLocationInWindow"),
+        jni_sig!("([I)V"),
+        &[JValue::Object(location.as_ref())],
+    )?;
+    let mut coordinates = [0; 2];
+    location.get_region(env, 0, &mut coordinates)?;
+    let (width, height) = if sdk_int(env)? >= 30 {
+        // WindowMetrics include space covered by the IME even when DecorView
+        // has already been resized to exclude it.
+        let manager = env
             .call_method(
-                &resources,
-                jni_str!("getIdentifier"),
-                jni_sig!("(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I"),
-                &[
-                    JValue::Object(&name),
-                    JValue::Object(&kind),
-                    JValue::Object(&package),
-                ],
+                activity,
+                jni_str!("getWindowManager"),
+                jni_sig!("()Landroid/view/WindowManager;"),
+                &[],
             )?
-            .i()?;
-        if identifier == 0 {
-            return Ok(0.0);
-        }
-        Ok(env
+            .l()?;
+        let metrics = env
             .call_method(
-                &resources,
-                jni_str!("getDimensionPixelSize"),
-                jni_sig!("(I)I"),
-                &[JValue::Int(identifier)],
+                &manager,
+                jni_str!("getCurrentWindowMetrics"),
+                jni_sig!("()Landroid/view/WindowMetrics;"),
+                &[],
             )?
-            .i()? as f32
-            / density)
+            .l()?;
+        let bounds = env
+            .call_method(
+                &metrics,
+                jni_str!("getBounds"),
+                jni_sig!("()Landroid/graphics/Rect;"),
+                &[],
+            )?
+            .l()?;
+        (
+            inset_method(env, &bounds, jni_str!("width"))?,
+            inset_method(env, &bounds, jni_str!("height"))?,
+        )
+    } else {
+        (
+            inset_method(env, decor, jni_str!("getWidth"))?,
+            inset_method(env, decor, jni_str!("getHeight"))?,
+        )
     };
-
-    Ok((
-        Insets {
-            top: dimension(env, "status_bar_height")?,
-            ..Insets::ZERO
-        },
-        Insets {
-            bottom: dimension(env, "navigation_bar_height")?,
-            ..Insets::ZERO
-        },
+    Ok(state::consumed_edges(
+        iced::Size::new(width, height),
+        iced::Point::new(coordinates[0] as f32, coordinates[1] as f32),
+        iced::Size::new(native.width() as f32, native.height() as f32),
+        density,
     ))
 }
 
@@ -647,10 +746,14 @@ fn display_density(env: &mut jni::Env<'_>, activity: &JObject<'_>) -> jni::error
             &[],
         )?
         .l()?;
-    Ok(env
+    let density = env
         .get_field(&metrics, jni_str!("density"), jni_sig!("F"))?
-        .f()?
-        .max(1.0))
+        .f()?;
+    Ok(if density.is_finite() && density > 0.0 {
+        density
+    } else {
+        1.0
+    })
 }
 
 fn sdk_int(env: &mut jni::Env<'_>) -> jni::errors::Result<i32> {
@@ -670,7 +773,11 @@ fn with_activity<T>(
     let activity_raw = app.activity_as_ptr() as jni::sys::jobject;
     vm.attach_current_thread(|env| {
         let activity = unsafe { env.as_cast_raw::<JObject>(&activity_raw)? };
-        operation(env, &activity)
+        let result = operation(env, &activity);
+        if result.is_err() {
+            env.exception_clear();
+        }
+        result
     })
 }
 
