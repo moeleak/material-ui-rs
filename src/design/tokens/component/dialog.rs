@@ -3,6 +3,8 @@ pub const CONTAINER_ELEVATION_LEVEL: u8 = 3;
 pub const CONTAINER_MIN_WIDTH: f32 = 280.0;
 pub const CONTAINER_MAX_WIDTH: f32 = 560.0;
 pub const CONTAINER_PADDING: f32 = 24.0;
+/// Recommended clearance from the safe window edges for a floating dialog.
+pub const WINDOW_MARGIN: f32 = 24.0;
 pub const ICON_SIZE: f32 = 24.0;
 pub const ICON_BOTTOM_PADDING: f32 = 16.0;
 pub const TITLE_BOTTOM_PADDING: f32 = 16.0;

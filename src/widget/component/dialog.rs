@@ -11,7 +11,7 @@ use iced_widget::core::{
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
 use iced_widget::text;
-use iced_widget::{Column, Container, Row, Space, Stack, Text, opaque};
+use iced_widget::{Column, Container, Row, Scrollable, Space, Stack, Text, opaque};
 
 use super::absolute_line_height;
 use super::support::{alpha_color, duration_ms, lerp};
@@ -209,6 +209,31 @@ pub struct AlertOptions<'a> {
     pub alpha: f32,
 }
 
+/// Safe-area placement for a modal dialog, independent of its full-window scrim.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ModalOptions {
+    insets: Padding,
+    margin: Padding,
+}
+
+impl ModalOptions {
+    /// Insets the dialog surface by space still overlapping the rendering window.
+    ///
+    /// Combine system and keyboard insets before passing them here. The scrim
+    /// continues to cover the whole window, and the dialog keeps its child state
+    /// when the available area changes.
+    pub fn insets(mut self, insets: Padding) -> Self {
+        self.insets = insets;
+        self
+    }
+
+    /// Adds space around the dialog inside the safe area, without shrinking the scrim.
+    pub fn margin(mut self, margin: impl Into<Padding>) -> Self {
+        self.margin = margin.into();
+        self
+    }
+}
+
 impl Default for AlertOptions<'_> {
     fn default() -> Self {
         Self {
@@ -261,6 +286,9 @@ where
 
 /// Creates a Material 3 dialog with a title, arbitrary interactive content,
 /// and actions.
+///
+/// The body scrolls when the available height is limited, while the title and
+/// actions remain visible. With enough space, the dialog keeps its natural height.
 pub fn content<'a, Message, Renderer>(
     title: impl text::IntoFragment<'a>,
     body: impl Into<Element<'a, Message, Theme, Renderer>>,
@@ -478,6 +506,20 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + 'a,
 {
+    modal_layer_animated_with(content, transition, now, ModalOptions::default())
+}
+
+/// Creates an animated modal layer with safe-area placement for the surface.
+pub fn modal_layer_animated_with<'a, Message, Renderer>(
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    transition: &Transition,
+    now: Instant,
+    options: ModalOptions,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
     let scrim = opaque(scrim_with(
         Space::new().width(Length::Fill).height(Length::Fill),
         AlphaOptions::default().alpha(transition.scrim_alpha(now)),
@@ -488,7 +530,13 @@ where
             transition.scale(now),
             transition.phase() != TransitionPhase::Dismissing,
         ))
-        .center(Length::Fill),
+        .center(Length::Fill)
+        .padding(Padding {
+            top: options.insets.top + options.margin.top,
+            right: options.insets.right + options.margin.right,
+            bottom: options.insets.bottom + options.margin.bottom,
+            left: options.insets.left + options.margin.left,
+        }),
     );
 
     Stack::with_children([scrim, dialog])
@@ -523,16 +571,34 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + 'a,
 {
+    modal_animated_with(content, transition, now, dialog, ModalOptions::default())
+}
+
+/// Places an animated modal over content while keeping its surface inside a safe area.
+pub fn modal_animated_with<'a, Message, Renderer>(
+    content: impl Into<Element<'a, Message, Theme, Renderer>>,
+    transition: &Transition,
+    now: Instant,
+    dialog: impl Into<Element<'a, Message, Theme, Renderer>>,
+    options: ModalOptions,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
     let content = content.into();
 
     if !transition.is_active() {
         return content;
     }
 
-    Stack::with_children([content, modal_layer_animated(dialog, transition, now)])
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    Stack::with_children([
+        content,
+        modal_layer_animated_with(dialog, transition, now, options),
+    ])
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
 }
 
 fn dialog_content<'a, Message, Renderer>(
@@ -546,10 +612,10 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
 {
-    let mut content = Column::new().width(Length::Fill);
+    let mut header = Column::new().width(Length::Fill);
 
     if let Some(icon) = icon {
-        content = content.push(
+        header = header.push(
             Container::new(icon)
                 .width(Length::Fill)
                 .padding(Padding {
@@ -562,23 +628,200 @@ where
         );
     }
 
-    content = content.push(Container::new(title).width(Length::Fill).padding(Padding {
-        top: 0.0,
-        right: 0.0,
-        bottom: tokens::component::dialog::TITLE_BOTTOM_PADDING,
-        left: 0.0,
-    }));
+    header = header.push(title);
 
-    content = content.push(Container::new(body).width(Length::Fill).padding(Padding {
-        top: 0.0,
+    // Include the title-to-body gap in the scrolling area so floating labels
+    // can extend above their fields without being clipped at its top edge.
+    let body = Container::new(body).width(Length::Fill).padding(Padding {
+        top: tokens::component::dialog::TITLE_BOTTOM_PADDING,
         right: 0.0,
         bottom: tokens::component::dialog::SUPPORTING_TEXT_BOTTOM_PADDING,
         left: 0.0,
-    }));
+    });
+    let scrollable = Scrollable::new(body).height(Length::Shrink);
+    #[cfg(target_os = "android")]
+    let scrollable = scrollable.direction(iced_widget::scrollable::Direction::Vertical(
+        iced_widget::scrollable::Scrollbar::hidden(),
+    ));
+    let content = DialogContent {
+        children: [header.into(), scrollable.into(), actions.into()],
+    };
 
-    content = content.push(actions.into());
+    basic_with(Element::new(content), AlphaOptions::default().alpha(alpha))
+}
 
-    basic_with(content, AlphaOptions::default().alpha(alpha))
+/// Measures the fixed title/actions before giving the remaining height to the body.
+struct DialogContent<'a, Message, Renderer> {
+    children: [Element<'a, Message, Theme, Renderer>; 3],
+}
+
+struct DialogContentTag;
+
+impl<Message, Renderer> Widget<Message, Theme, Renderer> for DialogContent<'_, Message, Renderer>
+where
+    Renderer: renderer::Renderer,
+{
+    fn tag(&self) -> tree::Tag {
+        tree::Tag::of::<DialogContentTag>()
+    }
+
+    fn children(&self) -> Vec<Tree> {
+        self.children.iter().map(Tree::new).collect()
+    }
+
+    fn diff(&self, tree: &mut Tree) {
+        tree.diff_children(&self.children);
+    }
+
+    fn size(&self) -> Size<Length> {
+        Size::new(Length::Fill, Length::Shrink)
+    }
+
+    fn layout(
+        &mut self,
+        tree: &mut Tree,
+        renderer: &Renderer,
+        limits: &layout::Limits,
+    ) -> layout::Node {
+        // A caller may wrap the dialog in Shrink. Do not propagate iced's cross-
+        // axis compression into a form whose children all use Fill widths.
+        let width = limits.max().width;
+        let height = limits.max().height;
+        let child_limits =
+            |height: f32| layout::Limits::new(Size::new(width, 0.0), Size::new(width, height));
+        let actions = self.children[2].as_widget_mut().layout(
+            &mut tree.children[2],
+            renderer,
+            &child_limits(height),
+        );
+        let header = self.children[0].as_widget_mut().layout(
+            &mut tree.children[0],
+            renderer,
+            &child_limits((height - actions.size().height).max(0.0)),
+        );
+        let body = self.children[1].as_widget_mut().layout(
+            &mut tree.children[1],
+            renderer,
+            &child_limits((height - actions.size().height - header.size().height).max(0.0)),
+        );
+        let body_y = header.size().height;
+        let actions_y = body_y + body.size().height;
+        let total_height = actions_y + actions.size().height;
+        layout::Node::with_children(
+            Size::new(width, total_height),
+            vec![
+                header,
+                body.move_to(iced_widget::core::Point::new(0.0, body_y)),
+                actions.move_to(iced_widget::core::Point::new(0.0, actions_y)),
+            ],
+        )
+    }
+
+    fn operate(
+        &mut self,
+        tree: &mut Tree,
+        layout: Layout<'_>,
+        renderer: &Renderer,
+        operation: &mut dyn widget::Operation,
+    ) {
+        operation.container(None, layout.bounds());
+        operation.traverse(&mut |operation| {
+            for ((child, tree), layout) in self
+                .children
+                .iter_mut()
+                .zip(&mut tree.children)
+                .zip(layout.children())
+            {
+                child
+                    .as_widget_mut()
+                    .operate(tree, layout, renderer, operation);
+            }
+        });
+    }
+
+    fn update(
+        &mut self,
+        tree: &mut Tree,
+        event: &Event,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        renderer: &Renderer,
+        clipboard: &mut dyn Clipboard,
+        shell: &mut Shell<'_, Message>,
+        viewport: &Rectangle,
+    ) {
+        for ((child, tree), layout) in self
+            .children
+            .iter_mut()
+            .zip(&mut tree.children)
+            .zip(layout.children())
+        {
+            child.as_widget_mut().update(
+                tree, event, layout, cursor, renderer, clipboard, shell, viewport,
+            );
+        }
+    }
+
+    fn mouse_interaction(
+        &self,
+        tree: &Tree,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+        renderer: &Renderer,
+    ) -> mouse::Interaction {
+        self.children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+            .map(|((child, tree), layout)| {
+                child
+                    .as_widget()
+                    .mouse_interaction(tree, layout, cursor, viewport, renderer)
+            })
+            .max()
+            .unwrap_or_default()
+    }
+
+    fn draw(
+        &self,
+        tree: &Tree,
+        renderer: &mut Renderer,
+        theme: &Theme,
+        style: &renderer::Style,
+        layout: Layout<'_>,
+        cursor: mouse::Cursor,
+        viewport: &Rectangle,
+    ) {
+        for ((child, tree), layout) in self
+            .children
+            .iter()
+            .zip(&tree.children)
+            .zip(layout.children())
+        {
+            child
+                .as_widget()
+                .draw(tree, renderer, theme, style, layout, cursor, viewport);
+        }
+    }
+
+    fn overlay<'b>(
+        &'b mut self,
+        tree: &'b mut Tree,
+        layout: Layout<'b>,
+        renderer: &Renderer,
+        viewport: &Rectangle,
+        translation: Vector,
+    ) -> Option<overlay::Element<'b, Message, Theme, Renderer>> {
+        overlay::from_children(
+            &mut self.children,
+            tree,
+            layout,
+            renderer,
+            viewport,
+            translation,
+        )
+    }
 }
 
 fn icon_text<'a, Renderer>(icon: text::Fragment<'a>, alpha: f32) -> Text<'a, Theme, Renderer>

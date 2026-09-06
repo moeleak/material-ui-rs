@@ -763,14 +763,14 @@ fn view(state: &Showcase) -> material::Element<'_, Message> {
     });
     let content = iced::widget::stack![content, floating_layer];
 
-    let content = material::widget::dialog::modal_animated(
+    let content = material::widget::dialog::modal_animated_with(
         content,
         &state.login_dialog,
         now,
-        iced::widget::container(login_dialog(state, state.login_dialog.alpha(now)))
-            .width(iced::Length::Shrink)
-            .height(iced::Length::Shrink)
-            .padding(state.content_insets()),
+        login_dialog(state, state.login_dialog.alpha(now)),
+        material::widget::dialog::ModalOptions::default()
+            .insets(state.content_insets())
+            .margin(material::tokens::component::dialog::WINDOW_MARGIN),
     );
 
     state.theme_controller.reveal_over(content, now)

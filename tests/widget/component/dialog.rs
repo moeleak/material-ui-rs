@@ -2,8 +2,331 @@ use iced_widget::core::{Point, Widget, mouse, touch};
 
 use super::*;
 
-#[derive(Debug, Clone)]
-enum Message {}
+#[derive(Debug, Clone, PartialEq)]
+enum Message {
+    Account(String),
+    Password(String),
+    Remember(bool),
+    Cancel,
+    Confirm,
+    BackgroundPressed,
+}
+
+fn login_form() -> Element<'static, Message, Theme, iced_widget::Renderer> {
+    content(
+        "Sign in",
+        Column::new()
+            .spacing(16.0)
+            .push(
+                crate::widget::text_input::outlined("Account", "a")
+                    .id("dialog-account")
+                    .on_input(Message::Account),
+            )
+            .push(
+                crate::widget::text_input::outlined("Password", "")
+                    .id("dialog-password")
+                    .on_input(Message::Password),
+            )
+            .push(crate::widget::checkbox::standard(
+                false,
+                "Remember password",
+                Message::Remember,
+            )),
+        actions([
+            action_button("Cancel", Message::Cancel),
+            action_button("Log in", Message::Confirm),
+        ]),
+    )
+    .into()
+}
+
+fn test_modal(insets: Padding) -> Element<'static, Message, Theme, iced_widget::Renderer> {
+    let start = Instant::now();
+    let mut transition = Transition::default();
+    transition.show(start);
+    modal_animated_with(
+        iced_widget::MouseArea::new(Space::new().width(Length::Fill).height(Length::Fill))
+            .on_press(Message::BackgroundPressed),
+        &transition,
+        start + duration_ms(300),
+        login_form(),
+        ModalOptions::default()
+            .insets(insets)
+            .margin(tokens::component::dialog::WINDOW_MARGIN),
+    )
+}
+
+fn test_renderer() -> iced_widget::Renderer {
+    iced_widget::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+        crate::fonts::ROBOTO,
+        iced_widget::core::Pixels(16.0),
+    ))
+}
+
+fn dialog_layout<'a>(tree: &Tree, mut layout: Layout<'a>) -> Option<Layout<'a>> {
+    if tree.tag == tree::Tag::of::<DialogContentTag>() {
+        // Containers forward the child's tree tag but add their own layout node.
+        while layout.children().count() == 1 {
+            layout = layout.children().next().unwrap();
+        }
+        Some(layout)
+    } else {
+        tree.children
+            .iter()
+            .zip(layout.children())
+            .find_map(|(tree, layout)| dialog_layout(tree, layout))
+    }
+}
+
+#[test]
+fn narrow_dialogs_reserve_actions_and_scroll_the_form_above_the_keyboard() {
+    let renderer = test_renderer();
+    for width in [240.0, 320.0, 360.0, 412.0, 900.0] {
+        for (height, bottom) in [(640.0, 24.0), (640.0, 340.0), (300.0, 0.0)] {
+            let insets = Padding {
+                top: 24.0,
+                bottom,
+                ..Padding::ZERO
+            };
+            let mut modal = test_modal(insets);
+            let mut tree = Tree::new(modal.as_widget());
+            let node = modal.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, Size::new(width, height)),
+            );
+            let root = Layout::new(&node);
+            let content = dialog_layout(&tree, root).unwrap();
+            let mut children = content.children();
+            let header = children.next().unwrap();
+            let body = children.next().unwrap();
+            let actions = children.next().unwrap();
+
+            assert_eq!(root.bounds().size(), Size::new(width, height));
+            let scrim = root.children().nth(1).unwrap().children().next().unwrap();
+            assert_eq!(
+                scrim.bounds(),
+                root.bounds(),
+                "scrim must remain full-window"
+            );
+            assert_eq!(
+                content.bounds().width,
+                (width - 2.0 * tokens::component::dialog::WINDOW_MARGIN)
+                    .min(tokens::component::dialog::CONTAINER_MAX_WIDTH)
+                    - 48.0,
+                "the form must not shrink to its padding"
+            );
+            assert!(header.bounds().height >= 24.0);
+            assert!(
+                content.bounds().x >= insets.left + tokens::component::dialog::WINDOW_MARGIN + 24.0
+            );
+            assert!(actions.bounds().height >= 40.0);
+            assert!(actions.bounds().y + actions.bounds().height <= height - bottom - 24.0);
+            assert!(body.bounds().height > 0.0);
+            let scroll_content = body.children().next().unwrap().bounds();
+            if height - bottom <= 300.0 {
+                assert!(
+                    scroll_content.height > body.bounds().height,
+                    "short dialogs must scroll the form"
+                );
+            } else {
+                assert_eq!(
+                    scroll_content.height,
+                    body.bounds().height,
+                    "ordinary dialogs retain their natural height"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn dialog_content_does_not_collapse_under_a_shrink_wrapper() {
+    let renderer = test_renderer();
+    let mut form: Element<'_, Message, Theme, iced_widget::Renderer> = Container::new(login_form())
+        .width(Length::Shrink)
+        .height(Length::Shrink)
+        .into();
+    let mut tree = Tree::new(form.as_widget());
+    let node = form.as_widget_mut().layout(
+        &mut tree,
+        &renderer,
+        &layout::Limits::new(Size::ZERO, Size::new(360.0, 300.0)),
+    );
+    assert_eq!(node.size().width, 360.0);
+    assert!(node.size().height <= 300.0);
+    let content = dialog_layout(&tree, Layout::new(&node)).unwrap();
+    assert_eq!(content.bounds().width, 312.0);
+}
+
+#[derive(Default)]
+struct FormProbe {
+    account_focused: bool,
+    scroll_translation: Vector,
+    scroll_to_end: bool,
+}
+
+impl widget::Operation for FormProbe {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn widget::Operation)) {
+        operate(self);
+    }
+
+    fn focusable(
+        &mut self,
+        id: Option<&widget::Id>,
+        _bounds: Rectangle,
+        state: &mut dyn widget::operation::focusable::Focusable,
+    ) {
+        if id == Some(&widget::Id::new("dialog-account")) {
+            self.account_focused = state.is_focused();
+        }
+    }
+
+    fn scrollable(
+        &mut self,
+        _id: Option<&widget::Id>,
+        _bounds: Rectangle,
+        _content_bounds: Rectangle,
+        translation: Vector,
+        state: &mut dyn widget::operation::scrollable::Scrollable,
+    ) {
+        self.scroll_translation = translation;
+        if self.scroll_to_end {
+            state.snap_to(widget::operation::scrollable::RelativeOffset {
+                x: None,
+                y: Some(1.0),
+            });
+        }
+    }
+}
+
+#[test]
+fn keyboard_resize_keeps_focus_and_scrollable_dialog_events_reach_children() {
+    use iced_widget::core::keyboard::{self, Key, Location, Modifiers, key};
+    let renderer = test_renderer();
+    let size = Size::new(360.0, 640.0);
+    let limits = layout::Limits::new(Size::ZERO, size);
+    let mut modal = test_modal(Padding {
+        top: 24.0,
+        bottom: 24.0,
+        ..Padding::ZERO
+    });
+    let mut tree = Tree::new(modal.as_widget());
+    let node = modal.as_widget_mut().layout(&mut tree, &renderer, &limits);
+    modal.as_widget_mut().operate(
+        &mut tree,
+        Layout::new(&node),
+        &renderer,
+        &mut widget::operation::focusable::focus::<()>(widget::Id::new("dialog-account")),
+    );
+
+    let mut modal = test_modal(Padding {
+        top: 24.0,
+        bottom: 340.0,
+        ..Padding::ZERO
+    });
+    tree.diff(modal.as_widget());
+    let node = modal.as_widget_mut().layout(&mut tree, &renderer, &limits);
+    let mut probe = FormProbe::default();
+    modal
+        .as_widget_mut()
+        .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+    assert!(
+        probe.account_focused,
+        "IME insets must not recreate the focused form"
+    );
+
+    let mut messages = Vec::new();
+    let viewport = Rectangle::with_size(size);
+    let key = Event::Keyboard(keyboard::Event::KeyPressed {
+        key: Key::Character("z".into()),
+        modified_key: Key::Character("z".into()),
+        physical_key: key::Physical::Code(key::Code::KeyZ),
+        location: Location::Standard,
+        modifiers: Modifiers::default(),
+        text: Some("z".into()),
+        repeat: false,
+    });
+    modal.as_widget_mut().update(
+        &mut tree,
+        &key,
+        Layout::new(&node),
+        mouse::Cursor::Unavailable,
+        &renderer,
+        &mut iced_widget::core::clipboard::Null,
+        &mut Shell::new(&mut messages),
+        &viewport,
+    );
+    assert!(
+        messages
+            .iter()
+            .any(|message| matches!(message, Message::Account(value) if value.contains('z')))
+    );
+
+    probe.scroll_to_end = true;
+    modal
+        .as_widget_mut()
+        .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+    probe.scroll_to_end = false;
+    modal
+        .as_widget_mut()
+        .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+    assert!(probe.scroll_translation.y > 0.0);
+
+    let content = dialog_layout(&tree, Layout::new(&node)).unwrap();
+    let body = content.children().nth(1).unwrap();
+    let checkbox = body
+        .children()
+        .next()
+        .unwrap()
+        .children()
+        .next()
+        .unwrap()
+        .children()
+        .nth(2)
+        .unwrap()
+        .bounds();
+    let checkbox_position = checkbox.center() - probe.scroll_translation;
+    assert!(body.bounds().contains(checkbox_position));
+    let confirm = content
+        .children()
+        .nth(2)
+        .unwrap()
+        .children()
+        .next()
+        .unwrap()
+        .children()
+        .nth(1)
+        .unwrap()
+        .bounds()
+        .center();
+    for position in [checkbox_position, confirm, Point::new(2.0, 2.0)] {
+        for event in [
+            Event::Touch(touch::Event::FingerPressed {
+                id: touch::Finger(0),
+                position,
+            }),
+            Event::Touch(touch::Event::FingerLifted {
+                id: touch::Finger(0),
+                position,
+            }),
+        ] {
+            modal.as_widget_mut().update(
+                &mut tree,
+                &event,
+                Layout::new(&node),
+                mouse::Cursor::Available(position),
+                &renderer,
+                &mut iced_widget::core::clipboard::Null,
+                &mut Shell::new(&mut messages),
+                &viewport,
+            );
+        }
+    }
+    assert!(messages.contains(&Message::Remember(true)));
+    assert!(messages.contains(&Message::Confirm));
+    assert!(!messages.contains(&Message::BackgroundPressed));
+}
 
 #[test]
 fn dialog_container_style_uses_material_tokens() {
