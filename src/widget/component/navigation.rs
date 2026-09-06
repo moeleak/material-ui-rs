@@ -44,7 +44,7 @@ const NAVIGATION_MENU_ICON_ARROW_TOP_Y: f32 = 5.0;
 const NAVIGATION_MENU_ICON_ARROW_BOTTOM_Y: f32 = 19.0;
 const NAVIGATION_MENU_ICON_STROKE_WIDTH: f32 = 2.4;
 const NAVIGATION_INITIAL_HOVER_ENABLED: bool = !cfg!(target_os = "android");
-const NAVIGATION_TOUCH_SLOP: f32 = 8.0;
+const NAVIGATION_CLICK_SLOP: f32 = 8.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdaptiveLayout {
@@ -2390,6 +2390,7 @@ struct NavigationPressSurfaceState {
     is_hovered: bool,
     is_pressed: bool,
     active_press: Option<NavigationPress>,
+    mouse_position: Option<Point>,
     hover_enabled: bool,
     state_layer_opacity: AnimatedScalar,
     ripples: PressRippleState,
@@ -2408,6 +2409,7 @@ impl NavigationPressSurfaceState {
             is_hovered: false,
             is_pressed: false,
             active_press: None,
+            mouse_position: None,
             hover_enabled,
             state_layer_opacity: AnimatedScalar::new(0.0),
             ripples: PressRippleState::default(),
@@ -2616,6 +2618,15 @@ where
         }
 
         state.observe_pointer_kind(event);
+        match event {
+            Event::Mouse(mouse::Event::CursorMoved { position }) => {
+                state.mouse_position = Some(*position);
+            }
+            Event::Mouse(mouse::Event::CursorLeft) | Event::Window(window::Event::Unfocused) => {
+                state.mouse_position = None;
+            }
+            _ => {}
+        }
         let now = match event {
             Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
             _ => None,
@@ -2647,18 +2658,22 @@ where
                 let indicator_bounds = self.indicator.bounds(layout.bounds());
 
                 if let Some(origin) = pointer.press_origin(indicator_bounds)
-                    && let Some(press) = NavigationPress::new(pointer)
+                    && let Some(press) = NavigationPress::new(pointer, state.mouse_position)
                 {
                     state.press(origin, now.unwrap_or_else(Instant::now));
                     state.active_press = Some(press);
                     shell.request_redraw();
-                    shell.capture_event();
+                    // Let an enclosing Scrollable observe the touch origin.
+                    if matches!(event, Event::Mouse(_)) {
+                        shell.capture_event();
+                    }
                 }
             }
-            Event::Touch(touch::Event::FingerMoved { .. })
-                if state
-                    .active_press
-                    .is_some_and(|press| press.moved_beyond_slop(pointer)) =>
+            Event::Mouse(mouse::Event::CursorMoved { .. })
+            | Event::Touch(touch::Event::FingerMoved { .. })
+                if state.active_press.is_some_and(|press| {
+                    press.moved_beyond_slop(pointer, state.mouse_position)
+                }) =>
             {
                 state.cancel(now.unwrap_or_else(Instant::now));
                 shell.request_redraw();
@@ -2668,9 +2683,9 @@ where
                 if state.active_press.is_some() =>
             {
                 let is_released_over = pointer.is_over(layout.bounds())
-                    && !state
-                        .active_press
-                        .is_some_and(|press| press.moved_beyond_slop(pointer));
+                    && !state.active_press.is_some_and(|press| {
+                        press.moved_beyond_slop(pointer, state.mouse_position)
+                    });
                 let is_touch_release = matches!(event, Event::Touch(_));
 
                 if is_touch_release {
@@ -2690,7 +2705,8 @@ where
 
                 shell.capture_event();
             }
-            Event::Touch(touch::Event::FingerLost { .. })
+            Event::Mouse(mouse::Event::CursorLeft)
+            | Event::Touch(touch::Event::FingerLost { .. })
             | Event::Window(window::Event::Unfocused)
                 if state.is_pressed =>
             {
@@ -2889,26 +2905,43 @@ enum NavigationPointerSource {
 struct NavigationPress {
     source: NavigationPointerSource,
     position: Point,
+    raw_position: Option<Point>,
 }
 
 impl NavigationPress {
-    fn new(pointer: NavigationPointer<'_>) -> Option<Self> {
+    fn new(pointer: NavigationPointer<'_>, mouse_position: Option<Point>) -> Option<Self> {
+        let source = pointer.source()?;
         Some(Self {
-            source: pointer.source()?,
+            source,
             position: pointer.current_position()?,
+            raw_position: if source == NavigationPointerSource::Mouse {
+                mouse_position
+            } else {
+                pointer.position()
+            },
         })
     }
 
-    fn moved_beyond_slop(self, pointer: NavigationPointer<'_>) -> bool {
-        if !matches!(self.source, NavigationPointerSource::Touch(_)) {
-            return false;
-        }
-
+    fn moved_beyond_slop(
+        self,
+        pointer: NavigationPointer<'_>,
+        mouse_position: Option<Point>,
+    ) -> bool {
         let Some(position) = pointer.current_position() else {
             return true;
         };
-        let delta = position - self.position;
-        delta.x * delta.x + delta.y * delta.y > NAVIGATION_TOUCH_SLOP * NAVIGATION_TOUCH_SLOP
+        let beyond_slop = |delta: Vector| {
+            delta.x * delta.x + delta.y * delta.y > NAVIGATION_CLICK_SLOP * NAVIGATION_CLICK_SLOP
+        };
+
+        beyond_slop(position - self.position)
+            // The cursor may already contain the last position in an event
+            // batch, or a scrollable may translate it back towards the press.
+            // Measure motion in event coordinates as well as local coordinates.
+            || self.raw_position.zip(if self.source == NavigationPointerSource::Mouse {
+                mouse_position
+            } else { pointer.position() })
+                .is_some_and(|(origin, current)| beyond_slop(current - origin))
     }
 }
 

@@ -1,5 +1,6 @@
 //! Material 3 radio constructors with token-backed size and motion defaults.
 
+use super::click::Update as ClickUpdate;
 use super::*;
 
 type StyleFn<'a> = Box<dyn Fn(&Theme, iced_radio::Status) -> iced_radio::Style + 'a>;
@@ -259,38 +260,33 @@ where
         let hit_bounds =
             selection_control_hit_bounds(layout, tokens::component::radio::TARGET_SIZE);
 
-        match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. })
-                if self.on_click.is_some() && press_is_over(event, hit_bounds, cursor) =>
-            {
+        match state
+            .click
+            .update(event, cursor, hit_bounds, self.on_click.is_some())
+        {
+            ClickUpdate::Pressed => {
                 state.is_pressed = true;
                 state.press_origin = None;
-                shell.capture_event();
+                if !matches!(event, Event::Touch(_)) {
+                    shell.capture_event();
+                }
                 shell.request_redraw();
             }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. })
-                if state.is_pressed =>
-            {
-                let is_released_over = release_is_over(event, hit_bounds, cursor);
-
+            ClickUpdate::Released(activated) => {
                 state.is_pressed = false;
                 state.press_origin = None;
-
-                if is_released_over && let Some(on_click) = &self.on_click {
+                if activated && let Some(on_click) = &self.on_click {
                     shell.publish(on_click.clone());
                 }
-
                 shell.capture_event();
                 shell.request_redraw();
             }
-            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+            ClickUpdate::Cancelled => {
                 state.is_pressed = false;
                 state.press_origin = None;
                 shell.request_redraw();
             }
-            _ => {}
+            ClickUpdate::None => {}
         }
 
         let now = match event {

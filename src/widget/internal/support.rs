@@ -716,6 +716,7 @@ pub(super) struct SelectionState<Paragraph: core_text::Paragraph, Status> {
     pub(super) icon: AnimatedScalar,
     pub(super) icon_opacity: AnimatedScalar,
     pub(super) is_pressed: bool,
+    pub(super) click: super::click::ClickGesture,
     pub(super) press_origin: Option<Point>,
     pub(super) last_status: Option<Status>,
 }
@@ -733,6 +734,7 @@ impl<Paragraph: core_text::Paragraph, Status> SelectionState<Paragraph, Status> 
             icon: AnimatedScalar::new(value),
             icon_opacity: AnimatedScalar::new(value),
             is_pressed: false,
+            click: super::click::ClickGesture::default(),
             press_origin: None,
             last_status: None,
         }

@@ -24,7 +24,8 @@ use iced_widget::pick_list::{self as iced_select, Handle, Icon, Status};
 
 use super::support::{AnimatedScalar, duration_ms};
 use super::{
-    absolute_line_height, draw_text_field_outline, menu_overlay, text_field_floating_label_notch,
+    absolute_line_height, click, draw_text_field_outline, menu_overlay,
+    text_field_floating_label_notch,
 };
 use crate::style::{menu as menu_style, select as select_style};
 use crate::{Theme, tokens};
@@ -386,37 +387,22 @@ where
         _viewport: &Rectangle,
     ) {
         let state = tree.state.downcast_mut::<State<Renderer::Paragraph>>();
+        let click = state
+            .click
+            .update(event, cursor, layout.bounds(), !state.is_open);
 
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. }) => {
-                if state.is_open {
-                    let now = Instant::now();
+            | Event::Touch(touch::Event::FingerPressed { .. })
+                if state.is_open =>
+            {
+                state.set_open(false, Instant::now());
 
-                    state.set_open(false, now);
-
-                    if let Some(on_close) = &self.on_close {
-                        shell.publish(on_close.clone());
-                    }
-
-                    shell.capture_event();
-                } else if cursor.is_over(layout.bounds()) {
-                    let selected = self.selected.as_ref().map(Borrow::borrow);
-                    let now = Instant::now();
-
-                    state.set_open(true, now);
-                    state.hovered_option = self
-                        .options
-                        .borrow()
-                        .iter()
-                        .position(|option| Some(option) == selected);
-
-                    if let Some(on_open) = &self.on_open {
-                        shell.publish(on_open.clone());
-                    }
-
-                    shell.capture_event();
+                if let Some(on_close) = &self.on_close {
+                    shell.publish(on_close.clone());
                 }
+
+                shell.capture_event();
             }
             Event::Mouse(mouse::Event::WheelScrolled {
                 delta: mouse::ScrollDelta::Lines { y, .. },
@@ -454,6 +440,32 @@ where
             }
             _ => {}
         };
+
+        match click {
+            click::Update::Pressed => {
+                // Scrollable must see touch down to establish its drag origin.
+                if matches!(event, Event::Mouse(_)) {
+                    shell.capture_event();
+                }
+            }
+            click::Update::Released(false) => shell.capture_event(),
+            click::Update::Released(true) => {
+                let selected = self.selected.as_ref().map(Borrow::borrow);
+                state.set_open(true, Instant::now());
+                state.hovered_option = self
+                    .options
+                    .borrow()
+                    .iter()
+                    .position(|option| Some(option) == selected);
+
+                if let Some(on_open) = &self.on_open {
+                    shell.publish(on_open.clone());
+                }
+
+                shell.capture_event();
+            }
+            click::Update::None | click::Update::Cancelled => {}
+        }
 
         let now = match event {
             Event::Window(window::Event::RedrawRequested(now)) => Some(*now),
@@ -760,6 +772,7 @@ where
 #[derive(Debug)]
 struct State<P: text::Paragraph> {
     menu: menu_overlay::State,
+    click: click::ClickGesture,
     keyboard_modifiers: keyboard::Modifiers,
     is_open: bool,
     hovered_option: Option<usize>,
@@ -774,6 +787,7 @@ impl<P: text::Paragraph> State<P> {
     fn new() -> Self {
         Self {
             menu: menu_overlay::State::default(),
+            click: click::ClickGesture::default(),
             keyboard_modifiers: keyboard::Modifiers::default(),
             is_open: bool::default(),
             hovered_option: Option::default(),

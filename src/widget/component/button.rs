@@ -6,6 +6,7 @@ use iced_widget::core::overlay;
 use iced_widget::graphics::geometry;
 use iced_widget::renderer::wgpu::primitive;
 
+use super::click::{ClickGesture, Update as ClickUpdate};
 use super::ripple::{PressRippleState, RippleConfig, RippleStart, RippleStyle, draw_ripples};
 use super::support::{AnimatedScalar, duration_ms};
 use crate::utils::state_layer;
@@ -17,6 +18,7 @@ use super::ripple::{
     rounded_rect_span_at_y, unbounded_ripple_target_radius,
 };
 
+#[cfg(test)]
 const TOUCH_CLICK_SLOP: f32 = 8.0;
 
 /// A Material 3 button with Android-style bounded press ripples.
@@ -140,7 +142,7 @@ struct ButtonState {
     is_pressed: bool,
     is_hovered: bool,
     state_layer_opacity: AnimatedScalar,
-    touch_press_position: Option<Point>,
+    click: ClickGesture,
     ripples: PressRippleState,
     last_status: Option<Status>,
     now: Option<Instant>,
@@ -152,7 +154,7 @@ impl Default for ButtonState {
             is_pressed: false,
             is_hovered: false,
             state_layer_opacity: AnimatedScalar::new(0.0),
-            touch_press_position: None,
+            click: ClickGesture::default(),
             ripples: PressRippleState::default(),
             last_status: None,
             now: None,
@@ -174,7 +176,6 @@ impl ButtonState {
 
     fn release(&mut self, now: Instant) {
         self.is_pressed = false;
-        self.touch_press_position = None;
 
         self.ripples.release(now);
 
@@ -344,50 +345,35 @@ where
             shell.request_redraw();
         }
 
-        match event {
-            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerPressed { .. })
-                if self.on_press.is_some() =>
-            {
+        match state
+            .click
+            .update(event, cursor, bounds, self.on_press.is_some())
+        {
+            ClickUpdate::Pressed => {
                 if let Some(origin) = press_origin(event, bounds, cursor) {
                     state.press(origin, now_or_current());
-                    state.touch_press_position = touch_position(event, cursor);
-                    shell.capture_event();
+                    if !matches!(event, Event::Touch(_)) {
+                        shell.capture_event();
+                    }
                     shell.request_redraw();
                 }
             }
-            Event::Touch(touch::Event::FingerMoved { .. })
-                if state.is_pressed
-                    && TouchClick {
-                        press_position: state.touch_press_position,
-                        event,
-                        cursor,
-                    }
-                    .moved_beyond_slop() =>
-            {
-                state.cancel(now_or_current());
-                shell.request_redraw();
-            }
-            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left))
-            | Event::Touch(touch::Event::FingerLifted { .. })
-                if state.is_pressed =>
-            {
+            ClickUpdate::Released(activated) => {
                 state.release(now_or_current());
-
-                if release_is_over(event, bounds, cursor)
+                if activated
+                    && release_is_over(event, bounds, cursor)
                     && let Some(on_press) = &self.on_press
                 {
                     shell.publish(on_press.get());
                 }
-
                 shell.capture_event();
                 shell.request_redraw();
             }
-            Event::Touch(touch::Event::FingerLost { .. }) if state.is_pressed => {
+            ClickUpdate::Cancelled => {
                 state.cancel(now_or_current());
                 shell.request_redraw();
             }
-            _ => {}
+            ClickUpdate::None => {}
         }
 
         let current_status =
@@ -661,6 +647,7 @@ fn release_is_over(event: &Event, bounds: Rectangle, cursor: mouse::Cursor) -> b
     }
 }
 
+#[cfg(test)]
 fn touch_position(event: &Event, cursor: mouse::Cursor) -> Option<Point> {
     if cursor.position().is_some() {
         return cursor.position();
@@ -681,6 +668,7 @@ fn touch_position(event: &Event, cursor: mouse::Cursor) -> Option<Point> {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy)]
 struct TouchClick<'a> {
     press_position: Option<Point>,
@@ -688,6 +676,7 @@ struct TouchClick<'a> {
     cursor: mouse::Cursor,
 }
 
+#[cfg(test)]
 impl TouchClick<'_> {
     fn moved_beyond_slop(self) -> bool {
         let Some(press_position) = self.press_position else {

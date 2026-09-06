@@ -41,6 +41,8 @@ pub mod app_bar;
 pub mod badge;
 #[path = "widget/component/card.rs"]
 pub mod card;
+#[path = "widget/internal/click.rs"]
+mod click;
 #[path = "widget/component/combobox.rs"]
 pub mod combobox;
 #[path = "widget/component/data_table.rs"]

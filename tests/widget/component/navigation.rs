@@ -1589,7 +1589,7 @@ impl NavigationInputHarness {
 fn navigation_widget_tap_with_small_motion_selects_once_without_hover() {
     let mut input = NavigationInputHarness::new();
     let id = touch::Finger(0);
-    assert!(input.touch(touch::Event::FingerPressed {
+    assert!(!input.touch(touch::Event::FingerPressed {
         id,
         position: Point::new(40.0, 750.0)
     }));
@@ -1718,6 +1718,148 @@ fn navigation_widget_keeps_mouse_ownership_across_touch_events() {
 }
 
 #[test]
+fn navigation_widget_mouse_click_allows_taps_and_motion_up_to_slop() {
+    let origin = Point::new(40.0, 750.0);
+    for movement in [0.0, 4.0, 8.0] {
+        let mut input = NavigationInputHarness::new();
+        let _ = input.send(
+            Event::Mouse(mouse::Event::CursorMoved { position: origin }),
+            mouse::Cursor::Available(origin),
+        );
+        assert!(input.send(
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            mouse::Cursor::Available(origin),
+        ));
+        let position = origin + Vector::new(movement, 0.0);
+        let _ = input.send(
+            Event::Mouse(mouse::Event::CursorMoved { position }),
+            mouse::Cursor::Available(position),
+        );
+        assert!(input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            mouse::Cursor::Available(position),
+        ));
+        assert!(!input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            mouse::Cursor::Available(position),
+        ));
+        assert_eq!(input.messages.len(), 1, "movement={movement}");
+        assert!(!input.state().is_pressed);
+    }
+}
+
+#[test]
+fn navigation_widget_mouse_drag_cancels_inside_item_and_after_leaving_and_returning() {
+    let origin = Point::new(40.0, 750.0);
+    for position in [Point::new(49.0, 750.0), Point::new(150.0, 750.0)] {
+        let mut input = NavigationInputHarness::new();
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            mouse::Cursor::Available(origin),
+        );
+        assert!(!input.send(
+            Event::Mouse(mouse::Event::CursorMoved { position }),
+            mouse::Cursor::Available(position),
+        ));
+        let _ = input.send(
+            Event::Mouse(mouse::Event::CursorMoved { position: origin }),
+            mouse::Cursor::Available(origin),
+        );
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            mouse::Cursor::Available(origin),
+        );
+        assert!(input.messages.is_empty(), "drag position={position:?}");
+        assert!(!input.state().is_pressed);
+        assert!(input.state().active_press.is_none());
+        assert!(!input.state().has_visible_ripples(Instant::now()));
+    }
+}
+
+#[test]
+fn navigation_widget_mouse_motion_uses_event_position_when_batch_cursor_has_returned() {
+    let raw_origin = Point::new(40.0, 50.0);
+    let translated_origin = Point::new(40.0, 750.0);
+    for movement in [8.0, 9.0] {
+        let mut input = NavigationInputHarness::new();
+        let cursor = mouse::Cursor::Available(translated_origin);
+        let _ = input.send(
+            Event::Mouse(mouse::Event::CursorMoved {
+                position: raw_origin,
+            }),
+            cursor,
+        );
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            cursor,
+        );
+        for position in [raw_origin + Vector::new(movement, 0.0), raw_origin] {
+            let _ = input.send(Event::Mouse(mouse::Event::CursorMoved { position }), cursor);
+        }
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            cursor,
+        );
+        assert_eq!(input.messages.len(), usize::from(movement <= 8.0));
+        assert!(!input.state().is_pressed);
+    }
+}
+
+#[test]
+fn navigation_widget_mouse_release_checks_distance_without_move_event() {
+    let mut input = NavigationInputHarness::new();
+    let origin = Point::new(40.0, 750.0);
+    let _ = input.send(
+        Event::Mouse(mouse::Event::CursorMoved { position: origin }),
+        mouse::Cursor::Available(origin),
+    );
+    let _ = input.send(
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+        mouse::Cursor::Available(origin),
+    );
+    let _ = input.send(
+        Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+        mouse::Cursor::Available(Point::new(90.0, 750.0)),
+    );
+    assert!(input.messages.is_empty());
+    assert!(!input.state().is_pressed);
+}
+
+#[test]
+fn navigation_widget_mouse_loss_cancels_press_and_allows_next_click() {
+    let position = Point::new(40.0, 750.0);
+    let cursor = mouse::Cursor::Available(position);
+    for cancel in [
+        Event::Mouse(mouse::Event::CursorLeft),
+        Event::Window(window::Event::Unfocused),
+    ] {
+        let mut input = NavigationInputHarness::new();
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            cursor,
+        );
+        let _ = input.send(cancel, mouse::Cursor::Unavailable);
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            cursor,
+        );
+        assert!(input.messages.is_empty());
+        assert!(input.state().active_press.is_none());
+        assert!(!input.state().is_pressed);
+        assert!(!input.state().has_visible_ripples(Instant::now()));
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)),
+            cursor,
+        );
+        let _ = input.send(
+            Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)),
+            cursor,
+        );
+        assert_eq!(input.messages.len(), 1);
+    }
+}
+
+#[test]
 fn navigation_widget_cancels_on_owner_loss_and_window_unfocus() {
     let position = Point::new(40.0, 750.0);
     let id = touch::Finger(0);
@@ -1736,7 +1878,39 @@ fn navigation_widget_cancels_on_owner_loss_and_window_unfocus() {
 }
 
 #[test]
-fn navigation_widget_uses_translated_cursor_for_entire_touch_gesture() {
+fn navigation_widget_uses_translated_cursor_for_touch_hit_testing() {
+    let mut input = NavigationInputHarness::new();
+    let id = touch::Finger(0);
+    for (event, position) in [
+        (
+            touch::Event::FingerPressed {
+                id,
+                position: Point::new(40.0, 50.0),
+            },
+            Point::new(40.0, 750.0),
+        ),
+        (
+            touch::Event::FingerMoved {
+                id,
+                position: Point::new(40.0, 52.0),
+            },
+            Point::new(40.0, 752.0),
+        ),
+        (
+            touch::Event::FingerLifted {
+                id,
+                position: Point::new(40.0, 54.0),
+            },
+            Point::new(40.0, 754.0),
+        ),
+    ] {
+        let _ = input.send(Event::Touch(event), mouse::Cursor::Available(position));
+    }
+    assert_eq!(input.messages.len(), 1);
+}
+
+#[test]
+fn navigation_touch_drag_is_not_hidden_by_scroll_translation() {
     let mut input = NavigationInputHarness::new();
     let id = touch::Finger(0);
     for (event, position) in [
@@ -1764,7 +1938,7 @@ fn navigation_widget_uses_translated_cursor_for_entire_touch_gesture() {
     ] {
         let _ = input.send(Event::Touch(event), mouse::Cursor::Available(position));
     }
-    assert_eq!(input.messages.len(), 1);
+    assert!(input.messages.is_empty());
 }
 
 #[test]
@@ -1780,6 +1954,126 @@ fn navigation_widget_cancels_touch_that_leaves_visible_hit_region() {
     let _ = input.touch(touch::Event::FingerLifted { id, position });
     assert!(input.messages.is_empty());
     assert!(!input.state().is_pressed);
+}
+
+#[test]
+fn navigation_bar_and_rail_inside_scrollable_allow_touch_scrolling_and_taps() {
+    #[derive(Debug, Clone)]
+    enum ScrollMessage {
+        Selected,
+        Scrolled(f32),
+    }
+
+    fn item_is_pressed(tree: &Tree) -> bool {
+        if tree.tag == tree::Tag::of::<NavigationPressSurfaceState>() {
+            tree.state
+                .downcast_ref::<NavigationPressSurfaceState>()
+                .is_pressed
+        } else {
+            tree.children.iter().any(item_is_pressed)
+        }
+    }
+
+    fn item_bounds(tree: &Tree, layout: Layout<'_>) -> Option<Rectangle> {
+        if tree.tag == tree::Tag::of::<NavigationPressSurfaceState>() {
+            Some(layout.bounds())
+        } else {
+            tree.children
+                .iter()
+                .zip(layout.children())
+                .find_map(|(tree, layout)| item_bounds(tree, layout))
+        }
+    }
+
+    for is_rail in [false, true] {
+        for drag in [false, true] {
+            let destinations = [Destination::new(Page::One, "1", "One")];
+            let navigation: Element<'_, ScrollMessage, Theme, SingleLineTestRenderer> = if is_rail {
+                rail_with(
+                    &destinations,
+                    Selection::new(Page::One),
+                    |_| ScrollMessage::Selected,
+                    NavigationRailOptions::default().fit_content(),
+                )
+                .into()
+            } else {
+                bar(&destinations, Selection::new(Page::One), |_| {
+                    ScrollMessage::Selected
+                })
+                .into()
+            };
+            let content = Column::new()
+                .push(Space::new().height(60))
+                .push(navigation)
+                .push(Space::new().height(900));
+            let mut scrollable = iced_widget::Scrollable::new(content)
+                .width(240)
+                .height(200)
+                .on_scroll(|viewport| ScrollMessage::Scrolled(viewport.absolute_offset().y));
+            let renderer = SingleLineTestRenderer;
+            let mut tree =
+                Tree::new(&scrollable as &dyn Widget<ScrollMessage, Theme, SingleLineTestRenderer>);
+            let viewport = Rectangle::with_size(Size::new(240.0, 200.0));
+            let node = scrollable.layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, viewport.size()),
+            );
+            let origin = item_bounds(&tree, Layout::new(&node)).unwrap().center();
+            let end = if drag {
+                Point::new(origin.x, origin.y - 60.0)
+            } else {
+                origin
+            };
+            let mut messages = Vec::new();
+            let mut positions = vec![origin];
+            if drag {
+                positions.extend(
+                    (1..=15).map(|step| Point::new(origin.x, origin.y - step as f32 * 4.0)),
+                );
+            } else {
+                positions.push(origin);
+            }
+            positions.push(end);
+            let last = positions.len() - 1;
+            for (index, position) in positions.into_iter().enumerate() {
+                let id = touch::Finger(0);
+                let event = Event::Touch(match index {
+                    0 => touch::Event::FingerPressed { id, position },
+                    i if i == last => touch::Event::FingerLifted { id, position },
+                    _ => touch::Event::FingerMoved { id, position },
+                });
+                scrollable.update(
+                    &mut tree,
+                    &event,
+                    Layout::new(&node),
+                    mouse::Cursor::Available(position),
+                    &renderer,
+                    &mut iced_widget::core::clipboard::Null,
+                    &mut Shell::new(&mut messages),
+                    &viewport,
+                );
+                if index == 0 {
+                    assert!(item_is_pressed(&tree), "is_rail={is_rail}");
+                    assert!(messages.is_empty());
+                }
+            }
+
+            let did_scroll = messages
+                .iter()
+                .any(|message| matches!(message, ScrollMessage::Scrolled(y) if *y > 0.0));
+            let selected = messages
+                .iter()
+                .filter(|message| matches!(message, ScrollMessage::Selected))
+                .count();
+            assert_eq!(
+                did_scroll, drag,
+                "is_rail={is_rail}, drag={drag}, {messages:?}"
+            );
+            assert_eq!(selected, usize::from(!drag), "is_rail={is_rail}");
+            assert!(!item_is_pressed(&tree));
+        }
+    }
 }
 
 #[test]
