@@ -44,14 +44,20 @@
                      debug!("App Paused - stopped running");
                      self.running = false;
                  },
-@@ -287,6 +294,7 @@
+@@ -287,9 +294,10 @@
                      warn!("TODO: forward onStop notification to application");
                  },
                  MainEvent::Destroy => {
+-                    // XXX: maybe exit mainloop to drop things before being
+-                    // killed by the OS?
+-                    warn!("TODO: forward onDestroy notification to application");
 +                    crate::platform::android::notify_activity_lifecycle(false);
-                     // XXX: maybe exit mainloop to drop things before being
-                     // killed by the OS?
-                     warn!("TODO: forward onDestroy notification to application");
++                    // NativeActivity.onDestroy waits until android_main returns.
++                    // Continuing to poll here deadlocks the Java UI thread.
++                    self.window_target().exit();
+                 },
+                 MainEvent::InsetsChanged { .. } => {
+                     // XXX: how to forward this state to applications?
 @@ -473,12 +481,126 @@
                      },
                  }
@@ -179,7 +185,22 @@
      }
 
      pub fn run<F>(mut self, event_handler: F) -> Result<(), EventLoopError>
-@@ -917,9 +1039,19 @@
+@@ -630,6 +752,14 @@
+     }
+ }
+
++impl<T> Drop for EventLoop<T> {
++    fn drop(&mut self) {
++        // A later NativeActivity can call android_main again in this process.
++        // Do not keep winit's single-active-loop guard set after teardown.
++        event_loop::EventLoopBuilder::<T>::allow_event_loop_recreation();
++    }
++}
++
+ pub struct EventLoopProxy<T: 'static> {
+     user_events_sender: mpsc::Sender<T>,
+     waker: AndroidAppWaker,
+@@ -917,9 +1047,19 @@
 
      pub fn set_ime_allowed(&self, allowed: bool) {
          if allowed {
@@ -199,7 +220,7 @@
          }
      }
 
-@@ -1139,3 +1271,47 @@
+@@ -1139,3 +1279,47 @@
          self.monitor.clone()
      }
  }
@@ -274,3 +295,14 @@
 
  /// Additional methods on [`EventLoop`] that are specific to Android.
  pub trait EventLoopExtAndroid {
+--- a/src/event_loop.rs
++++ b/src/event_loop.rs
+@@ -127,7 +127,7 @@
+         })
+     }
+
+-    #[cfg(web_platform)]
++    #[cfg(any(web_platform, android_platform))]
+     pub(crate) fn allow_event_loop_recreation() {
+         EVENT_LOOP_CREATED.store(false, Ordering::Relaxed);
+     }
