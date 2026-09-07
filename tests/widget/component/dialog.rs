@@ -451,6 +451,73 @@ fn dialog_container_style_uses_material_tokens() {
 }
 
 #[test]
+fn scrollable_dialog_body_uses_the_dialog_surface_and_fades_without_residue() {
+    for theme in [Theme::Light, Theme::Dark] {
+        for alpha in [1.0, 0.5, 0.0] {
+            for body_height in [100.0, 800.0] {
+                let mut renderer = test_renderer();
+                let mut form: Element<'_, Message, Theme, iced_widget::Renderer> = content_with(
+                    "Title",
+                    Space::new().height(body_height),
+                    Space::new().height(40),
+                    AlphaOptions::default().alpha(alpha),
+                )
+                .into();
+                let mut tree = Tree::new(form.as_widget());
+                let node = form
+                    .as_widget_mut()
+                    .layout(
+                        &mut tree,
+                        &renderer,
+                        &layout::Limits::new(Size::ZERO, Size::new(360.0, 300.0)),
+                    )
+                    .move_to(Point::new(20.0, 20.0));
+                let body = dialog_layout(&tree, Layout::new(&node))
+                    .unwrap()
+                    .children()
+                    .nth(1)
+                    .unwrap()
+                    .bounds();
+                let viewport = Rectangle::with_size(Size::new(400.0, 340.0));
+                form.as_widget().draw(
+                    &tree,
+                    &mut renderer,
+                    &theme,
+                    &renderer::Style::default(),
+                    Layout::new(&node),
+                    mouse::Cursor::Unavailable,
+                    &viewport,
+                );
+                let iced_widget::Renderer::Secondary(renderer) = &mut renderer else {
+                    unreachable!()
+                };
+                let mut pixels = tiny_skia::Pixmap::new(400, 340).unwrap();
+                renderer.draw(
+                    &mut pixels.as_mut(),
+                    &mut tiny_skia::Mask::new(400, 340).unwrap(),
+                    &iced_widget::graphics::Viewport::with_physical_size(Size::new(400, 340), 1.0),
+                    &[viewport],
+                    Color::from_rgb8(10, 20, 30),
+                );
+                let y = body.center_y() as u32;
+                assert_eq!(
+                    pixels.pixel(body.center_x() as u32, y),
+                    pixels.pixel(28, y),
+                    "body paints a separate surface: alpha={alpha}, height={body_height}"
+                );
+                if alpha == 0.0 {
+                    let background = pixels.pixel(0, 0).unwrap();
+                    assert!(
+                        pixels.pixels().iter().all(|pixel| *pixel == background),
+                        "fully faded dialog left visible pixels"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn dialog_content_styles_use_material_color_roles() {
     let theme = Theme::Light;
     let colors = theme.colors();

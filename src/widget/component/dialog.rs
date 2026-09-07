@@ -638,7 +638,9 @@ where
         bottom: tokens::component::dialog::SUPPORTING_TEXT_BOTTOM_PADDING,
         left: 0.0,
     });
-    let scrollable = Scrollable::new(body).height(Length::Shrink);
+    let scrollable = Scrollable::new(body)
+        .height(Length::Shrink)
+        .style(move |theme, status| body_scrollable_style(theme, status, alpha));
     #[cfg(target_os = "android")]
     let scrollable = scrollable.direction(iced_widget::scrollable::Direction::Vertical(
         iced_widget::scrollable::Scrollbar::hidden(),
@@ -893,6 +895,31 @@ fn container_style(theme: &Theme) -> iced_widget::container::Style {
         ),
         snap: cfg!(feature = "crisp"),
     }
+}
+
+fn body_scrollable_style(
+    theme: &Theme,
+    status: iced_widget::scrollable::Status,
+    alpha: f32,
+) -> iced_widget::scrollable::Style {
+    let mut style = crate::style::scrollable::default(theme, status);
+    // The dialog owns the surface. A second opaque surface here produces a
+    // dark inset panel that remains visible after the dialog has faded out.
+    style.container = iced_widget::container::Style::default();
+    for rail in [&mut style.vertical_rail, &mut style.horizontal_rail] {
+        rail.background = rail
+            .background
+            .map(|background| background.scale_alpha(alpha));
+        rail.border.color = alpha_color(rail.border.color, alpha);
+        rail.scroller.background = rail.scroller.background.scale_alpha(alpha);
+        rail.scroller.border.color = alpha_color(rail.scroller.border.color, alpha);
+    }
+    style.gap = style.gap.map(|background| background.scale_alpha(alpha));
+    style.auto_scroll.background = style.auto_scroll.background.scale_alpha(alpha);
+    style.auto_scroll.border.color = alpha_color(style.auto_scroll.border.color, alpha);
+    style.auto_scroll.icon = alpha_color(style.auto_scroll.icon, alpha);
+    style.auto_scroll.shadow.color = alpha_color(style.auto_scroll.shadow.color, alpha);
+    style
 }
 
 fn container_style_alpha(theme: &Theme, alpha: f32) -> iced_widget::container::Style {
