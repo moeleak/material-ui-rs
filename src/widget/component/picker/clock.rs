@@ -6,7 +6,7 @@ where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + 'static + 'a,
 {
-    Canvas::new(ClockFace {
+    Element::new(ClockFace {
         hour: state.hour,
         minute: state.minute,
         is_24_hour: state.is_24_hour,
@@ -18,13 +18,6 @@ where
         selector_angle: state.animation.clock_angle(),
         on_action: Arc::new(on_action),
     })
-    .width(Length::Fixed(
-        tokens::component::time_picker::CLOCK_DIAL_SIZE,
-    ))
-    .height(Length::Fixed(
-        tokens::component::time_picker::CLOCK_DIAL_SIZE,
-    ))
-    .into()
 }
 
 #[derive(Clone)]
@@ -174,6 +167,7 @@ where
     Renderer: geometry::Renderer,
 {
     drag: Option<ClockFaceDrag>,
+    tap: super::click::ClickGesture,
     cache: canvas::Cache<Renderer>,
     render_key: Cell<Option<ClockFaceRenderKey>>,
 }
@@ -185,11 +179,14 @@ where
     fn default() -> Self {
         Self {
             drag: None,
+            tap: super::click::ClickGesture::default(),
             cache: canvas::Cache::new(),
             render_key: Cell::new(None),
         }
     }
 }
+
+include!("clock_widget.rs");
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct ClockFaceRenderKey {

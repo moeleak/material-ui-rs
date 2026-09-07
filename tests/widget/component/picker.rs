@@ -1,5 +1,7 @@
 use super::*;
 
+include!("picker_touch.rs");
+
 fn picker_test_renderer() -> iced_widget::Renderer {
     iced_widget::Renderer::Secondary(iced_tiny_skia::Renderer::new(
         crate::fonts::ROBOTO,
