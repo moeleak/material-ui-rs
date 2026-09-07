@@ -4197,6 +4197,35 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
+    let vertical_width = 2.0 * tokens::component::time_picker::TIME_SELECTOR_WIDTH
+        + tokens::component::time_picker::DISPLAY_SEPARATOR_WIDTH
+        + tokens::component::time_picker::PERIOD_TOGGLE_MARGIN
+        + tokens::component::time_picker::PERIOD_SELECTOR_VERTICAL_WIDTH;
+
+    iced_widget::Responsive::new(move |size| {
+        // Keep the period buttons at their Material size when page padding
+        // leaves too little room for the vertical arrangement.
+        clock_display_content(
+            state,
+            on_action.clone(),
+            vertical_period && size.width >= vertical_width,
+        )
+    })
+    .width(Length::Shrink)
+    .height(Length::Shrink)
+    .into()
+}
+
+fn clock_display_content<'a, Message, Renderer>(
+    state: &'a TimePickerState,
+    on_action: impl Fn(TimePickerAction) -> Message + Clone + 'a,
+    vertical_period: bool,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
     let hour = time_selector(
         two_digit(state.hour_for_display()),
         state

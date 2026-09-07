@@ -1,5 +1,76 @@
 use super::*;
 
+fn picker_test_renderer() -> iced_widget::Renderer {
+    iced_widget::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+        crate::fonts::ROBOTO,
+        iced_widget::core::Pixels(16.0),
+    ))
+}
+
+fn layout_has_size(node: &layout::Node, size: Size) -> bool {
+    node.size() == size
+        || node
+            .children()
+            .iter()
+            .any(|child| layout_has_size(child, size))
+}
+
+#[test]
+fn time_picker_reflows_period_buttons_on_narrow_pages() {
+    let state = TimePickerState::new(17, 20, false);
+    let renderer = picker_test_renderer();
+    // A 360 dp page leaves 304 dp after page padding, and 256 dp inside
+    // the picker's padding. The old row squeezed AM/PM down to 28 dp.
+    for (width, period_width, period_height) in [
+        (304.0, 216.0, 38.0),
+        (327.0, 216.0, 38.0),
+        (328.0, 52.0, 80.0),
+        (400.0, 52.0, 80.0),
+    ] {
+        let mut picker = time_picker(&state, |action| action);
+        let mut tree = Tree::new(picker.as_widget());
+        let node = picker.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(width, 800.0)),
+        );
+
+        assert!(node.size().width <= width);
+        assert!(layout_has_size(&node, Size::new(96.0, 80.0)));
+        assert!(layout_has_size(&node, Size::new(256.0, 256.0)));
+        assert!(
+            layout_has_size(&node, Size::new(period_width, period_height)),
+            "incorrect period size at width {width}"
+        );
+        let (button_width, button_height) =
+            period_toggle_item_size(period_height == 80.0, period_width, period_height);
+        assert!(layout_has_size(
+            &node,
+            Size::new(button_width, button_height)
+        ));
+    }
+}
+
+#[test]
+fn clock_display_keeps_horizontal_and_24_hour_layouts() {
+    let renderer = picker_test_renderer();
+    for (is_24_hour, vertical_period, height) in [
+        (false, false, 130.0),
+        (true, false, 80.0),
+        (true, true, 80.0),
+    ] {
+        let state = TimePickerState::new(17, 20, is_24_hour);
+        let mut display = clock_display(&state, |action| action, vertical_period);
+        let mut tree = Tree::new(display.as_widget());
+        let node = display.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(280.0, 800.0)),
+        );
+        assert_eq!(node.size(), Size::new(216.0, height));
+    }
+}
+
 #[test]
 fn date_round_trips_utc_millis() {
     let date = Date::new(2026, 7, 4).unwrap();
