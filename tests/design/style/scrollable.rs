@@ -79,3 +79,89 @@ fn callers_can_still_opt_into_a_separate_scrollable_surface() {
         assert_ne!(pixels.pixel(20, 24), pixels.pixel(4, 24));
     }
 }
+
+fn color_of(rail: Rail) -> Color {
+    match rail.scroller.background {
+        Background::Color(color) => color,
+        Background::Gradient(_) => panic!("scrollbar thumb should use a color role"),
+    }
+}
+
+#[test]
+fn interactive_thumbs_use_outline_with_axis_specific_state_layers() {
+    let mut custom_colors = Theme::Dark.colors();
+    custom_colors.outline.color = Color::from_rgb8(180, 120, 140);
+    let custom = Theme::new("Custom outline", custom_colors);
+    for theme in [Theme::Light, Theme::Dark, custom] {
+        let colors = theme.colors();
+        let active = default(
+            &theme,
+            Status::Active {
+                is_horizontal_scrollbar_disabled: false,
+                is_vertical_scrollbar_disabled: false,
+            },
+        );
+        let hovered = default(
+            &theme,
+            Status::Hovered {
+                is_horizontal_scrollbar_hovered: false,
+                is_vertical_scrollbar_hovered: true,
+                is_horizontal_scrollbar_disabled: false,
+                is_vertical_scrollbar_disabled: false,
+            },
+        );
+        let dragged = default(
+            &theme,
+            Status::Dragged {
+                is_horizontal_scrollbar_dragged: true,
+                is_vertical_scrollbar_dragged: false,
+                is_horizontal_scrollbar_disabled: false,
+                is_vertical_scrollbar_disabled: false,
+            },
+        );
+        assert_eq!(color_of(active.vertical_rail), colors.outline.color);
+        assert_eq!(hovered.horizontal_rail, active.horizontal_rail);
+        assert_eq!(dragged.vertical_rail, active.vertical_rail);
+        assert_eq!(
+            color_of(hovered.vertical_rail),
+            mix(
+                colors.outline.color,
+                colors.surface.text,
+                HOVERED_LAYER_OPACITY
+            )
+        );
+        assert_eq!(
+            color_of(dragged.horizontal_rail),
+            mix(
+                colors.outline.color,
+                colors.surface.text,
+                DRAGGED_LAYER_OPACITY
+            )
+        );
+    }
+}
+
+#[test]
+fn disabled_thumbs_do_not_gain_hover_or_drag_emphasis() {
+    for theme in [Theme::Light, Theme::Dark] {
+        let expected = disabled_text(theme.colors().surface.text);
+        for status in [
+            Status::Hovered {
+                is_horizontal_scrollbar_hovered: true,
+                is_vertical_scrollbar_hovered: true,
+                is_horizontal_scrollbar_disabled: true,
+                is_vertical_scrollbar_disabled: true,
+            },
+            Status::Dragged {
+                is_horizontal_scrollbar_dragged: true,
+                is_vertical_scrollbar_dragged: true,
+                is_horizontal_scrollbar_disabled: true,
+                is_vertical_scrollbar_disabled: true,
+            },
+        ] {
+            let style = default(&theme, status);
+            assert_eq!(color_of(style.horizontal_rail), expected);
+            assert_eq!(color_of(style.vertical_rail), expected);
+        }
+    }
+}

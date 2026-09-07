@@ -4,7 +4,7 @@ use iced_widget::scrollable::{AutoScroll, Catalog, Rail, Scroller, Status, Style
 use crate::Theme;
 use crate::style::container::transparent;
 use crate::utils::{
-    HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, disabled_container, disabled_text, mix,
+    DRAGGED_LAYER_OPACITY, HOVERED_LAYER_OPACITY, disabled_container, disabled_text, mix,
 };
 
 impl Catalog for Theme {
@@ -20,12 +20,14 @@ impl Catalog for Theme {
 }
 
 pub fn default(theme: &Theme, status: Status) -> Style {
-    let surface = theme.colors().surface;
+    let colors = theme.colors();
+    let surface = colors.surface;
+    let thumb_color = colors.outline.color;
 
     let active_rail = Rail {
         background: None,
         scroller: Scroller {
-            background: surface.text.into(),
+            background: thumb_color.into(),
             border: border::rounded(9999),
         },
         border: Border::default(),
@@ -94,7 +96,7 @@ pub fn default(theme: &Theme, status: Status) -> Style {
         } => {
             let hovered_rail = Rail {
                 scroller: Scroller {
-                    background: mix(surface.text, surface.color, HOVERED_LAYER_OPACITY).into(),
+                    background: mix(thumb_color, surface.text, HOVERED_LAYER_OPACITY).into(),
                     border: border::rounded(9999),
                 },
                 ..active_rail
@@ -131,7 +133,7 @@ pub fn default(theme: &Theme, status: Status) -> Style {
         } => {
             let dragged_rail = Rail {
                 scroller: Scroller {
-                    background: mix(surface.text, surface.color, PRESSED_LAYER_OPACITY).into(),
+                    background: mix(thumb_color, surface.text, DRAGGED_LAYER_OPACITY).into(),
                     border: border::rounded(9999),
                 },
                 ..active_rail
