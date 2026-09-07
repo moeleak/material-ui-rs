@@ -14,6 +14,52 @@ enum Message {
 }
 
 #[test]
+fn standard_rail_does_not_cast_a_shadow_over_the_adjacent_surface() {
+    for theme in [Theme::Light, Theme::Dark] {
+        let mut renderer = iced_tiny_skia::Renderer::new(crate::fonts::ROBOTO, Pixels(16.0));
+        let mut element: Element<'_, Message, Theme, iced_tiny_skia::Renderer> =
+            Container::new(Space::new())
+                .width(80)
+                .height(80)
+                .style(rail_container)
+                .into();
+        let mut tree = Tree::new(element.as_widget());
+        let size = Size::new(120.0, 100.0);
+        let node = element.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, size),
+        );
+        let viewport = Rectangle::with_size(size);
+        element.as_widget().draw(
+            &tree,
+            &mut renderer,
+            &theme,
+            &renderer::Style::default(),
+            Layout::new(&node),
+            mouse::Cursor::Unavailable,
+            &viewport,
+        );
+        let mut pixels = tiny_skia::Pixmap::new(120, 100).unwrap();
+        renderer.draw(
+            &mut pixels.as_mut(),
+            &mut tiny_skia::Mask::new(120, 100).unwrap(),
+            &iced_widget::graphics::Viewport::with_physical_size(Size::new(120, 100), 1.0),
+            &[viewport],
+            theme.colors().surface.color,
+        );
+        let page = pixels.pixel(110, 40);
+        for x in 80..100 {
+            assert_eq!(
+                pixels.pixel(x, 40),
+                page,
+                "standard rail cast a shadow onto its neighboring page: theme={theme}, x={x}"
+            );
+        }
+    }
+}
+
+#[test]
 fn window_size_classes_use_material_breakpoints() {
     assert_eq!(width_class(599.0), WindowWidthClass::Compact);
     assert_eq!(width_class(600.0), WindowWidthClass::Medium);

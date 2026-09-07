@@ -369,7 +369,7 @@ fn m3_component_sizing_tokens_match_google_values() {
     assert_eq!(component::navigation_bar::ITEM_ANIMATION_DURATION_MS, 100);
     assert_eq!(component::navigation_rail::CONTAINER_WIDTH, 96.0);
     assert_eq!(component::navigation_rail::EXPANDED_CONTAINER_WIDTH, 220.0);
-    assert_eq!(component::navigation_rail::CONTAINER_ELEVATION_LEVEL, 3);
+    assert_eq!(component::navigation_rail::CONTAINER_ELEVATION_LEVEL, 0);
     assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_WIDTH, 56.0);
     assert_eq!(component::navigation_rail::ACTIVE_INDICATOR_HEIGHT, 32.0);
     assert_eq!(
