@@ -498,8 +498,15 @@ where
     Message: Clone + 'a,
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
 {
+    // Keep the content at the same tree position across visibility changes so
+    // scroll offsets, input focus, and other widget state survive the snackbar.
+    let layers = Stack::new()
+        .push(content)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
     if !transition.is_active() {
-        return content.into();
+        return layers.into();
     }
 
     let alpha = transition.content_alpha(now);
@@ -516,7 +523,13 @@ where
         Options::default().content_alpha(alpha),
     );
 
-    overlay_with(content, snackbar, translation_y, options)
+    layers
+        .push(floating_layer(
+            snackbar,
+            translation_y,
+            options.bottom_margin,
+        ))
+        .into()
 }
 
 fn surface_container<'a, Message, Renderer>(
