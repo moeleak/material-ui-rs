@@ -3126,6 +3126,7 @@ where
 {
     let scale = tokens::component::date_picker::WEEKDAY_LABEL_TEXT;
     let mut row = Row::new()
+        .width(Length::Fill)
         .height(Length::Fixed(
             tokens::component::date_picker::WEEKDAY_CONTAINER_HEIGHT,
         ))
@@ -3143,9 +3144,7 @@ where
                         color: Some(alpha_color(theme.colors().surface.text, content_alpha)),
                     }),
             )
-            .center_x(Length::Fixed(
-                tokens::component::date_picker::CALENDAR_CELL_SIZE,
-            ))
+            .center_x(Length::Fill)
             .center_y(Length::Fixed(
                 tokens::component::date_picker::CALENDAR_CELL_SIZE,
             )),
@@ -3210,24 +3209,20 @@ where
     let days = days_in_month(month.year, month.month);
     let today = Date::today_utc();
     let mut day = 1u8;
-    let mut column = Column::new();
+    let mut column = Column::new().width(Length::Fill);
 
     for week in 0..tokens::component::date_picker::MAX_CALENDAR_ROWS {
-        let mut row = Row::new().align_y(alignment::Vertical::Center);
+        let mut row = Row::new()
+            .width(Length::Fill)
+            .align_y(alignment::Vertical::Center);
 
         for weekday in 0..7 {
             let cell = week * 7 + weekday;
 
             if cell < first_weekday || day > days {
-                row = row.push(
-                    Space::new()
-                        .width(Length::Fixed(
-                            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-                        ))
-                        .height(Length::Fixed(
-                            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-                        )),
-                );
+                row = row.push(Space::new().width(Length::Fill).height(Length::Fixed(
+                    tokens::component::date_picker::CALENDAR_CELL_SIZE,
+                )));
             } else {
                 let date = Date {
                     year: month.year,
@@ -3488,28 +3483,26 @@ struct RangeBackground {
 
 impl RangeBackground {
     fn rects(self) -> Vec<RangeBackgroundRect> {
-        let item_container_width = tokens::component::date_picker::CALENDAR_CELL_SIZE;
+        // Match the seven equally sized cells, including empty cells at the
+        // start and end of a month, instead of assuming a 336 dp grid.
+        let item_container_width = self.width / 7.0;
         let item_container_height = tokens::component::date_picker::CALENDAR_CELL_SIZE;
         let item_state_layer_height = tokens::component::date_picker::DATE_CONTAINER_HEIGHT;
         let state_layer_vertical_padding = (item_container_height - item_state_layer_height) / 2.0;
-        let horizontal_space_between_items = (self.width - 7.0 * item_container_width) / 7.0;
-        let item_step = item_container_width + horizontal_space_between_items;
-        let start_x = self.info.start_column as f32 * item_step
+        let start_x = self.info.start_column as f32 * item_container_width
             + if self.info.first_is_selection_start {
                 item_container_width / 2.0
             } else {
                 0.0
-            }
-            + horizontal_space_between_items / 2.0;
+            };
         let start_y =
             self.info.start_row as f32 * item_container_height + state_layer_vertical_padding;
-        let end_x = self.info.end_column as f32 * item_step
+        let end_x = self.info.end_column as f32 * item_container_width
             + if self.info.last_is_selection_end {
                 item_container_width / 2.0
             } else {
                 item_container_width
-            }
-            + horizontal_space_between_items / 2.0;
+            };
         let end_y = self.info.end_row as f32 * item_container_height + state_layer_vertical_padding;
         let mut rects = Vec::with_capacity(3);
 
@@ -3575,6 +3568,7 @@ impl RangeBackground {
 struct RangeConnector {
     position: DateRangePosition,
     weekday: usize,
+    width: f32,
 }
 
 impl RangeConnector {
@@ -3582,7 +3576,7 @@ impl RangeConnector {
         let cell_size = tokens::component::date_picker::CALENDAR_CELL_SIZE;
         let layer_height = tokens::component::date_picker::DATE_STATE_LAYER_HEIGHT;
         let y = (cell_size - layer_height) / 2.0;
-        let half_width = cell_size / 2.0;
+        let half_width = self.width / 2.0;
 
         match self.position {
             DateRangePosition::Start if self.weekday < 6 => Some(RangeBackgroundRect {
@@ -3632,27 +3626,23 @@ where
     let days = days_in_month(month.year, month.month);
     let today = Date::today_utc();
     let mut day = 1u8;
-    let mut column = Column::new();
+    let mut column = Column::new().width(Length::Fill);
     let grid_width = tokens::component::date_picker::CALENDAR_CELL_SIZE * 7.0;
     let grid_height = tokens::component::date_picker::CALENDAR_CELL_SIZE
         * tokens::component::date_picker::MAX_CALENDAR_ROWS as f32;
 
     for week in 0..tokens::component::date_picker::MAX_CALENDAR_ROWS {
-        let mut row = Row::new().align_y(alignment::Vertical::Center);
+        let mut row = Row::new()
+            .width(Length::Fill)
+            .align_y(alignment::Vertical::Center);
 
         for weekday in 0..7 {
             let cell = week * 7 + weekday;
 
             if cell < first_weekday || day > days {
-                row = row.push(
-                    Space::new()
-                        .width(Length::Fixed(
-                            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-                        ))
-                        .height(Length::Fixed(
-                            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-                        )),
-                );
+                row = row.push(Space::new().width(Length::Fill).height(Length::Fixed(
+                    tokens::component::date_picker::CALENDAR_CELL_SIZE,
+                )));
             } else {
                 let date = Date {
                     year: month.year,
@@ -3796,18 +3786,12 @@ where
     Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
-    let label = Canvas::new(cell)
-        .width(Length::Fixed(
-            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-        ))
-        .height(Length::Fixed(
-            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-        ));
+    let label = Canvas::new(cell).width(Length::Fill).height(Length::Fixed(
+        tokens::component::date_picker::CALENDAR_CELL_SIZE,
+    ));
 
     Button::new(label)
-        .width(Length::Fixed(
-            tokens::component::date_picker::CALENDAR_CELL_SIZE,
-        ))
+        .width(Length::Fill)
         .height(Length::Fixed(
             tokens::component::date_picker::CALENDAR_CELL_SIZE,
         ))
@@ -3907,7 +3891,8 @@ where
         let colors = theme.colors();
         let mut frame = Frame::new(renderer, bounds.size());
         let center = frame.center();
-        let indicator_width = tokens::component::date_picker::DATE_CONTAINER_WIDTH;
+        let indicator_width =
+            tokens::component::date_picker::DATE_CONTAINER_WIDTH.min(bounds.width);
         let indicator_height = tokens::component::date_picker::DATE_CONTAINER_HEIGHT;
         let selected_progress = if self.selected {
             self.selected_progress.clamp(0.0, 1.0)
@@ -3921,6 +3906,7 @@ where
             && let Some(rect) = (RangeConnector {
                 position: self.range_position,
                 weekday: self.weekday,
+                width: bounds.width,
             }
             .rect())
         {

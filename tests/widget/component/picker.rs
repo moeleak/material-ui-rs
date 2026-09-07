@@ -1,6 +1,7 @@
 use super::*;
 
 include!("picker_touch.rs");
+include!("picker_calendar.rs");
 
 fn picker_test_renderer() -> iced_widget::Renderer {
     iced_widget::Renderer::Secondary(iced_tiny_skia::Renderer::new(
@@ -429,7 +430,11 @@ fn range_bg(info: RangeMonthSelectionInfo, width: f32) -> RangeBackground {
 }
 
 fn connector(position: DateRangePosition, weekday: usize) -> RangeConnector {
-    RangeConnector { position, weekday }
+    RangeConnector {
+        position,
+        weekday,
+        width: tokens::component::date_picker::CALENDAR_CELL_SIZE,
+    }
 }
 
 #[test]
