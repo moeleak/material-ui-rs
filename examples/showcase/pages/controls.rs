@@ -29,6 +29,7 @@ fn counter_controls(state: &Showcase) -> material::Element<'_, Message> {
             Message::Increment,
         ),
     ])
+    .wrap()
     .into()
 }
 
@@ -44,6 +45,7 @@ fn action_buttons(state: &Showcase) -> material::Element<'_, Message> {
             button::button("Text", ButtonVariant::Text),
         ],
     ))
+    .wrap()
     .into()
 }
 
@@ -63,6 +65,7 @@ fn fabs(state: &Showcase) -> material::Element<'_, Message> {
                 button::fab("add", FabVariant::Tertiary, FabSize::Standard),
             ],
         ))
+        .wrap()
         .into(),
         page::row(button::enabled_actions(
             state.enabled,
@@ -74,6 +77,7 @@ fn fabs(state: &Showcase) -> material::Element<'_, Message> {
                 button::extended_fab("Reroute", FabVariant::Surface),
             ],
         ))
+        .wrap()
         .into(),
     ])
     .into()
@@ -92,6 +96,7 @@ fn chips(state: &Showcase) -> material::Element<'_, Message> {
             button::chip("Selected", ChipVariant::SelectedFilter),
         ],
     ))
+    .wrap()
     .into()
 }
 
@@ -140,7 +145,101 @@ fn selection_controls(state: &Showcase) -> material::Element<'_, Message> {
             state.radio_choice,
             Message::ChoiceSelected,
         ),
-    ]);
+    ])
+    .wrap();
 
     page::spacious_stack([switches.into(), radios.into()]).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced_widget::core::{
+        Event, Layout, Pixels, Rectangle, Shell, Size, layout, mouse, touch, widget::Tree,
+    };
+
+    #[test]
+    fn fab_and_chip_previews_wrap_without_shrinking_or_losing_click_targets() {
+        let renderer = iced_widget::Renderer::Secondary(iced_tiny_skia::Renderer::new(
+            material::fonts::ROBOTO,
+            Pixels(16.0),
+        ));
+        for enabled in [true, false] {
+            let state = Showcase {
+                enabled,
+                ..Showcase::default()
+            };
+            for is_fab in [true, false] {
+                let mut content = if is_fab { fabs(&state) } else { chips(&state) };
+                let mut tree = Tree::new(content.as_widget());
+                let mut natural_sizes = Vec::new();
+                let mut wide_height = 0.0;
+                // 320/360 dp phones leave 264/304 dp after page padding.
+                // Resize back to desktop too, using the same widget state.
+                for width in [720.0, 304.0, 264.0, 720.0] {
+                    let viewport = Rectangle::with_size(Size::new(width, 1000.0));
+                    let node = content.as_widget_mut().layout(
+                        &mut tree,
+                        &renderer,
+                        &layout::Limits::new(Size::ZERO, viewport.size()),
+                    );
+                    let layout = Layout::new(&node);
+                    let buttons: Vec<_> = if is_fab {
+                        layout
+                            .children()
+                            .flat_map(|row| row.children().map(|button| button.bounds()))
+                            .collect()
+                    } else {
+                        layout.children().map(|button| button.bounds()).collect()
+                    };
+                    assert_eq!(buttons.len(), if is_fab { 10 } else { 4 });
+                    let sizes: Vec<_> = buttons.iter().map(|bounds| bounds.size()).collect();
+                    if natural_sizes.is_empty() {
+                        natural_sizes = sizes.clone();
+                        wide_height = node.size().height;
+                    }
+                    assert_eq!(sizes, natural_sizes, "a preview shrank at width {width}");
+                    if width < 720.0 {
+                        assert!(node.size().height > wide_height, "previews did not wrap");
+                    } else {
+                        assert_eq!(node.size().height, wide_height);
+                    }
+                    for (index, bounds) in buttons.iter().enumerate() {
+                        assert!(bounds.x >= 0.0 && bounds.x + bounds.width <= width);
+                        assert!(bounds.y >= 0.0 && bounds.y + bounds.height <= node.size().height);
+                        for other in &buttons[index + 1..] {
+                            assert!(bounds.intersection(other).is_none(), "previews overlap");
+                        }
+                    }
+
+                    let mut messages = Vec::new();
+                    for button in &buttons {
+                        let position = button.center();
+                        let id = touch::Finger(1);
+                        for event in [
+                            touch::Event::FingerPressed { id, position },
+                            touch::Event::FingerLifted { id, position },
+                        ] {
+                            content.as_widget_mut().update(
+                                &mut tree,
+                                &Event::Touch(event),
+                                layout,
+                                mouse::Cursor::Available(position),
+                                &renderer,
+                                &mut iced_widget::core::clipboard::Null,
+                                &mut Shell::new(&mut messages),
+                                &viewport,
+                            );
+                        }
+                    }
+                    assert_eq!(messages.len(), if enabled { buttons.len() } else { 0 });
+                    assert!(
+                        messages
+                            .iter()
+                            .all(|message| matches!(message, Message::Increment))
+                    );
+                }
+            }
+        }
+    }
 }
