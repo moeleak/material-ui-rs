@@ -2,7 +2,7 @@ use iced_widget::core::{Background, Border, Shadow, border};
 use iced_widget::scrollable::{AutoScroll, Catalog, Rail, Scroller, Status, Style, StyleFn};
 
 use crate::Theme;
-use crate::style::container::surface_container;
+use crate::style::container::transparent;
 use crate::utils::{
     HOVERED_LAYER_OPACITY, PRESSED_LAYER_OPACITY, disabled_container, disabled_text, mix,
 };
@@ -55,7 +55,9 @@ pub fn default(theme: &Theme, status: Status) -> Style {
     };
 
     let style = Style {
-        container: surface_container(theme),
+        // A scrolling viewport is a layout mechanism; its enclosing surface
+        // owns the background, including gaps between child cards.
+        container: transparent(theme),
         vertical_rail: active_rail,
         horizontal_rail: active_rail,
         gap: None,
@@ -160,3 +162,7 @@ pub fn default(theme: &Theme, status: Status) -> Style {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "../../../tests/design/style/scrollable.rs"]
+mod tests;
