@@ -586,19 +586,20 @@ where
     Message: 'a,
     Renderer: iced_widget::core::Renderer + 'a,
 {
-    let content = content.into();
+    // Keep the background's tree position stable through the entire transition,
+    // including the final frame when the modal layer is removed.
+    let layers = Stack::new()
+        .push(content)
+        .width(Length::Fill)
+        .height(Length::Fill);
 
     if !transition.is_active() {
-        return content;
+        return layers.into();
     }
 
-    Stack::with_children([
-        content,
-        modal_layer_animated_with(dialog, transition, now, options),
-    ])
-    .width(Length::Fill)
-    .height(Length::Fill)
-    .into()
+    layers
+        .push(modal_layer_animated_with(dialog, transition, now, options))
+        .into()
 }
 
 fn dialog_content<'a, Message, Renderer>(

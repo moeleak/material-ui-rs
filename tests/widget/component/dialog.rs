@@ -653,6 +653,100 @@ fn dismissing_scaled_dialog_preserves_child_state() {
     assert_eq!(dismissing.as_widget().children().len(), 1);
 }
 
+#[derive(Default)]
+struct BackgroundScrollProbe {
+    initialize: bool,
+    translation: Option<Vector>,
+}
+
+impl widget::Operation for BackgroundScrollProbe {
+    fn traverse(&mut self, operate: &mut dyn FnMut(&mut dyn widget::Operation)) {
+        operate(self);
+    }
+
+    fn scrollable(
+        &mut self,
+        id: Option<&widget::Id>,
+        _bounds: Rectangle,
+        _content_bounds: Rectangle,
+        translation: Vector,
+        state: &mut dyn widget::operation::Scrollable,
+    ) {
+        if id == Some(&widget::Id::new("dialog-background")) {
+            if self.initialize {
+                state.scroll_to(widget::operation::scrollable::AbsoluteOffset {
+                    x: None,
+                    y: Some(240.0),
+                });
+            }
+            self.translation = Some(translation);
+        }
+    }
+}
+
+#[test]
+fn opening_and_closing_a_dialog_preserves_the_background_scroll_position() {
+    let renderer = test_renderer();
+    for wrapped in [false, true] {
+        let mut tree = Tree::empty();
+        let mut transition = Transition::default();
+        let start = Instant::now();
+        for (index, elapsed) in [0, 10, 310, 320, 395, 470, 540, 550]
+            .into_iter()
+            .enumerate()
+        {
+            let now = start + duration_ms(elapsed);
+            match index {
+                1 | 7 => transition.show(now),
+                3 => transition.dismiss(now),
+                _ => {
+                    let _ = transition.advance(now);
+                }
+            }
+            let scrollable = Scrollable::new(Space::new().height(1200))
+                .id("dialog-background")
+                .width(Length::Fill)
+                .height(Length::Fill);
+            let background: Element<'_, Message, Theme, iced_widget::Renderer> = if wrapped {
+                Column::new()
+                    .push(Space::new().height(48))
+                    .push(scrollable)
+                    .into()
+            } else {
+                scrollable.into()
+            };
+            let mut modal = modal_animated(background, &transition, now, login_form());
+            tree.diff(modal.as_widget());
+            let node = modal.as_widget_mut().layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, Size::new(360.0, 640.0)),
+            );
+            let mut probe = BackgroundScrollProbe {
+                initialize: index == 0,
+                ..BackgroundScrollProbe::default()
+            };
+            modal
+                .as_widget_mut()
+                .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+            probe.initialize = false;
+            modal
+                .as_widget_mut()
+                .operate(&mut tree, Layout::new(&node), &renderer, &mut probe);
+            assert_eq!(
+                probe.translation,
+                Some(Vector::new(0.0, 240.0)),
+                "phase={:?}, wrapped={wrapped}",
+                transition.phase()
+            );
+            assert_eq!(
+                tree.children.len(),
+                if transition.is_active() { 2 } else { 1 }
+            );
+        }
+    }
+}
+
 #[test]
 fn scaled_dialog_layer_uses_viewport_to_preserve_shadow() {
     let bounds = Rectangle {
