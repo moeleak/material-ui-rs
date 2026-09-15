@@ -3152,6 +3152,9 @@ where
     }
 
     Container::new(row)
+        .height(Length::Fixed(
+            tokens::component::date_picker::WEEKDAY_CONTAINER_HEIGHT,
+        ))
         .padding(Padding {
             top: 0.0,
             right: tokens::component::date_picker::HORIZONTAL_SPACE,
