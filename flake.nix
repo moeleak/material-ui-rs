@@ -42,12 +42,19 @@
             python3Packages.fonttools
           ]
           ++ (lib.optionals pkgs.stdenv.isDarwin [ pkgs.libiconv ]);
+        linuxRuntimeLibraries = lib.optionals pkgs.stdenv.isLinux [
+          pkgs.wayland
+          pkgs.libxkbcommon
+        ];
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = rustToolchain ++ [ nativePackages.cargo_material_ui ];
+          packages = rustToolchain ++ [ nativePackages.cargo_material_ui ] ++ linuxRuntimeLibraries;
           shellHook = ''
             export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER="${pkgs.lld}/bin/wasm-ld"
+            ${lib.optionalString pkgs.stdenv.isLinux ''
+              export LD_LIBRARY_PATH="${lib.makeLibraryPath linuxRuntimeLibraries}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            ''}
           '';
         };
 
