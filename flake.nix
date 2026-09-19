@@ -45,6 +45,14 @@
         linuxRuntimeLibraries = lib.optionals pkgs.stdenv.isLinux [
           pkgs.wayland
           pkgs.libxkbcommon
+          # GPU
+          pkgs.vulkan-loader
+          pkgs.libGL
+          # X11 fallback for winit when not running under Wayland.
+          pkgs.libx11
+          pkgs.libxcursor
+          pkgs.libxi
+          pkgs.libxrandr
         ];
       in
       {
