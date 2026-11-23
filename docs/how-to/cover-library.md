@@ -102,3 +102,9 @@ the menu key is pressed over it, towards the side of the window with room for
 it. A click outside, <kbd>Esc</kbd> or losing focus closes it; the arrow keys
 and <kbd>Enter</kbd> pick an action. Actions without a message are shown
 disabled. Use `ContextMenu::on_open` to select the item whose menu opened.
+
+The menu's state lives with its content in the widget tree, so keep the
+content where it is when `on_open` changes the view: if selecting an item adds
+a details pane beside the grid, lay the grid out in the same row whether or not
+the pane shows, with an empty space in its place. Moving the grid to another
+position in the tree resets its widgets, and closes the menu that just opened.
