@@ -1,6 +1,7 @@
 mod controls;
 mod feedback;
 mod inputs;
+mod media;
 mod navigation;
 mod structure;
 mod surfaces;
@@ -12,6 +13,8 @@ use material_ui_rs as material;
 
 use super::{Message, Showcase, ShowcasePage};
 
+pub(super) use media::{COVERS, cover_source};
+
 pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
     let page = state.navigation.selected();
     let content = match page {
@@ -19,6 +22,7 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
         ShowcasePage::Controls => controls::view(state),
         ShowcasePage::Feedback => feedback::view(state),
         ShowcasePage::Surfaces => surfaces::view(),
+        ShowcasePage::Media => media::view(state),
         ShowcasePage::Navigation => navigation::view(state),
         ShowcasePage::Structure => structure::view(state),
     };
@@ -50,9 +54,9 @@ pub(super) fn view(state: &Showcase) -> material::Element<'_, Message> {
                 )
             }),
         )
-        .width(Length::Fixed(
-            available_width.max(MIN_COMPONENT_TAB_WIDTH * 4.0),
-        ));
+        .width(Length::Fixed(available_width.max(
+            MIN_COMPONENT_TAB_WIDTH * super::mobile::COMPONENT_PAGES.len() as f32,
+        )));
         let tabs = iced::widget::scrollable(tabs)
             .id(super::mobile::TABS_ID)
             .direction(iced::widget::scrollable::Direction::Horizontal(
@@ -87,6 +91,7 @@ fn page_label(page: ShowcasePage) -> &'static str {
         ShowcasePage::Controls => "Controls",
         ShowcasePage::Feedback => "Feedback",
         ShowcasePage::Surfaces => "Surfaces",
+        ShowcasePage::Media => "Media",
         ShowcasePage::Navigation => "Navigation",
         ShowcasePage::Structure => "Structure",
     }

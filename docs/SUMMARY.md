@@ -15,6 +15,7 @@
 - [Build adaptive navigation](how-to/adaptive-navigation.md)
 - [Add a theme picker](how-to/theme-picker.md)
 - [Compose forms and feedback](how-to/forms-and-feedback.md)
+- [Show a library of covers](how-to/cover-library.md)
 
 # Reference
 

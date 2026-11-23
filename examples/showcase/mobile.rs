@@ -21,11 +21,12 @@ pub(super) const DESTINATIONS: [navigation::Destination<Section>; 3] = [
     navigation::Destination::new(Section::Structure, "layers", "Structure"),
 ];
 
-pub(super) const COMPONENT_PAGES: [(ShowcasePage, &str); 4] = [
+pub(super) const COMPONENT_PAGES: [(ShowcasePage, &str); 5] = [
     (ShowcasePage::Inputs, "Inputs"),
     (ShowcasePage::Controls, "Controls"),
     (ShowcasePage::Feedback, "Feedback"),
     (ShowcasePage::Surfaces, "Surfaces"),
+    (ShowcasePage::Media, "Media"),
 ];
 
 #[derive(Debug)]

@@ -41,6 +41,24 @@ modules.
 - `theme_picker` provides a floating Material color picker and animated theme
   reveal helpers.
 
+## Media and Collections
+
+- `image` (feature `image`) provides images with corners from the shape scale,
+  cropped to cover their bounds, and placeholders for images that are loading,
+  failed to load, or are missing. `image::Cache` decodes images in the
+  background, optionally down to a bounded size, and keeps the most recently
+  requested ones; `image::cached` shows an image from it, or its placeholder.
+- `grid` provides fluid grids of cells at most a given width, with Material
+  spacing, and `grid::aspect_ratio` for content of a fixed aspect ratio inside
+  a cell, such as a cover above its title.
+- `menu` provides context menus: `menu::context` wraps content with a menu of
+  actions that opens at the pointer when the content is right-clicked. Actions
+  take an icon, are disabled until they have a message, and can be marked
+  destructive; dividers separate groups.
+
+See [Show a library of covers](../how-to/cover-library.md) for the three
+together.
+
 ## Pattern
 
 The constructors set Material metrics such as height, padding, shape, typography,

@@ -95,8 +95,18 @@ enum Message {
     DialogRememberPasswordChanged(bool),
     ShowSnackbar,
     SnackbarUndo,
+    CoverShown(usize),
+    CoverLoaded(material::widget::image::Loaded<usize>),
+    CoverAction(usize, CoverAction),
     WindowResized(Size),
     Frame(Instant),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CoverAction {
+    Play,
+    Reveal,
+    Remove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +115,7 @@ enum ShowcasePage {
     Controls,
     Feedback,
     Surfaces,
+    Media,
     Navigation,
     Structure,
 }
@@ -157,11 +168,12 @@ struct InventoryRow {
     count: u32,
 }
 
-const NAV_DESTINATIONS: [navigation::Destination<ShowcasePage>; 6] = [
+const NAV_DESTINATIONS: [navigation::Destination<ShowcasePage>; 7] = [
     navigation::Destination::new(ShowcasePage::Inputs, "input", "Inputs"),
     navigation::Destination::new(ShowcasePage::Controls, "tune", "Controls"),
     navigation::Destination::new(ShowcasePage::Feedback, "info", "Feedback").badge("3"),
     navigation::Destination::new(ShowcasePage::Surfaces, "layers", "Surfaces").small_badge(),
+    navigation::Destination::new(ShowcasePage::Media, "photo_library", "Media"),
     navigation::Destination::new(ShowcasePage::Navigation, "navigation", "Navigation"),
     navigation::Destination::new(ShowcasePage::Structure, "layers", "Structure"),
 ];
@@ -222,6 +234,8 @@ struct Showcase {
     dialog_password: String,
     dialog_remember_password: bool,
     snackbar: material::widget::snackbar::Transition,
+    covers: material::widget::image::Cache<usize>,
+    cover_action: Option<String>,
     theme_controller: theme_picker::ThemeController,
 }
 
@@ -281,6 +295,8 @@ impl Default for Showcase {
             dialog_password: String::new(),
             dialog_remember_password: false,
             snackbar: material::widget::snackbar::Transition::default(),
+            covers: material::widget::image::Cache::new(32).max_dimension(320),
+            cover_action: None,
             theme_controller: theme_picker::ThemeController::default(),
         }
     }
@@ -367,6 +383,24 @@ fn update(state: &mut Showcase, message: Message) -> Task<Message> {
         }
         Message::Increment => {
             state.count += 1;
+            Task::none()
+        }
+        Message::CoverShown(index) => {
+            state
+                .covers
+                .request(index, pages::cover_source(index), Message::CoverLoaded)
+        }
+        Message::CoverLoaded(loaded) => {
+            state.covers.insert(loaded);
+            Task::none()
+        }
+        Message::CoverAction(index, action) => {
+            let title = pages::COVERS[index].0;
+            state.cover_action = Some(match action {
+                CoverAction::Play => format!("Playing {title}"),
+                CoverAction::Reveal => format!("Showing {title} in its folder"),
+                CoverAction::Remove => format!("Removed {title} from the library"),
+            });
             Task::none()
         }
         Message::Decrement => {
