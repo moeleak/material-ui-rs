@@ -104,7 +104,7 @@ fn large_images_are_fitted_keeping_their_aspect_ratio() {
 
 #[test]
 fn decoding_reads_and_fits_encoded_images() {
-    let handle = decode(&Source::Bytes(png(40, 20)), Some(10)).unwrap();
+    let handle = decode(&Source::Bytes(png(40, 20)), None, Some(10)).unwrap();
 
     match handle {
         Handle::Rgba {
@@ -119,6 +119,28 @@ fn decoding_reads_and_fits_encoded_images() {
         other => panic!("expected decoded pixels, got {other:?}"),
     }
 
-    assert!(decode(&Source::Bytes(Arc::from(&b"not an image"[..])), None).is_err());
-    assert!(decode(&Source::Path("/nonexistent/cover.png".into()), None).is_err());
+    assert!(decode(&Source::Bytes(Arc::from(&b"not an image"[..])), None, None).is_err());
+    assert!(decode(&Source::Path("/nonexistent/cover.png".into()), None, None).is_err());
+}
+
+#[test]
+fn cover_crops_keep_the_center_at_the_cell_ratio() {
+    // A landscape image in a 3:4 cell keeps its middle.
+    assert_eq!(cover_crop(1000, 700, 3.0 / 4.0), (237, 0, 525, 700));
+    // A tall image in a square cell keeps its middle rows.
+    assert_eq!(cover_crop(300, 500, 1.0), (0, 100, 300, 300));
+    // An image at the ratio, or a ratio that is none, stays whole.
+    assert_eq!(cover_crop(300, 400, 3.0 / 4.0), (0, 0, 300, 400));
+    assert_eq!(cover_crop(300, 400, 0.0), (0, 0, 300, 400));
+    assert_eq!(cover_crop(0, 400, 1.0), (0, 0, 0, 400));
+}
+
+#[test]
+fn decoding_crops_before_fitting() {
+    let handle = decode(&Source::Bytes(png(400, 200)), Some(1.0), Some(100)).unwrap();
+
+    match handle {
+        Handle::Rgba { width, height, .. } => assert_eq!((width, height), (100, 100)),
+        other => panic!("expected decoded pixels, got {other:?}"),
+    }
 }

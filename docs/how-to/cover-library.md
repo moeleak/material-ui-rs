@@ -9,8 +9,8 @@ The showcase's Media page is a complete example.
 
 ## Keep a Cache of Covers
 
-Decode covers in the background, down to the size they are shown at, and keep
-the most recently shown ones:
+Decode covers in the background, cropped to the cells' aspect ratio and down
+to the size they are shown at, and keep the most recently shown ones:
 
 ```rust
 use material::widget::image;
@@ -20,7 +20,7 @@ struct Library {
     covers: image::Cache<GameId>,
 }
 
-let covers = image::Cache::new(256).max_dimension(512);
+let covers = image::Cache::new(256).aspect_ratio(3.0 / 4.0).max_dimension(512);
 ```
 
 ## Load Covers as They Come Into View
@@ -51,6 +51,9 @@ fn update(library: &mut Library, message: Message) -> Task<Message> {
     }
 }
 ```
+
+Covers cropped to their cells fit them exactly, so they stay inside the cell
+on renderers that do not clip images, such as the software one.
 
 `request` does nothing for covers that are loading or loaded already, and
 `insert` drops results for covers removed meanwhile. Call `remove` when a cover

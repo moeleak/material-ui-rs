@@ -76,6 +76,7 @@ pub struct Cache<K> {
     recent: VecDeque<K>,
     capacity: usize,
     max_dimension: Option<u32>,
+    aspect_ratio: Option<f32>,
 }
 
 impl<K> Cache<K>
@@ -89,6 +90,7 @@ where
             recent: VecDeque::new(),
             capacity: capacity.max(1),
             max_dimension: None,
+            aspect_ratio: None,
         }
     }
 
@@ -96,6 +98,14 @@ where
     /// keeping their aspect ratio, as covers in a grid need.
     pub fn max_dimension(mut self, max: u32) -> Self {
         self.max_dimension = Some(max.max(1));
+        self
+    }
+
+    /// Crops images around their center to `ratio` (width / height) as they
+    /// are decoded, as cells of that ratio show them: an image that already
+    /// fits its cell draws within it on every renderer, and takes less memory.
+    pub fn aspect_ratio(mut self, ratio: f32) -> Self {
+        self.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
         self
     }
 
@@ -142,10 +152,10 @@ where
         }
 
         let _ = self.entries.insert(key.clone(), Status::Loading);
-        let max_dimension = self.max_dimension;
+        let (aspect_ratio, max_dimension) = (self.aspect_ratio, self.max_dimension);
 
         Task::perform(
-            async move { decode(&source, max_dimension) },
+            async move { decode(&source, aspect_ratio, max_dimension) },
             move |result| on_loaded(Loaded { key, result }),
         )
     }
@@ -217,12 +227,42 @@ pub fn fitted_size(width: u32, height: u32, max: Option<u32>) -> (u32, u32) {
     (fit(width), fit(height))
 }
 
-fn decode(source: &Source, max_dimension: Option<u32>) -> Result<Handle, Arc<str>> {
-    let image = match source {
+/// The part of an image of `width` by `height` that a cell of `ratio` (width /
+/// height) shows, around its center: `(x, y, width, height)`.
+pub fn cover_crop(width: u32, height: u32, ratio: f32) -> (u32, u32, u32, u32) {
+    if width == 0 || height == 0 || !(ratio.is_finite() && ratio > 0.0) {
+        return (0, 0, width, height);
+    }
+
+    let ratio = f64::from(ratio);
+
+    if f64::from(width) / f64::from(height) > ratio {
+        let cropped = ((f64::from(height) * ratio).round() as u32).clamp(1, width);
+        ((width - cropped) / 2, 0, cropped, height)
+    } else {
+        let cropped = ((f64::from(width) / ratio).round() as u32).clamp(1, height);
+        (0, (height - cropped) / 2, width, cropped)
+    }
+}
+
+fn decode(
+    source: &Source,
+    aspect_ratio: Option<f32>,
+    max_dimension: Option<u32>,
+) -> Result<Handle, Arc<str>> {
+    let mut image = match source {
         Source::Path(path) => image::open(path),
         Source::Bytes(bytes) => image::load_from_memory(bytes),
     }
     .map_err(|error| Arc::from(error.to_string()))?;
+
+    if let Some(ratio) = aspect_ratio {
+        let (x, y, width, height) = cover_crop(image.width(), image.height(), ratio);
+
+        if (width, height) != (image.width(), image.height()) {
+            image = image.crop_imm(x, y, width, height);
+        }
+    }
 
     let (width, height) = fitted_size(image.width(), image.height(), max_dimension);
     let image = if (width, height) == (image.width(), image.height()) {

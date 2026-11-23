@@ -46,8 +46,8 @@ modules.
 - `image` (feature `image`) provides images with corners from the shape scale,
   cropped to cover their bounds, and placeholders for images that are loading,
   failed to load, or are missing. `image::Cache` decodes images in the
-  background, optionally down to a bounded size, and keeps the most recently
-  requested ones; `image::cached` shows an image from it, or its placeholder.
+  background, optionally cropped to an aspect ratio and down to a bounded size,
+  and keeps the most recently requested ones; `image::cached` shows an image from it, or its placeholder.
 - `grid` provides fluid grids of cells at most a given width, with Material
   spacing, and `grid::aspect_ratio` for content of a fixed aspect ratio inside
   a cell, such as a cover above its title.
