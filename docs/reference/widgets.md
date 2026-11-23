@@ -49,8 +49,10 @@ modules.
   background, optionally cropped to an aspect ratio and down to a bounded size,
   and keeps the most recently requested ones; `image::cached` shows an image from it, or its placeholder.
 - `grid` provides fluid grids of cells at most a given width, with Material
-  spacing, and `grid::aspect_ratio` for content of a fixed aspect ratio inside
-  a cell, such as a cover above its title.
+  spacing; `grid::fixed` grids, whose cells keep their width as the window
+  resizes and only the number of columns changes; and `grid::aspect_ratio` for
+  content of a fixed aspect ratio inside a cell, such as a cover above its
+  title.
 - `menu` provides context menus: `menu::context` wraps content with a menu of
   actions that opens at the pointer when the content is right-clicked. Actions
   take an icon, are disabled until they have a message, and can be marked

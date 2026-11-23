@@ -95,6 +95,10 @@ fn view(library: &Library) -> material::Element<'_, Message> {
 `grid::columns_for` gives the number of columns the grid has at a width, for
 moving a selection by rows with the keyboard.
 
+A fluid grid's covers grow and shrink as the window resizes. For covers that
+keep their size, and only reflow into more or fewer columns, use
+`grid::fixed(180.0, cells)` and `grid::fixed_columns` instead.
+
 ## Context Menus
 
 A context menu opens at the pointer when its content is right-clicked, or when

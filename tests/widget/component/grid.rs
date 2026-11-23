@@ -71,3 +71,48 @@ fn grid_is_fluid_with_material_spacing() {
         Size::new(Length::Fill, Length::Shrink)
     );
 }
+
+#[test]
+fn fixed_columns_fit_whole_cells() {
+    // 3 cells of 150 with 16 between them take 482.
+    assert_eq!(fixed_columns(482.0, 150.0, SPACING), 3);
+    assert_eq!(fixed_columns(481.0, 150.0, SPACING), 2);
+    assert_eq!(fixed_columns(100.0, 150.0, SPACING), 1);
+    assert_eq!(fixed_columns(500.0, 0.0, 0.0), 1);
+}
+
+#[test]
+fn fixed_grids_keep_their_cells_as_the_width_changes() {
+    let renderer = Renderer::new(crate::fonts::ROBOTO, iced_widget::core::Pixels(16.0));
+    let layout_at = |width: f32| {
+        let cells: Vec<TestElement<'_>> = (0..5)
+            .map(|_| Space::new().width(Length::Fill).height(200.0).into())
+            .collect();
+        let mut grid = fixed(150.0, cells);
+        let mut tree = iced_widget::core::widget::Tree::new(grid.as_widget());
+        let node = grid.as_widget_mut().layout(
+            &mut tree,
+            &renderer,
+            &layout::Limits::new(Size::ZERO, Size::new(width, f32::INFINITY)),
+        );
+
+        node.children()
+            .iter()
+            .map(|cell| (cell.bounds().x, cell.bounds().y, cell.size().width))
+            .collect::<Vec<_>>()
+    };
+
+    let narrow = layout_at(500.0);
+    let wider = layout_at(560.0);
+
+    // The same cells at the same places: a few more pixels change nothing.
+    assert_eq!(narrow, wider);
+    assert!(narrow.iter().all(|(_, _, width)| *width == 150.0));
+    assert_eq!(narrow[2], (332.0, 0.0, 150.0));
+    assert_eq!(narrow[3], (0.0, 216.0, 150.0));
+
+    // Room for a fourth column moves cells, but never resizes them.
+    let wide = layout_at(700.0);
+    assert_eq!(wide[3], (498.0, 0.0, 150.0));
+    assert!(wide.iter().all(|(_, _, width)| *width == 150.0));
+}

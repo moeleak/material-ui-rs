@@ -6,12 +6,12 @@
 //! of a cell, such as a cover, a fixed aspect ratio, so that a title can follow
 //! it in the same cell.
 
-use iced_widget::Grid;
 use iced_widget::core::widget::{Operation, Tree};
 use iced_widget::core::{
     Clipboard, Element, Event, Layout, Length, Rectangle, Shell, Size, Vector, Widget, layout,
     mouse, overlay, renderer,
 };
+use iced_widget::{Container, Grid, Row};
 
 pub use iced_widget::grid::Sizing;
 
@@ -31,6 +31,40 @@ where
         .fluid(max_cell_width)
         .spacing(SPACING)
         .height(Sizing::EvenlyDistribute(Length::Shrink))
+}
+
+/// A grid of `cells` exactly `cell_width` wide, [`SPACING`] apart, in as many
+/// columns as fit: unlike a [`grid`], whose cells grow and shrink with the
+/// width, its cells keep their size as the window resizes, and only the
+/// number of columns changes, which steadies a wall of covers.
+pub fn fixed<'a, Message, Theme, Renderer>(
+    cell_width: f32,
+    cells: impl IntoIterator<Item = Element<'a, Message, Theme, Renderer>>,
+) -> Element<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Theme: iced_widget::container::Catalog + 'a,
+    Renderer: iced_widget::core::Renderer + 'a,
+{
+    Row::with_children(
+        cells
+            .into_iter()
+            .map(|cell| Container::new(cell).width(Length::Fixed(cell_width)).into()),
+    )
+    .spacing(SPACING)
+    .width(Length::Fill)
+    .wrap()
+    .into()
+}
+
+/// How many columns a [`fixed`] grid `width` wide has for cells
+/// `cell_width` wide, `spacing` apart: as many as fit, and at least one.
+pub fn fixed_columns(width: f32, cell_width: f32, spacing: f32) -> usize {
+    if cell_width + spacing <= 0.0 {
+        return 1;
+    }
+
+    (((width + spacing) / (cell_width + spacing)).floor() as usize).max(1)
 }
 
 /// How many columns a [`grid`] `width` wide has for cells at most
