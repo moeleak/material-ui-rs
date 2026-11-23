@@ -8,7 +8,7 @@ use iced_widget::renderer::wgpu::primitive;
 
 use super::click::{ClickGesture, Update as ClickUpdate};
 use super::ripple::{PressRippleState, RippleConfig, RippleStart, RippleStyle, draw_ripples};
-use super::support::{AnimatedScalar, duration_ms};
+use super::support::{AnimatedScalar, alpha_border, alpha_color, duration_ms};
 use crate::utils::state_layer;
 
 #[cfg(test)]
@@ -34,6 +34,7 @@ where
     clip: bool,
     class: <Theme as Catalog>::Class<'a>,
     status: Option<Status>,
+    content_alpha: f32,
 }
 
 enum OnPress<'a, Message> {
@@ -52,6 +53,7 @@ where
             .field("padding", &self.padding)
             .field("clip", &self.clip)
             .field("status", &self.status)
+            .field("content_alpha", &self.content_alpha)
             .finish_non_exhaustive()
     }
 }
@@ -84,6 +86,7 @@ where
             clip: false,
             class: <Theme as Catalog>::default(),
             status: None,
+            content_alpha: 1.0,
         }
     }
 
@@ -126,6 +129,13 @@ where
     /// Sets whether the button content should be clipped on overflow.
     pub fn clip(mut self, clip: bool) -> Self {
         self.clip = clip;
+        self
+    }
+
+    /// Fades the [`Button`] by `content_alpha`, as a dialog transition fades
+    /// its content.
+    pub fn alpha(mut self, content_alpha: f32) -> Self {
+        self.content_alpha = content_alpha.clamp(0.0, 1.0);
         self
     }
 
@@ -413,7 +423,10 @@ where
         let state = tree.state.downcast_ref::<ButtonState>();
         let status = button_status(self.on_press.is_some(), state.is_pressed, bounds, cursor);
         let now = state.now.unwrap_or_else(Instant::now);
-        let style = button_draw_style(theme, &self.class, status);
+        let style = alpha_button_style(
+            button_draw_style(theme, &self.class, status),
+            self.content_alpha,
+        );
         let content_layout = layout.children().next().unwrap();
 
         if style.background.is_some() || style.border.width > 0.0 || style.shadow.color.a > 0.0 {
@@ -587,6 +600,17 @@ fn button_draw_style(
     }
 
     theme.style(class, status)
+}
+
+/// `style` with every color faded by `alpha`.
+fn alpha_button_style(mut style: Style, alpha: f32) -> Style {
+    style.background = style
+        .background
+        .map(|background| background.scale_alpha(alpha));
+    style.text_color = alpha_color(style.text_color, alpha);
+    style.border = alpha_border(style.border, alpha);
+    style.shadow.color = alpha_color(style.shadow.color, alpha);
+    style
 }
 
 fn draw_button_state_layer<Renderer>(

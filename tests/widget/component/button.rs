@@ -615,3 +615,26 @@ fn buttons_with_icons_use_material_leading_icon_spacing() {
         Length::Fixed(tokens::component::button::CONTAINER_HEIGHT)
     );
 }
+
+#[test]
+fn faded_buttons_scale_every_color() {
+    let theme = Theme::Light;
+    let style = crate::style::button::elevated_assist_chip(&theme, Status::Active);
+    let faded = alpha_button_style(style, 0.25);
+
+    assert_eq!(faded.text_color.a, style.text_color.a * 0.25);
+    assert_eq!(faded.border.color.a, style.border.color.a * 0.25);
+    assert_eq!(faded.shadow.color.a, style.shadow.color.a * 0.25);
+    assert_eq!(
+        faded.background,
+        style
+            .background
+            .map(|background| background.scale_alpha(0.25))
+    );
+    assert_eq!(alpha_button_style(style, 1.0), style);
+
+    let chip: Button<'_, ()> = chip("Chip", ChipVariant::Filter).alpha(3.0);
+    assert_eq!(chip.content_alpha, 1.0);
+    let chip: Button<'_, ()> = chip_button("Chip", ChipVariant::Filter.style()).alpha(-1.0);
+    assert_eq!(chip.content_alpha, 0.0);
+}
