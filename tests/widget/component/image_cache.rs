@@ -136,6 +136,22 @@ fn cover_crops_keep_the_center_at_the_cell_ratio() {
 }
 
 #[test]
+fn files_decode_by_their_contents_whatever_their_name() {
+    let directory = std::env::temp_dir().join(format!("material-cache-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("05cb788083949e4ccd54c1fda698ca4d");
+    std::fs::write(&path, &*png(8, 4)).unwrap();
+
+    let handle = decode(&Source::Path(path), None, None);
+    std::fs::remove_dir_all(&directory).unwrap();
+
+    match handle.unwrap() {
+        Handle::Rgba { width, height, .. } => assert_eq!((width, height), (8, 4)),
+        other => panic!("expected decoded pixels, got {other:?}"),
+    }
+}
+
+#[test]
 fn decoding_crops_before_fitting() {
     let handle = decode(&Source::Bytes(png(400, 200)), Some(1.0), Some(100)).unwrap();
 

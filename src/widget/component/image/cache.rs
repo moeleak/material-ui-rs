@@ -251,7 +251,11 @@ fn decode(
     max_dimension: Option<u32>,
 ) -> Result<Handle, Arc<str>> {
     let mut image = match source {
-        Source::Path(path) => image::open(path),
+        // By their contents: cached covers are often named by a hash alone.
+        Source::Path(path) => image::ImageReader::open(path)
+            .and_then(image::ImageReader::with_guessed_format)
+            .map_err(image::ImageError::IoError)
+            .and_then(image::ImageReader::decode),
         Source::Bytes(bytes) => image::load_from_memory(bytes),
     }
     .map_err(|error| Arc::from(error.to_string()))?;
