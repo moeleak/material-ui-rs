@@ -145,6 +145,23 @@ fn controller_dark_mode_action_uses_supplied_origin() {
 }
 
 #[test]
+fn controller_selects_color_from_a_supplied_origin() {
+    let mut controller = ThemeController::new(MaterialColor::Purple, false);
+    let origin = Point::new(420.0, 260.0);
+
+    controller.select_color_from(MaterialColor::Teal, origin, Instant::now());
+
+    let transition = controller
+        .transition()
+        .expect("selecting a different color should animate");
+
+    assert_eq!(controller.selected_color(), MaterialColor::Teal);
+    assert!(!controller.is_picker_open());
+    assert_eq!(transition.origin(), origin);
+    assert_eq!(transition.target(), MaterialColor::Teal.color_scheme(false));
+}
+
+#[test]
 fn material_colors_generate_distinct_primary_roles() {
     assert_eq!(MaterialColor::ALL.len(), 8);
     assert_eq!(

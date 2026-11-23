@@ -240,6 +240,14 @@ impl ThemeController {
         }
     }
 
+    /// Selects `color` with its reveal growing from `origin`, for color
+    /// controls of the app's own rather than the floating picker's swatches.
+    pub fn select_color_from(&mut self, color: MaterialColor, origin: Point, now: Instant) {
+        self.selected = color;
+        self.picker.close_at(now);
+        self.animate_to(color.color_scheme(self.dark_mode), origin, now);
+    }
+
     pub fn advance(&mut self, now: Instant) -> bool {
         let picker_advanced = self.picker.advance(now);
         let Some(transition) = self.transition else {
