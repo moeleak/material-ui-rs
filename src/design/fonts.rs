@@ -192,7 +192,9 @@ pub fn material_symbol_codepoint(name: &str) -> Option<char> {
     char::from_u32(codepoint)
 }
 
-fn material_symbol_fragment<'a>(name: impl text::IntoFragment<'a>) -> text::Fragment<'a> {
+pub(crate) fn material_symbol_fragment<'a>(
+    name: impl text::IntoFragment<'a>,
+) -> text::Fragment<'a> {
     let fragment = name.into_fragment();
 
     material_symbol_codepoint(fragment.as_ref())

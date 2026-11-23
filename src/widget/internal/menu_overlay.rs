@@ -740,7 +740,7 @@ fn menu_shadow_padding() -> f32 {
     layer.blur + layer.y.abs()
 }
 
-fn menu_shadow_bounds(bounds: Rectangle) -> Rectangle {
+pub(super) fn menu_shadow_bounds(bounds: Rectangle) -> Rectangle {
     let padding = menu_shadow_padding();
 
     Rectangle {
@@ -768,7 +768,7 @@ fn opens_down(position: Point, target_height: f32, viewport_height: f32) -> bool
     viewport_height - (position.y + target_height) > position.y
 }
 
-fn alpha_menu_style(
+pub(super) fn alpha_menu_style(
     mut style: iced_widget::overlay::menu::Style,
     alpha: f32,
 ) -> iced_widget::overlay::menu::Style {

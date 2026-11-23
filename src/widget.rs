@@ -58,6 +58,8 @@ pub mod image;
 pub mod list;
 #[path = "widget/component/log_viewer.rs"]
 pub mod log_viewer;
+#[path = "widget/component/menu.rs"]
+pub mod menu;
 #[path = "widget/internal/menu_overlay.rs"]
 mod menu_overlay;
 #[path = "widget/component/navigation.rs"]
