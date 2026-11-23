@@ -58,8 +58,9 @@ resolver = "2"
 animate = ["dep:iced_anim"]
 canvas = []
 crisp = ["iced_widget/crisp"]
-default = ["svg", "animate", "canvas"]
+default = ["svg", "animate", "canvas", "image"]
 dialog = ["dep:iced_dialog"]
+image = ["iced/image-without-codecs", "iced_widget/image", "dep:image"]
 markdown = ["iced_widget/markdown"]
 qr_code = ["iced_widget/qr_code"]
 selection = ["dep:iced_selection"]
@@ -109,6 +110,18 @@ features = [
     "web-colors",
     "thread-pool",
 ]
+default-features = false
+
+[dependencies.image]
+version = "0.25"
+features = [
+    "bmp",
+    "gif",
+    "jpeg",
+    "png",
+    "webp",
+]
+optional = true
 default-features = false
 
 [dependencies.iced_selection]

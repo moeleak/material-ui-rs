@@ -51,6 +51,9 @@ pub mod data_table;
 pub mod dialog;
 #[path = "widget/component/grid.rs"]
 pub mod grid;
+#[cfg(feature = "image")]
+#[path = "widget/component/image.rs"]
+pub mod image;
 #[path = "widget/component/list.rs"]
 pub mod list;
 #[path = "widget/component/log_viewer.rs"]

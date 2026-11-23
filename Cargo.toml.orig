@@ -27,13 +27,15 @@ default-members = ["."]
 resolver = "2"
 
 [features]
-default = ["svg", "animate", "canvas"]
+default = ["svg", "animate", "canvas", "image"]
 # Provides `serde` support.
 serde = ["serde/derive"]
 # Provides support for animating with `iced_anim`.
 animate = ["dep:iced_anim"]
 # Compatibility feature for existing manifests. Canvas drawing is always enabled.
 canvas = []
+# Provides shaped images, and a cache that decodes them in the background.
+image = ["iced/image-without-codecs", "iced_widget/image", "dep:image"]
 # Enables pixel snapping for crisp edges by default (can cause jitter!).
 crisp = ["iced_widget/crisp"]
 # Provides support for `iced_dialog`.
@@ -63,6 +65,13 @@ iced_anim = { version = "0.3", optional = true, features = ["derive"] }
 iced_dialog = { version = "0.14", optional = true }
 iced_selection = { version = "0.5", optional = true }
 serde = { version = "1.0", optional = true }
+image = { version = "0.25", optional = true, default-features = false, features = [
+  "bmp",
+  "gif",
+  "jpeg",
+  "png",
+  "webp",
+] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 iced = { version = "0.14", default-features = false, features = [
