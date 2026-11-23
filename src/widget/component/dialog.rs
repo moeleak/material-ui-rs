@@ -323,6 +323,32 @@ where
         body.into(),
         actions,
         options.alpha,
+        tokens::component::dialog::CONTAINER_MAX_WIDTH,
+    )
+}
+
+/// Creates a dialog like [`content_with`] up to `max_width` wide, for content
+/// that needs more room than Material's 560dp, such as a detail page.
+///
+/// `max_width` is at least the Material minimum width.
+pub fn content_with_max_width<'a, Message, Renderer>(
+    title: impl text::IntoFragment<'a>,
+    body: impl Into<Element<'a, Message, Theme, Renderer>>,
+    actions: impl Into<Element<'a, Message, Theme, Renderer>>,
+    options: AlphaOptions,
+    max_width: f32,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+{
+    dialog_content(
+        None,
+        title_text(title, alignment::Horizontal::Left, options.alpha),
+        body.into(),
+        actions,
+        options.alpha,
+        max_width.max(tokens::component::dialog::CONTAINER_MIN_WIDTH),
     )
 }
 
@@ -363,6 +389,7 @@ where
         body,
         actions,
         alpha,
+        tokens::component::dialog::CONTAINER_MAX_WIDTH,
     )
 }
 
@@ -608,6 +635,7 @@ fn dialog_content<'a, Message, Renderer>(
     body: Element<'a, Message, Theme, Renderer>,
     actions: impl Into<Element<'a, Message, Theme, Renderer>>,
     alpha: f32,
+    max_width: f32,
 ) -> Container<'a, Message, Theme, Renderer>
 where
     Message: 'a,
@@ -650,7 +678,7 @@ where
         children: [header.into(), scrollable.into(), actions.into()],
     };
 
-    basic_with(Element::new(content), AlphaOptions::default().alpha(alpha))
+    basic_with(Element::new(content), AlphaOptions::default().alpha(alpha)).max_width(max_width)
 }
 
 /// Measures the fixed title/actions before giving the remaining height to the body.

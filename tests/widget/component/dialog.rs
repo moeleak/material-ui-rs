@@ -159,6 +159,41 @@ fn dialog_content_does_not_collapse_under_a_shrink_wrapper() {
     assert_eq!(content.bounds().width, 312.0);
 }
 
+#[test]
+fn wide_content_dialogs_grow_to_their_maximum_and_no_further() {
+    let renderer = test_renderer();
+    let wide = |max_width: f32, window: f32| {
+        let mut dialog: Element<'_, Message, Theme, iced_widget::Renderer> =
+            content_with_max_width(
+                "Details",
+                Text::new("Body"),
+                actions([action_button("Close", Message::Cancel)]),
+                AlphaOptions::default(),
+                max_width,
+            )
+            .into();
+        let mut tree = Tree::new(dialog.as_widget());
+
+        dialog
+            .as_widget_mut()
+            .layout(
+                &mut tree,
+                &renderer,
+                &layout::Limits::new(Size::ZERO, Size::new(window, 600.0)),
+            )
+            .size()
+            .width
+    };
+
+    assert_eq!(wide(840.0, 1200.0), 840.0);
+    assert_eq!(wide(840.0, 700.0), 700.0);
+    // Never narrower than a Material dialog may be.
+    assert_eq!(
+        wide(100.0, 1200.0),
+        tokens::component::dialog::CONTAINER_MIN_WIDTH
+    );
+}
+
 #[derive(Default)]
 struct FormProbe {
     account_focused: bool,
