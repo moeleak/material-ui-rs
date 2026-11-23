@@ -24,7 +24,7 @@ use iced_widget::pick_list::{self as iced_select, Handle, Icon, Status};
 
 use super::support::{AnimatedScalar, duration_ms};
 use super::{
-    absolute_line_height, click, draw_text_field_outline, menu_overlay,
+    absolute_line_height, alpha_border, alpha_color, click, draw_text_field_outline, menu_overlay,
     text_field_floating_label_notch,
 };
 use crate::style::{menu as menu_style, select as select_style};
@@ -102,6 +102,7 @@ where
     class: <Theme as iced_select::Catalog>::Class<'a>,
     menu_class: <Theme as menu::Catalog>::Class<'a>,
     menu_height: Length,
+    content_alpha: f32,
 }
 
 impl<T, L, V, Message, Renderer> fmt::Debug for Select<'_, T, L, V, Message, Renderer>
@@ -148,6 +149,7 @@ where
             class: <Theme as iced_select::Catalog>::default(),
             menu_class: <Theme as iced_select::Catalog>::default_menu(),
             menu_height: material_menu_height(option_count),
+            content_alpha: 1.0,
         }
     }
 
@@ -172,6 +174,13 @@ where
     /// Sets the height of the menu.
     pub fn menu_height(mut self, menu_height: impl Into<Length>) -> Self {
         self.menu_height = menu_height.into();
+        self
+    }
+
+    /// Fades the field by `content_alpha`, as a dialog transition fades its
+    /// content.
+    pub fn alpha(mut self, content_alpha: f32) -> Self {
+        self.content_alpha = content_alpha.clamp(0.0, 1.0);
         self
     }
 
@@ -522,7 +531,10 @@ where
             .last_status
             .unwrap_or_else(|| select_status(state.is_open, cursor.is_over(bounds)));
 
-        let style = <Theme as iced_select::Catalog>::style(theme, &self.class, status);
+        let style = alpha_field_style(
+            <Theme as iced_select::Catalog>::style(theme, &self.class, status),
+            self.content_alpha,
+        );
 
         let label_width = self
             .label
@@ -680,7 +692,7 @@ where
                     wrapping: text::Wrapping::None,
                 },
                 Point::new(label_x, label_y),
-                select_label_color(theme, status),
+                alpha_color(select_label_color(theme, status), self.content_alpha),
                 Rectangle {
                     x: label_x,
                     y: label_y - label_height / 2.0,
@@ -832,6 +844,16 @@ fn select_status(is_open: bool, is_hovered: bool) -> Status {
     } else {
         Status::Active
     }
+}
+
+/// `style` with every color faded by `alpha`.
+fn alpha_field_style(mut style: iced_select::Style, alpha: f32) -> iced_select::Style {
+    style.background = style.background.scale_alpha(alpha);
+    style.border = alpha_border(style.border, alpha);
+    style.text_color = alpha_color(style.text_color, alpha);
+    style.placeholder_color = alpha_color(style.placeholder_color, alpha);
+    style.handle_color = alpha_color(style.handle_color, alpha);
+    style
 }
 
 fn select_label_color(theme: &Theme, status: Status) -> Color {

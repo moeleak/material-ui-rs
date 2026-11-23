@@ -459,3 +459,23 @@ fn select_keeps_default_anchor_when_menu_does_not_fit_below() {
     assert_eq!(anchor.position, position);
     assert_eq!(anchor.target_height, target_height);
 }
+
+#[test]
+fn faded_selects_scale_every_color() {
+    let theme = Theme::Dark;
+    let style = <Theme as iced_select::Catalog>::style(
+        &theme,
+        &<Theme as iced_select::Catalog>::default(),
+        Status::Active,
+    );
+    let faded = alpha_field_style(style, 0.25);
+
+    assert_eq!(faded.text_color.a, style.text_color.a * 0.25);
+    assert_eq!(faded.placeholder_color.a, style.placeholder_color.a * 0.25);
+    assert_eq!(faded.handle_color.a, style.handle_color.a * 0.25);
+    assert_eq!(faded.border.color.a, style.border.color.a * 0.25);
+    assert_eq!(alpha_field_style(style, 1.0), style);
+
+    let select: InputSelect = outlined([1, 2, 3], Some(2), InputMessage::Selected).alpha(3.0);
+    assert_eq!(select.content_alpha, 1.0);
+}
