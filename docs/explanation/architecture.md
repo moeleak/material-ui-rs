@@ -16,7 +16,7 @@ can live in that file, while large or stateful components live under
 This gives users a single public namespace:
 
 ```rust
-material::widget::button::filled("Save")
+material::widget::button::button("Save", material::widget::button::ButtonVariant::Filled)
 material::widget::navigation::suite(&destinations, &state)
 material::widget::picker::date_picker(&state.date_picker, Message::Date)
 ```

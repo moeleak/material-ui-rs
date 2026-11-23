@@ -48,6 +48,8 @@ and icon size. Colors and visual states are still resolved by the style catalogs
 for `Theme`.
 
 ```rust
-material::widget::button::filled("Save").on_press(Message::Save);
+use material::widget::button::{self, ButtonVariant};
+
+button::button("Save", ButtonVariant::Filled).on_press(Message::Save);
 material::widget::text_input::outlined("Name", &state.name).on_input(Message::NameChanged);
 ```

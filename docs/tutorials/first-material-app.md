@@ -116,7 +116,8 @@ helper chooses a bottom navigation bar or rail from the provided size.
 
 ```rust
 use iced::widget::column;
-use material::widget::{button, page};
+use material::widget::button::{self, ButtonVariant};
+use material::widget::page;
 
 fn view(app: &App) -> material::Element<'_, Message> {
     navigation::suite(&DESTINATIONS, &app.navigation)
@@ -132,8 +133,10 @@ impl Page {
                 page::header("Home", "A small Material app"),
                 column![
                     material::text::headline_medium(app.count.to_string()),
-                    button::filled("Increment").on_press(Message::Increment),
-                    button::outlined("Decrement").on_press(Message::Decrement),
+                    button::button("Increment", ButtonVariant::Filled)
+                        .on_press(Message::Increment),
+                    button::button("Decrement", ButtonVariant::Outlined)
+                        .on_press(Message::Decrement),
                 ]
                 .spacing(12),
             )

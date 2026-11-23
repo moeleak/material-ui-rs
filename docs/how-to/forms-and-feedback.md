@@ -62,13 +62,15 @@ subscription when you use indeterminate indicators.
 ## Dialogs, Snackbars, and Tooltips
 
 ```rust
-material::widget::button::filled_action(
-    "Open alert dialog",
+use material::widget::button::{self, ButtonVariant};
+
+button::action(
+    button::button("Open alert dialog", ButtonVariant::Filled),
     Message::DialogOpened,
 );
 
-material::widget::button::filled_action(
-    "Show snackbar",
+button::action(
+    button::button("Show snackbar", ButtonVariant::Filled),
     Message::ShowSnackbar,
 );
 ```
@@ -81,7 +83,7 @@ For local contextual help, wrap an anchor with a tooltip:
 
 ```rust
 material::widget::tooltip::plain(
-    material::widget::button::assist_chip("Plain"),
+    button::chip("Plain", button::ChipVariant::Assist),
     "Material 3 plain tooltip",
     material::widget::tooltip::Position::Top,
 )
