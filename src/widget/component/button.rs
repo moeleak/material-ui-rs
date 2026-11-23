@@ -1132,6 +1132,79 @@ where
     standard_button(label, variant.style())
 }
 
+/// A Material 3 common button with an icon before its label, such as a play
+/// button.
+pub fn button_with_icon<'a, Message, Renderer>(
+    icon_content: impl text::IntoFragment<'a>,
+    label: impl text::IntoFragment<'a>,
+    variant: ButtonVariant,
+) -> Button<'a, Message, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    Button::new(leading_icon_content(
+        icon_content,
+        label,
+        leading_icon_padding(variant),
+    ))
+    .height(Length::Fixed(tokens::component::button::CONTAINER_HEIGHT))
+    .padding(Padding::ZERO)
+    .style(variant.style())
+}
+
+/// The space before the icon and after the label of a button with a leading
+/// icon: text buttons sit closer to their content.
+fn leading_icon_padding(variant: ButtonVariant) -> Padding {
+    let (left, right) = match variant {
+        ButtonVariant::Text => (
+            tokens::component::button::TEXT_WITH_LEADING_ICON_LEADING_SPACE,
+            tokens::component::button::TEXT_WITH_LEADING_ICON_TRAILING_SPACE,
+        ),
+        _ => (
+            tokens::component::button::WITH_LEADING_ICON_LEADING_SPACE,
+            tokens::component::button::WITH_LEADING_ICON_TRAILING_SPACE,
+        ),
+    };
+
+    Padding {
+        top: 0.0,
+        right,
+        bottom: 0.0,
+        left,
+    }
+}
+
+fn leading_icon_content<'a, Message, Renderer>(
+    icon: impl text::IntoFragment<'a>,
+    label: impl text::IntoFragment<'a>,
+    padding: Padding,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: iced_widget::core::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    let content = Row::new()
+        .push(centered_icon_text(
+            icon,
+            tokens::component::button::ICON_SIZE,
+        ))
+        .push(text_with_metrics(
+            label,
+            tokens::component::button::LABEL_TEXT_SIZE,
+            tokens::component::button::LABEL_TEXT_LINE_HEIGHT,
+        ))
+        .spacing(tokens::component::button::ICON_LABEL_SPACE)
+        .align_y(alignment::Vertical::Center);
+
+    Container::new(content)
+        .height(Length::Fixed(tokens::component::button::CONTAINER_HEIGHT))
+        .padding(padding)
+        .align_y(alignment::Vertical::Center)
+}
+
 pub fn action<'a, Message, Renderer>(
     button: Button<'a, Message, Renderer>,
     on_press: Message,

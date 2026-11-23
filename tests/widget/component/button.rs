@@ -586,3 +586,32 @@ fn touch_move_beyond_click_slop_cancels_click_candidate() {
         .moved_beyond_slop()
     );
 }
+
+#[test]
+fn buttons_with_icons_use_material_leading_icon_spacing() {
+    assert_eq!(
+        leading_icon_padding(ButtonVariant::Filled),
+        Padding {
+            top: 0.0,
+            right: 24.0,
+            bottom: 0.0,
+            left: 16.0,
+        }
+    );
+    assert_eq!(
+        leading_icon_padding(ButtonVariant::Text),
+        Padding {
+            top: 0.0,
+            right: 16.0,
+            bottom: 0.0,
+            left: 12.0,
+        }
+    );
+
+    let button: Button<'_, (), iced_widget::Renderer> =
+        button_with_icon("play_arrow", "Play", ButtonVariant::Filled);
+    assert_eq!(
+        Widget::<(), Theme, iced_widget::Renderer>::size(&button).height,
+        Length::Fixed(tokens::component::button::CONTAINER_HEIGHT)
+    );
+}

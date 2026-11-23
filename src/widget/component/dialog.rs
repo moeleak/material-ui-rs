@@ -446,6 +446,22 @@ where
         .style(move |theme, status| action_style_alpha(theme, status, options.alpha))
 }
 
+/// Creates a Material 3 dialog text action with an icon before its label,
+/// such as a play action, with custom visual options.
+pub fn action_with_icon<'a, Message, Renderer>(
+    icon: impl text::IntoFragment<'a>,
+    label: impl text::IntoFragment<'a>,
+    options: AlphaOptions,
+) -> super::button::Button<'a, Message, Renderer>
+where
+    Message: Clone + 'a,
+    Renderer: geometry::Renderer + primitive::Renderer + core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    super::button::button_with_icon(icon, label, super::button::ButtonVariant::Text)
+        .style(move |theme, status| action_style_alpha(theme, status, options.alpha))
+}
+
 /// Creates a Material 3 dialog text action button with custom visual options.
 pub fn action_button_with<'a, Message, Renderer>(
     label: impl text::IntoFragment<'a>,
