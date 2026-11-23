@@ -49,6 +49,8 @@ pub mod combobox;
 pub mod data_table;
 #[path = "widget/component/dialog.rs"]
 pub mod dialog;
+#[path = "widget/component/grid.rs"]
+pub mod grid;
 #[path = "widget/component/list.rs"]
 pub mod list;
 #[path = "widget/component/log_viewer.rs"]
