@@ -75,8 +75,16 @@ pub struct Cache<K> {
     /// The keys of the decoded and failed images, least recently requested first.
     recent: VecDeque<K>,
     capacity: usize,
-    max_dimension: Option<u32>,
+    processing: Processing,
+}
+
+/// How a [`Cache`] prepares images as it decodes them.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+struct Processing {
+    trim_borders: bool,
     aspect_ratio: Option<f32>,
+    from_top: bool,
+    max_dimension: Option<u32>,
 }
 
 impl<K> Cache<K>
@@ -89,15 +97,14 @@ where
             entries: HashMap::new(),
             recent: VecDeque::new(),
             capacity: capacity.max(1),
-            max_dimension: None,
-            aspect_ratio: None,
+            processing: Processing::default(),
         }
     }
 
     /// Decodes images down to at most `max` pixels on their longer side,
     /// keeping their aspect ratio, as covers in a grid need.
     pub fn max_dimension(mut self, max: u32) -> Self {
-        self.max_dimension = Some(max.max(1));
+        self.processing.max_dimension = Some(max.max(1));
         self
     }
 
@@ -105,7 +112,22 @@ where
     /// are decoded, as cells of that ratio show them: an image that already
     /// fits its cell draws within it on every renderer, and takes less memory.
     pub fn aspect_ratio(mut self, ratio: f32) -> Self {
-        self.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
+        self.processing.aspect_ratio = (ratio.is_finite() && ratio > 0.0).then_some(ratio);
+        self
+    }
+
+    /// Crops to the [aspect ratio](Self::aspect_ratio) from the top of the
+    /// image rather than around its center, as portraits whose faces are at
+    /// the top want.
+    pub fn crop_from_top(mut self) -> Self {
+        self.processing.from_top = true;
+        self
+    }
+
+    /// Trims the margin of an image's background color before cropping, so
+    /// that a figure drawn on a plain background fills its cell.
+    pub fn trim_borders(mut self) -> Self {
+        self.processing.trim_borders = true;
         self
     }
 
@@ -152,12 +174,11 @@ where
         }
 
         let _ = self.entries.insert(key.clone(), Status::Loading);
-        let (aspect_ratio, max_dimension) = (self.aspect_ratio, self.max_dimension);
+        let processing = self.processing;
 
-        Task::perform(
-            async move { decode(&source, aspect_ratio, max_dimension) },
-            move |result| on_loaded(Loaded { key, result }),
-        )
+        Task::perform(async move { decode(&source, &processing) }, move |result| {
+            on_loaded(Loaded { key, result })
+        })
     }
 
     /// Keeps an image a request decoded, or its failure, dropping the least
@@ -230,6 +251,12 @@ pub fn fitted_size(width: u32, height: u32, max: Option<u32>) -> (u32, u32) {
 /// The part of an image of `width` by `height` that a cell of `ratio` (width /
 /// height) shows, around its center: `(x, y, width, height)`.
 pub fn cover_crop(width: u32, height: u32, ratio: f32) -> (u32, u32, u32, u32) {
+    cover_crop_at(width, height, ratio, false)
+}
+
+/// [`cover_crop`], keeping the top of the image instead of its middle if
+/// `from_top`.
+pub fn cover_crop_at(width: u32, height: u32, ratio: f32, from_top: bool) -> (u32, u32, u32, u32) {
     if width == 0 || height == 0 || !(ratio.is_finite() && ratio > 0.0) {
         return (0, 0, width, height);
     }
@@ -241,15 +268,49 @@ pub fn cover_crop(width: u32, height: u32, ratio: f32) -> (u32, u32, u32, u32) {
         ((width - cropped) / 2, 0, cropped, height)
     } else {
         let cropped = ((f64::from(width) / ratio).round() as u32).clamp(1, height);
-        (0, (height - cropped) / 2, width, cropped)
+        let y = if from_top { 0 } else { (height - cropped) / 2 };
+        (0, y, width, cropped)
     }
 }
 
-fn decode(
-    source: &Source,
-    aspect_ratio: Option<f32>,
-    max_dimension: Option<u32>,
-) -> Result<Handle, Arc<str>> {
+/// How far a channel may stray from the background color and still be it.
+const BACKGROUND_TOLERANCE: u8 = 24;
+
+/// The bounds of what `image` shows on its background, the color of its top
+/// left corner: `(x, y, width, height)`, the whole image if it is all
+/// background or has no margin.
+pub fn content_bounds(image: &image::RgbaImage) -> (u32, u32, u32, u32) {
+    let (width, height) = image.dimensions();
+    let Some(&background) = image.get_pixel_checked(0, 0) else {
+        return (0, 0, width, height);
+    };
+    let is_background = |pixel: &image::Rgba<u8>| {
+        pixel
+            .0
+            .iter()
+            .zip(background.0)
+            .all(|(channel, background)| channel.abs_diff(background) <= BACKGROUND_TOLERANCE)
+    };
+
+    let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+
+    for (x, y, pixel) in image.enumerate_pixels() {
+        if !is_background(pixel) {
+            left = left.min(x);
+            top = top.min(y);
+            right = right.max(x);
+            bottom = bottom.max(y);
+        }
+    }
+
+    if left > right || top > bottom {
+        return (0, 0, width, height);
+    }
+
+    (left, top, right - left + 1, bottom - top + 1)
+}
+
+fn decode(source: &Source, processing: &Processing) -> Result<Handle, Arc<str>> {
     let mut image = match source {
         // By their contents: cached covers are often named by a hash alone.
         Source::Path(path) => image::ImageReader::open(path)
@@ -260,15 +321,24 @@ fn decode(
     }
     .map_err(|error| Arc::from(error.to_string()))?;
 
-    if let Some(ratio) = aspect_ratio {
-        let (x, y, width, height) = cover_crop(image.width(), image.height(), ratio);
+    if processing.trim_borders {
+        let (x, y, width, height) = content_bounds(&image.to_rgba8());
 
         if (width, height) != (image.width(), image.height()) {
             image = image.crop_imm(x, y, width, height);
         }
     }
 
-    let (width, height) = fitted_size(image.width(), image.height(), max_dimension);
+    if let Some(ratio) = processing.aspect_ratio {
+        let (x, y, width, height) =
+            cover_crop_at(image.width(), image.height(), ratio, processing.from_top);
+
+        if (width, height) != (image.width(), image.height()) {
+            image = image.crop_imm(x, y, width, height);
+        }
+    }
+
+    let (width, height) = fitted_size(image.width(), image.height(), processing.max_dimension);
     let image = if (width, height) == (image.width(), image.height()) {
         image
     } else {
