@@ -43,7 +43,7 @@ fn placeholders_fill_the_image_bounds_on_the_highest_surface() {
         Size::new(Length::Fill, Length::Fill)
     );
 
-    let style = placeholder_style(&Theme::Dark, tokens::shape::CORNER_MEDIUM);
+    let style = placeholder_style(&Theme::Dark, tokens::shape::CORNER_MEDIUM, 1.0);
     assert_eq!(
         style.background,
         Some(Background::Color(
@@ -53,5 +53,22 @@ fn placeholders_fill_the_image_bounds_on_the_highest_surface() {
     assert_eq!(
         style.border.radius,
         border::radius(tokens::shape::CORNER_MEDIUM)
+    );
+}
+
+#[test]
+fn faded_placeholders_scale_their_surface() {
+    let faded = placeholder_style(&Theme::Dark, tokens::shape::CORNER_MEDIUM, 0.5);
+
+    assert_eq!(
+        faded.background,
+        Some(Background::Color(
+            Theme::Dark
+                .colors()
+                .surface
+                .container
+                .highest
+                .scale_alpha(0.5)
+        ))
     );
 }

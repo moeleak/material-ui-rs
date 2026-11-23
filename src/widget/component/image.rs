@@ -79,12 +79,31 @@ where
     Renderer: core_text::Renderer + 'a,
     iced_widget::core::Font: Into<Renderer::Font>,
 {
+    faded_placeholder(kind, corner, 1.0)
+}
+
+/// A [`placeholder`] faded by `alpha`, as a dialog transition fades its content.
+pub fn faded_placeholder<'a, Message, Renderer>(
+    kind: Placeholder,
+    corner: f32,
+    alpha: f32,
+) -> Container<'a, Message, Theme, Renderer>
+where
+    Message: 'a,
+    Renderer: core_text::Renderer + 'a,
+    iced_widget::core::Font: Into<Renderer::Font>,
+{
+    let alpha = alpha.clamp(0.0, 1.0);
     let content: Element<'a, Message, Theme, Renderer> = match kind.icon() {
         Some(name) => fonts::icon(name, PLACEHOLDER_ICON_SIZE)
             .width(Length::Fixed(PLACEHOLDER_ICON_SIZE))
             .height(Length::Fixed(PLACEHOLDER_ICON_SIZE))
             .center()
-            .style(text_style::surface_variant)
+            .style(move |theme: &Theme| iced_widget::text::Style {
+                color: text_style::surface_variant(theme)
+                    .color
+                    .map(|color| color.scale_alpha(alpha)),
+            })
             .into(),
         None => Space::new().into(),
     };
@@ -94,12 +113,14 @@ where
         .height(Length::Fill)
         .align_x(alignment::Horizontal::Center)
         .align_y(alignment::Vertical::Center)
-        .style(move |theme: &Theme| placeholder_style(theme, corner))
+        .style(move |theme: &Theme| placeholder_style(theme, corner, alpha))
 }
 
-fn placeholder_style(theme: &Theme, corner: f32) -> container::Style {
+fn placeholder_style(theme: &Theme, corner: f32, alpha: f32) -> container::Style {
     container::Style {
-        background: Some(Background::Color(theme.colors().surface.container.highest)),
+        background: Some(Background::Color(
+            theme.colors().surface.container.highest.scale_alpha(alpha),
+        )),
         border: border::rounded(corner),
         ..container::Style::default()
     }
