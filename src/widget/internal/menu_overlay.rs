@@ -140,6 +140,11 @@ pub(super) struct State {
     tree: Tree,
     animation: RevealAnimation,
     dismiss_requested: Cell<bool>,
+    /// Whether the last layout placed the menu below its anchor. Layout is the
+    /// only place that knows the overlay's full bounds, so drawing and hit
+    /// testing read the direction from here instead of guessing it again from
+    /// the anchor widget's viewport, which can be shorter (inside a dialog).
+    opens_down: Cell<bool>,
 }
 
 impl State {
@@ -148,6 +153,7 @@ impl State {
             tree: Tree::empty(),
             animation: RevealAnimation::closed(),
             dismiss_requested: Cell::new(false),
+            opens_down: Cell::new(true),
         }
     }
 
@@ -195,6 +201,7 @@ where
     viewport: Rectangle,
     animation: &'a mut RevealAnimation,
     dismiss_requested: &'a Cell<bool>,
+    opens_down: &'a Cell<bool>,
     tree: &'a mut Tree,
     list: Scrollable<'a, Message, Theme, Renderer>,
     width: f32,
@@ -235,9 +242,8 @@ where
             class,
         } = menu;
 
-        let opens_down = opens_down(position, target_height, viewport.height);
         let _ = state.animation.advance(Instant::now());
-        let frame = MenuAnimationFrame::new(state.animation.frame(), opens_down);
+        let reveal = state.animation.frame();
 
         let list = Scrollable::new(List {
             options,
@@ -252,7 +258,8 @@ where
             text_shaping,
             padding,
             class,
-            frame,
+            reveal,
+            opens_down: &state.opens_down,
         })
         .height(menu_height);
 
@@ -263,6 +270,7 @@ where
             viewport,
             animation: &mut state.animation,
             dismiss_requested: &state.dismiss_requested,
+            opens_down: &state.opens_down,
             tree: &mut state.tree,
             list,
             width,
@@ -298,6 +306,8 @@ where
 
         let node = self.list.layout(self.tree, renderer, &limits);
         let size = node.size();
+        self.opens_down
+            .set(opens_down(self.position, self.target_height, bounds.height));
         let content_position =
             menu_content_position(self.position, self.target_height, size, bounds.height);
         let overlay_position = Point::new(
@@ -378,10 +388,7 @@ where
             return;
         };
         let bounds = content_layout.bounds();
-        let frame = MenuAnimationFrame::new(
-            self.animation.frame(),
-            opens_down(self.position, self.target_height, self.viewport.height),
-        );
+        let frame = MenuAnimationFrame::new(self.animation.frame(), self.opens_down.get());
         let alpha = frame.alpha();
 
         if alpha <= 0.001 {
@@ -438,7 +445,18 @@ where
     text_shaping: text::Shaping,
     font: Option<Renderer::Font>,
     class: &'a <Theme as iced_widget::overlay::menu::Catalog>::Class<'b>,
-    frame: MenuAnimationFrame,
+    reveal: RevealFrame,
+    opens_down: &'a Cell<bool>,
+}
+
+impl<T, Message, Theme, Renderer> List<'_, '_, T, Message, Theme, Renderer>
+where
+    Theme: iced_widget::overlay::menu::Catalog,
+    Renderer: text::Renderer,
+{
+    fn frame(&self) -> MenuAnimationFrame {
+        MenuAnimationFrame::new(self.reveal, self.opens_down.get())
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -498,7 +516,7 @@ where
     ) {
         match event {
             Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-                if self.frame.cursor_visible(cursor, *_viewport)
+                if self.frame().cursor_visible(cursor, *_viewport)
                     && let Some(index) = *self.hovered_option
                     && let Some(option) = self.options.get(index)
                 {
@@ -514,7 +532,7 @@ where
             }
             Event::Mouse(mouse::Event::CursorMoved { .. }) => {
                 if let Some(cursor_position) = cursor.position_in(layout.bounds())
-                    && self.frame.cursor_visible(cursor, *_viewport)
+                    && self.frame().cursor_visible(cursor, *_viewport)
                 {
                     let text_size = self.text_size.unwrap_or_else(|| renderer.default_size());
                     let option_height =
@@ -536,7 +554,7 @@ where
             }
             Event::Touch(touch::Event::FingerPressed { .. }) => {
                 if let Some(cursor_position) = cursor.position_in(layout.bounds())
-                    && self.frame.cursor_visible(cursor, *_viewport)
+                    && self.frame().cursor_visible(cursor, *_viewport)
                 {
                     let text_size = self.text_size.unwrap_or_else(|| renderer.default_size());
                     let option_height =
@@ -580,7 +598,7 @@ where
         viewport: &Rectangle,
         _renderer: &Renderer,
     ) -> mouse::Interaction {
-        if cursor.is_over(layout.bounds()) && self.frame.cursor_visible(cursor, *viewport) {
+        if cursor.is_over(layout.bounds()) && self.frame().cursor_visible(cursor, *viewport) {
             mouse::Interaction::Pointer
         } else {
             mouse::Interaction::default()
@@ -599,7 +617,7 @@ where
     ) {
         let style = iced_widget::overlay::menu::Catalog::style(theme, self.class);
         let bounds = layout.bounds();
-        let alpha = self.frame.alpha();
+        let alpha = self.frame().alpha();
         let text_size = self.text_size.unwrap_or_else(|| renderer.default_size());
         let option_height =
             f32::from(self.text_line_height.to_absolute(text_size)) + self.padding.y();
